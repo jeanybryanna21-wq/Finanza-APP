@@ -39,7 +39,9 @@
   }
 
   /* ---------- header ---------- */
-  .header{ text-align: center; margin-bottom: 30px; padding-bottom: 22px; position: relative; }
+  .header{ margin-bottom: 30px; padding-bottom: 22px; }
+  .header-badge-row{ display:flex; justify-content:flex-end; margin-bottom: 10px; }
+  .header-titles{ text-align: center; }
   .header h1{
     font-family: 'Cormorant Garamond', serif; font-weight: 600; font-size: 34px;
     letter-spacing: 0.5px; margin: 0 0 6px; color: var(--ink);
@@ -47,9 +49,10 @@
   .header .rule{ width: 120px; height: 3px; margin: 10px auto 10px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
   .header .sub{ color: var(--ink-soft); font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 400; }
   .rate-badge{
-    position: absolute; right: 0; top: 4px; font-family: 'Jost', sans-serif; font-size: 11px;
+    font-family: 'Jost', sans-serif; font-size: 11px;
     letter-spacing: 1px; text-transform: uppercase; color: var(--gold-deep); border: 1px solid var(--hairline);
     background: var(--white); padding: 8px 12px; border-radius: 2px; display:flex; align-items:center; gap:6px;
+    flex-shrink: 0;
   }
   .rate-badge input{
     width: 34px; background: transparent; border: none; border-bottom: 1px solid var(--gold); color: var(--gold-deep);
@@ -294,12 +297,16 @@
 
 <div class="app">
   <div class="header">
-    <div class="rate-badge" title="Porcentaje que Mega paga sobre los trabajos completados">
-      % Mega: <input type="number" id="rate-input" value="90" min="1" max="100" />
+    <div class="header-badge-row">
+      <div class="rate-badge" title="Porcentaje que Mega paga sobre los trabajos completados">
+        % Mega: <input type="number" id="rate-input" value="90" min="1" max="100" />
+      </div>
     </div>
-    <h1>Bitácora de Trabajo</h1>
-    <div class="rule"></div>
-    <div class="sub" id="today-label">—</div>
+    <div class="header-titles">
+      <h1>Bitácora de Trabajo</h1>
+      <div class="rule"></div>
+      <div class="sub" id="today-label">—</div>
+    </div>
   </div>
 
   <div class="tabs">
@@ -868,6 +875,15 @@
     if(amountInput.value) return;
     const match = matchPrice(catInput.value);
     if(match){ amountInput.value = match.price; updatePreview(); }
+  });
+
+  document.querySelectorAll('.tabs button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));
+      document.querySelectorAll('.summary-panel').forEach(p=>p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+    });
   });
 
   document.querySelectorAll('.section-toggle').forEach(btn=>{
