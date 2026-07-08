@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bitácora Mega">
+<title>Bitácora de Trabajo — Mega</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --white:#FFFFFF;
+    --ivory:#FBF9F4;
+    --ink:#1B1A17;
+    --ink-soft:#8C8574;
+    --gold:#B08D4F;
+    --gold-deep:#8A6A32;
+    --gold-pale:#F3ECDA;
+    --hairline:#E8E0CC;
+    --wine:#7C3F35;
+    --slate:#5B6670;
+  }
+  *{ box-sizing: border-box; }
+  body, .app{ margin:0; padding:0; }
+  .app{
+    background: var(--ivory);
+    color: var(--ink);
+    font-family: 'Jost', sans-serif;
+    font-weight: 300;
+    min-height: 100%;
+    padding: 40px 24px 70px;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+
+  /* ---------- header ---------- */
+  .header{ text-align: center; margin-bottom: 30px; padding-bottom: 22px; position: relative; }
+  .header h1{
+    font-family: 'Cormorant Garamond', serif; font-weight: 600; font-size: 34px;
+    letter-spacing: 0.5px; margin: 0 0 6px; color: var(--ink);
+  }
+  .header .rule{ width: 120px; height: 3px; margin: 10px auto 10px; background: linear-gradient(90deg, transparent, var(--gold), transparent); }
+  .header .sub{ color: var(--ink-soft); font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 400; }
+  .rate-badge{
+    position: absolute; right: 0; top: 4px; font-family: 'Jost', sans-serif; font-size: 11px;
+    letter-spacing: 1px; text-transform: uppercase; color: var(--gold-deep); border: 1px solid var(--hairline);
+    background: var(--white); padding: 8px 12px; border-radius: 2px; display:flex; align-items:center; gap:6px;
+  }
+  .rate-badge input{
+    width: 34px; background: transparent; border: none; border-bottom: 1px solid var(--gold); color: var(--gold-deep);
+    font-family: 'Cormorant Garamond', serif; font-weight: 600; font-size: 14px; text-align:right;
+  }
+  .rate-badge input:focus{ outline: none; }
+
+  /* ---------- tabs ---------- */
+  .tabs{ display:flex; justify-content: center; gap: 30px; margin-bottom: 22px; border-bottom: 1px solid var(--hairline); }
+  .tabs button{
+    background: none; border: none; color: var(--ink-soft); padding: 0 0 12px; font-size: 12px; letter-spacing: 1.5px;
+    text-transform: uppercase; font-family: 'Jost', sans-serif; font-weight: 500; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tabs button.active{ color: var(--gold-deep); border-bottom: 2px solid var(--gold); }
+
+  /* ---------- summary ---------- */
+  .summary-panel{ display:none; margin-bottom: 34px; }
+  .summary-panel.active{ display:block; }
+  .summary-caption{ text-align: center; font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 15px; color: var(--ink-soft); margin-bottom: 14px; }
+
+  .count-row{ display:grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 14px; }
+  .count-chip{ background: var(--white); border: 1px solid var(--hairline); text-align:center; padding: 10px 4px; }
+  .count-chip .n{ font-family:'Cormorant Garamond', serif; font-size: 20px; font-weight: 600; color: var(--ink); }
+  .count-chip .l{ font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--ink-soft); margin-top: 2px; }
+  .count-chip.completed .n{ color: var(--gold-deep); }
+  .count-chip.pending .n{ color: var(--slate); }
+  .count-chip.cancelled .n{ color: var(--wine); }
+  .count-chip.paid .n{ color: var(--gold); }
+  .count-chip.missing .n{ color: var(--wine); }
+
+  .summary{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .stat{ background: var(--white); border: 1px solid var(--hairline); border-top: 2px solid var(--gold); padding: 16px 10px; text-align: center; }
+  .stat .label{ font-size: 9.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--ink-soft); margin-bottom: 8px; font-weight: 500; }
+  .stat .value{ font-family: 'Cormorant Garamond', serif; font-size: 21px; font-weight: 600; word-break: break-all; }
+  .stat.system .value{ color: var(--gold-deep); }
+  .stat.expected{ background: var(--gold-pale); border-top-color: var(--gold-deep); }
+  .stat.expected .value{ color: var(--ink); }
+  .stat.expense .value{ color: var(--wine); }
+  .stat.net .value{ color: var(--ink); }
+
+  /* ---------- form ---------- */
+  .form-card{ background: var(--white); border: 1px solid var(--hairline); padding: 26px 24px; margin-bottom: 32px; }
+  .form-row{ display:flex; gap: 20px; margin-bottom: 18px; flex-wrap: wrap; }
+  .field{ flex: 1; min-width: 130px; display:flex; flex-direction: column; gap: 6px; }
+  .field label{ font-size: 10px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 1.2px; font-weight: 500; }
+  input[type=date], input[type=text], input[type=number]{
+    background: transparent; border: none; border-bottom: 1px solid var(--hairline); color: var(--ink);
+    padding: 8px 2px; font-family: 'Jost', sans-serif; font-size: 15px; font-weight: 400; width: 100%; border-radius: 0;
+  }
+  input[type=number]{ font-family: 'Cormorant Garamond', serif; font-size: 17px; }
+  input:focus{ outline: none; border-bottom: 1px solid var(--gold); }
+  input.error{ border-bottom: 1px solid var(--wine); }
+
+  select{
+    background: transparent; border: none; border-bottom: 1px solid var(--hairline); color: var(--ink); padding: 8px 2px;
+    font-family: 'Jost', sans-serif; font-size: 14px; width: 100%; border-radius: 0; appearance: none; -webkit-appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--gold) 50%), linear-gradient(135deg, var(--gold) 50%, transparent 50%);
+    background-position: calc(100% - 12px) center, calc(100% - 7px) center; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+  }
+  select:focus{ outline: none; border-bottom: 1px solid var(--gold); }
+  #status-row.hidden{ display: none; }
+
+  .type-toggle{ display:flex; border: 1px solid var(--hairline); }
+  .type-toggle button{
+    flex:1; padding: 9px 10px; background: var(--white); color: var(--ink-soft); border: none; font-size: 11px;
+    letter-spacing: 1px; text-transform: uppercase; font-weight: 500; cursor: pointer; font-family: 'Jost', sans-serif;
+  }
+  .type-toggle button.active.income{ background: var(--gold); color: var(--white); }
+  .type-toggle button.active.expense{ background: var(--wine); color: var(--white); }
+
+  .preview{ font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 14px; color: var(--ink-soft); margin: 2px 2px 14px; min-height: 18px; }
+  .preview strong{ color: var(--gold-deep); font-weight: 600; }
+  .form-error{ font-size: 12px; color: var(--wine); margin: 0 2px 12px; min-height: 14px; }
+
+  .submit-btn{
+    width: 100%; padding: 13px; background: var(--ink); color: var(--gold); border: 1px solid var(--ink); font-weight: 500;
+    font-size: 12px; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: 'Jost', sans-serif;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .submit-btn:hover{ background: var(--gold); color: var(--white); border-color: var(--gold); }
+  .btn-outline{
+    background: none; border: 1px solid var(--ink); color: var(--ink); padding: 10px 18px; font-size: 11px;
+    letter-spacing: 1.5px; text-transform: uppercase; font-family: 'Jost', sans-serif; font-weight: 500; cursor: pointer;
+  }
+  .btn-outline:hover{ background: var(--ink); color: var(--gold); }
+  .btn-mini{
+    background: none; border: 1px solid var(--hairline); color: var(--ink-soft); padding: 5px 9px; font-size: 9px;
+    letter-spacing: 0.6px; text-transform: uppercase; font-family: 'Jost', sans-serif; cursor: pointer;
+  }
+  .btn-mini:hover{ border-color: var(--gold); color: var(--gold-deep); }
+
+  /* ---------- collapsible section cards ---------- */
+  .section-card{ background: var(--white); border: 1px solid var(--hairline); margin-bottom: 22px; }
+  .section-toggle{
+    width: 100%; display:flex; justify-content: space-between; align-items: center; background: none; border: none;
+    padding: 16px 22px; cursor: pointer; font-family: 'Cormorant Garamond', serif; font-size: 17px; font-weight: 600; color: var(--ink);
+  }
+  .section-toggle .badge-count{
+    font-family:'Jost',sans-serif; font-size: 11px; background: var(--wine); color:var(--white); padding: 2px 8px; border-radius:9px; margin-left:8px;
+  }
+  .section-toggle .chev{ color: var(--gold); font-size: 13px; transition: transform 0.15s ease; }
+  .section-toggle.open .chev{ transform: rotate(180deg); }
+  .section-body{ display:none; padding: 0 22px 22px; }
+  .section-body.open{ display:block; }
+  .section-hint{ font-family: 'Jost', sans-serif; font-size: 12px; color: var(--ink-soft); margin-bottom: 14px; line-height: 1.5; }
+
+  textarea#import-text{
+    width: 100%; min-height: 130px; background: var(--ivory); border: 1px solid var(--hairline); padding: 12px;
+    font-family: 'Jost', sans-serif; font-size: 13px; color: var(--ink); resize: vertical; margin-bottom: 12px;
+  }
+  textarea#import-text:focus{ outline: none; border-color: var(--gold); }
+
+  .import-row{ display:flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--hairline); flex-wrap: wrap; }
+  .import-row input[type=text]{ flex: 2; min-width: 140px; border-bottom: 1px solid var(--hairline); font-size: 13px; padding: 4px 2px; }
+  .import-row input[type=date]{ flex: 1; min-width: 120px; font-size: 12px; padding: 4px 2px; }
+  .import-row input[type=number]{ width: 90px; font-size: 14px; padding: 4px 2px; font-family: 'Cormorant Garamond', serif; }
+  .import-row .rate-flag{ font-size: 10px; color: var(--gold-deep); letter-spacing: 0.5px; text-transform: uppercase; min-width: 62px; }
+  .import-row .rate-flag.missing{ color: var(--wine); }
+  .import-row .note-flag{ font-size: 10px; color: var(--slate); font-style: italic; }
+  .import-row .rm-row{ background:none; border:none; color: var(--hairline); cursor:pointer; font-size:13px; }
+  .import-row .rm-row:hover{ color: var(--wine); }
+  .import-row select{ width: auto; min-width: 108px; flex: 0 0 auto; font-size: 12px; }
+  .import-actions{ display:flex; justify-content: space-between; align-items: center; margin-top: 16px; flex-wrap: wrap; gap: 8px; }
+  .import-count{ font-family: 'Jost', sans-serif; font-size: 12px; color: var(--ink-soft); }
+
+  /* ---------- inventario de precios ---------- */
+  .price-row{ display:flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--hairline); flex-wrap: wrap; }
+  .price-row.inactive{ opacity: 0.45; }
+  .price-row .p-name{ flex: 1.2; min-width: 110px; font-family: 'Jost', sans-serif; font-size: 14px; border-bottom: 1px solid var(--hairline); padding: 4px 2px; }
+  .price-row .p-aliases{ flex: 2; min-width: 150px; font-size: 12px; color: var(--ink-soft); border-bottom: 1px solid var(--hairline); padding: 4px 2px; }
+  .price-row .p-price{ width: 90px; font-family: 'Cormorant Garamond', serif; font-size: 16px; border-bottom: 1px solid var(--hairline); padding: 4px 2px; text-align: right; }
+  .price-row .p-active{ width: 16px; height: 16px; accent-color: var(--gold); }
+  .price-row .rm-price{ background:none; border:none; color: var(--hairline); cursor:pointer; font-size:13px; }
+  .price-row .rm-price:hover{ color: var(--wine); }
+  .price-add-row{ display:flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: flex-end; }
+  .price-add-row .field{ min-width: 100px; }
+  .rate-empty{ font-family: 'Cormorant Garamond', serif; font-style: italic; color: var(--ink-soft); font-size: 14px; padding: 10px 0; }
+
+  /* ---------- missing price review ---------- */
+  .missing-row{ display:flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--hairline); flex-wrap: wrap; }
+  .missing-row .m-cat{ flex: 1.6; min-width: 140px; font-family: 'Cormorant Garamond', serif; font-size: 15px; }
+  .missing-row .m-date{ font-size: 11px; color: var(--ink-soft); font-family: 'Jost', sans-serif; min-width: 60px; }
+  .missing-row .m-amount{ width: 90px; font-family: 'Cormorant Garamond', serif; font-size: 15px; border-bottom: 1px solid var(--gold); padding: 4px 2px; }
+  .missing-row label.chk{ font-size: 10px; color: var(--ink-soft); display:flex; align-items:center; gap: 4px; white-space: nowrap; }
+  .missing-row label.chk input{ accent-color: var(--gold); }
+
+  /* ---------- ledger / entries ---------- */
+  .week-group{ margin-bottom: 30px; }
+  .week-head{ display:flex; justify-content: space-between; align-items: baseline; padding: 0 0 8px; border-bottom: 1px solid var(--gold); margin-bottom: 12px; flex-wrap: wrap; gap: 6px; }
+  .week-head .week-name{ font-family: 'Cormorant Garamond', serif; font-weight: 600; font-size: 16px; color: var(--ink); }
+  .week-head .week-totals{ font-family: 'Jost', sans-serif; font-size: 11px; letter-spacing: 0.3px; color: var(--ink-soft); }
+  .week-head .week-totals b{ color: var(--gold-deep); font-weight: 600; }
+
+  .day-group{ margin-bottom: 16px; }
+  .day-head{ display:flex; justify-content: space-between; align-items: baseline; padding: 4px 2px; margin-bottom: 4px; }
+  .day-head .day-name{ font-family: 'Cormorant Garamond', serif; font-style: italic; font-weight: 500; font-size: 15px; text-transform: capitalize; color: var(--ink-soft); }
+  .day-head .day-totals{ font-family: 'Jost', sans-serif; font-size: 11px; color: var(--ink-soft); }
+  .day-head .day-totals b{ color: var(--gold-deep); font-weight: 500; }
+
+  .ticket{ background: var(--white); border-bottom: 1px solid var(--hairline); padding: 12px 4px; }
+  .ticket-top{ display:flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .ticket .desc{ font-size: 15px; min-width: 0; font-family: 'Jost', sans-serif; font-weight: 400; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .ticket .desc .cat{ cursor: pointer; }
+  .ticket .desc .cat:hover{ color: var(--gold-deep); }
+  .ticket .desc .cat::before{ content: "— "; color: var(--gold); }
+  .ticket.expense .desc .cat{ color: var(--wine); }
+  .ticket.expense .desc .cat::before{ color: var(--wine); }
+  .ticket.expense .desc .cat:hover{ opacity: 0.75; }
+  .ticket .note-tag{ font-family:'Cormorant Garamond', serif; font-style: italic; font-size: 11px; color: var(--slate); border: 1px solid var(--hairline); padding: 1px 6px; border-radius: 8px; }
+  .ticket .amounts{ display:flex; align-items:center; gap: 12px; font-family: 'Cormorant Garamond', serif; font-size: 16px; flex-shrink: 0; }
+  .ticket .gross{ color: var(--ink-soft); font-size: 13px; text-decoration: line-through; text-decoration-color: var(--hairline); }
+  .ticket .net{ font-weight: 600; }
+  .ticket.income .net{ color: var(--gold-deep); }
+  .ticket.expense .net{ color: var(--wine); }
+  .ticket .del{ background: none; border: none; color: var(--hairline); cursor: pointer; font-size: 14px; padding: 2px 4px; font-family: 'Jost', sans-serif; }
+  .ticket .del:hover{ color: var(--wine); }
+
+  .status-row-quick{ display:flex; gap: 6px; flex-wrap: wrap; }
+  .status-btn{
+    font-family: 'Jost', sans-serif; font-size: 9px; letter-spacing: 0.6px; text-transform: uppercase; padding: 4px 9px;
+    border: 1px solid var(--hairline); background: var(--white); color: var(--ink-soft); cursor: pointer; border-radius: 10px;
+  }
+  .status-btn.active.pending{ background: var(--slate); border-color: var(--slate); color: var(--white); }
+  .status-btn.active.completed{ background: var(--gold); border-color: var(--gold); color: var(--white); }
+  .status-btn.active.cancelled{ background: var(--wine); border-color: var(--wine); color: var(--white); }
+  .status-btn.active.paid{ background: var(--gold-deep); border-color: var(--gold-deep); color: var(--white); }
+
+  .ticket.is-cancelled{ opacity: 0.55; }
+  .ticket.is-cancelled .net, .ticket.is-cancelled .gross{ text-decoration: line-through; }
+  .ticket.is-pending{ opacity: 0.85; }
+
+  .ticket-edit{ display:flex; align-items:center; gap: 10px; width: 100%; flex-wrap: wrap; }
+  .ticket-edit input[type=text]{ flex:2; min-width: 120px; border-bottom:1px solid var(--gold); padding:4px 2px; font-size:14px; }
+  .ticket-edit input[type=number]{ width: 90px; font-family:'Cormorant Garamond', serif; font-size:15px; border-bottom:1px solid var(--gold); padding:4px 2px; }
+  .ticket-edit input[type=date]{ font-size: 12px; border-bottom:1px solid var(--gold); padding:4px 2px; }
+  .ticket-edit select{ width: auto; min-width: 108px; flex: 0 0 auto; font-size: 12px; border-bottom:1px solid var(--gold); }
+  .ticket-edit .save-edit, .ticket-edit .cancel-edit{ background:none; border:none; cursor:pointer; font-size:11px; letter-spacing:0.5px; text-transform:uppercase; font-family:'Jost',sans-serif; }
+  .ticket-edit .save-edit{ color: var(--gold-deep); font-weight:600; }
+  .ticket-edit .cancel-edit{ color: var(--ink-soft); }
+
+  .empty{ text-align:center; color: var(--ink-soft); padding: 50px 10px; font-family: 'Cormorant Garamond', serif; font-style: italic; font-size: 16px; border: 1px dashed var(--hairline); }
+  .status{ text-align:center; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-soft); margin-top: 30px; font-family: 'Jost', sans-serif; }
+
+  @media (max-width: 560px){
+    .count-row{ grid-template-columns: repeat(3, 1fr); }
+    .summary{ grid-template-columns: repeat(2, 1fr); }
+  }
+
+  /* ---------- reporte para imprimir / guardar como PDF ---------- */
+  #print-report{ display:none; }
+  #print-report.open{
+    display:block; background: var(--white); border: 1px solid var(--hairline); padding: 24px 22px;
+    margin-bottom: 28px; font-family: 'Jost', sans-serif; color: var(--ink);
+  }
+  #print-report h1{ font-family:'Cormorant Garamond', serif; font-size: 24px; margin: 0 0 2px; }
+  #print-report .print-sub{ font-size: 11px; color: var(--ink-soft); margin-bottom: 6px; }
+  #print-report h2{ font-family:'Cormorant Garamond', serif; font-size: 17px; border-bottom: 1px solid var(--gold); padding-bottom: 6px; margin-top: 24px; }
+  #print-report table{ width:100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+  #print-report th, #print-report td{ border-bottom: 1px solid var(--hairline); padding: 6px 6px; text-align: left; }
+  #print-report th{ font-size: 10px; text-transform: uppercase; color: var(--ink-soft); }
+  #print-report td.num, #print-report th.num{ text-align: right; font-variant-numeric: tabular-nums; font-family:'Cormorant Garamond', serif; }
+  #print-report .totals-line{ font-size: 13px; margin: 6px 0; color: var(--ink-soft); }
+  #print-report .totals-line b{ font-size: 14px; color: var(--gold-deep); }
+  #print-report .status-tag{ font-size: 10px; text-transform: uppercase; color: var(--ink-soft); }
+  #print-report .close-report-row{ text-align:right; margin-top: 18px; display:flex; justify-content:flex-end; gap: 10px; }
+  .report-hint{ font-family:'Jost', sans-serif; font-size: 11.5px; color: var(--ink-soft); text-align:center; margin: 4px 0 28px; line-height:1.5; padding: 0 10px; }
+  .report-btn-row{ display:flex; justify-content:center; margin-bottom: 8px; }
+
+  @media print{
+    body *{ visibility: hidden; }
+    #print-report, #print-report *{ visibility: visible; }
+    #print-report{
+      display:block !important; position:absolute; left:0; top:0; width:100%; padding: 10px 20px;
+      font-family: Georgia, 'Times New Roman', serif; color:#000; background:#fff;
+    }
+    #print-report .close-report-row{ display:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="header">
+    <div class="rate-badge" title="Porcentaje que Mega paga sobre los trabajos completados">
+      % Mega: <input type="number" id="rate-input" value="90" min="1" max="100" />
+    </div>
+    <h1>Bitácora de Trabajo</h1>
+    <div class="rule"></div>
+    <div class="sub" id="today-label">—</div>
+  </div>
+
+  <div class="tabs">
+    <button data-tab="day" class="active">Hoy</button>
+    <button data-tab="week">Esta semana</button>
+    <button data-tab="month">Este mes</button>
+  </div>
+
+  <div class="summary-panel active" id="panel-day">
+    <div class="summary-caption" id="caption-day"></div>
+    <div class="count-row" id="counts-day"></div>
+    <div class="summary" id="amounts-day"></div>
+  </div>
+  <div class="summary-panel" id="panel-week">
+    <div class="summary-caption" id="caption-week"></div>
+    <div class="count-row" id="counts-week"></div>
+    <div class="summary" id="amounts-week"></div>
+  </div>
+  <div class="summary-panel" id="panel-month">
+    <div class="summary-caption" id="caption-month"></div>
+    <div class="count-row" id="counts-month"></div>
+    <div class="summary" id="amounts-month"></div>
+  </div>
+
+  <div class="report-btn-row">
+    <button class="btn-outline" id="report-btn" type="button">Generar reporte (semana + mes)</button>
+  </div>
+  <div class="report-hint">El reporte aparece abajo. Para guardarlo como PDF: toca Compartir en Safari → Imprimir → pellizca para hacer zoom en la vista previa → Compartir → Guardar en Archivos.</div>
+
+  <div id="print-report"></div>
+
+  <div class="form-card">
+    <div id="entry-form">
+      <div class="form-row">
+        <div class="field">
+          <label>Fecha</label>
+          <input type="date" id="f-date" />
+        </div>
+        <div class="field" style="flex:1.4">
+          <label>Tipo</label>
+          <div class="type-toggle">
+            <button type="button" data-type="income" class="active income">Ingreso</button>
+            <button type="button" data-type="expense" class="expense">Gasto</button>
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field" style="flex:2">
+          <label>Categoría / Descripción</label>
+          <input type="text" id="f-cat" list="cat-list" placeholder="ej. Dishwasher Installation" />
+          <datalist id="cat-list"></datalist>
+        </div>
+        <div class="field">
+          <label>Monto total</label>
+          <input type="number" id="f-amount" step="0.01" min="0" placeholder="0.00" />
+        </div>
+      </div>
+      <div class="form-row" id="status-row">
+        <div class="field">
+          <label>Estado del trabajo</label>
+          <select id="f-status">
+            <option value="pending">Pendiente</option>
+            <option value="completed" selected>Completado</option>
+            <option value="paid">Pagado</option>
+            <option value="cancelled">Cancelado</option>
+          </select>
+        </div>
+      </div>
+      <div class="preview" id="preview-line"></div>
+      <div class="form-error" id="form-error"></div>
+      <button type="button" id="submit-btn" class="submit-btn">Agregar registro</button>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <button class="section-toggle" data-section="import" type="button">
+      <span>Importar trabajos de un correo</span>
+      <span class="chev">▾</span>
+    </button>
+    <div class="section-body" id="body-import">
+      <div class="section-hint">Pega el texto completo del correo de rutas. La app detecta cada trabajo, evita duplicados (por fecha + categoría + PO), busca el precio en tu inventario, y marca como cancelado o pendiente/reprogramado según el contenido del correo.</div>
+      <textarea id="import-text" placeholder="Pega el correo completo aquí…"></textarea>
+      <button class="btn-outline" id="detect-btn" type="button">Detectar trabajos</button>
+      <div id="import-preview"></div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <button class="section-toggle" data-section="missing" type="button">
+      <span>Trabajos sin precio<span class="badge-count" id="missing-badge" style="display:none">0</span></span>
+      <span class="chev">▾</span>
+    </button>
+    <div class="section-body" id="body-missing">
+      <div class="section-hint">Estos trabajos se detectaron pero no coinciden con ningún precio del inventario. Agrégales un monto para que pasen a "Pendiente".</div>
+      <div id="missing-list"></div>
+    </div>
+  </div>
+
+  <div class="section-card">
+    <button class="section-toggle" data-section="prices" type="button">
+      <span>Inventario de precios</span>
+      <span class="chev">▾</span>
+    </button>
+    <div class="section-body" id="body-prices">
+      <div class="section-hint">Cada precio tiene un nombre y palabras clave (alias). Si el texto de un trabajo contiene alguno de los alias, se le asigna este precio automáticamente. Desactiva un precio para dejar de usarlo sin borrarlo.</div>
+      <div id="prices-list"></div>
+      <div class="price-add-row">
+        <div class="field"><label>Nombre</label><input type="text" id="np-name" placeholder="ej. Dishwasher" /></div>
+        <div class="field" style="flex:1.6"><label>Alias (separados por coma)</label><input type="text" id="np-aliases" placeholder="lavaplatos, dishwasher install" /></div>
+        <div class="field" style="max-width:100px"><label>Precio</label><input type="number" step="0.01" min="0" id="np-price" placeholder="0.00" /></div>
+        <button class="btn-mini" id="np-add-btn" type="button" style="height:36px;">Agregar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="entries-container"></div>
+
+  <div class="status" id="status-line">cargando…</div>
+</div>
+<script>
+(function(){
+  // Si se abre fuera de Claude (archivo guardado y abierto en Safari, sin wifi),
+  // no existe window.storage — usamos localStorage como respaldo para que
+  // los datos se sigan guardando en el dispositivo.
+  if(!window.storage){
+    window.storage = {
+      get: async (key) => {
+        const v = localStorage.getItem(key);
+        if(v === null) throw new Error('not found');
+        return { key, value: v, shared: false };
+      },
+      set: async (key, value) => {
+        localStorage.setItem(key, value);
+        return { key, value, shared: false };
+      },
+      delete: async (key) => {
+        localStorage.removeItem(key);
+        return { key, deleted: true, shared: false };
+      },
+      list: async (prefix) => {
+        const keys = [];
+        for(let i=0; i<localStorage.length; i++){
+          const k = localStorage.key(i);
+          if(!prefix || (k && k.indexOf(prefix) === 0)) keys.push(k);
+        }
+        return { keys, prefix, shared: false };
+      }
+    };
+  }
+
+  const state = { entries: [], rate: 90, priceList: [] };
+  let editingId = null;
+
+  // ---------- utilidades de fecha ----------
+  const dayNames = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  function isoFromDate(dt){
+    const y=dt.getFullYear(), m=String(dt.getMonth()+1).padStart(2,'0'), d=String(dt.getDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+  function dateFromIso(iso){ const [y,m,d] = iso.split('-').map(Number); return new Date(y, m-1, d); }
+  function todayISO(){ return isoFromDate(new Date()); }
+  function dayNameFromISO(iso){ return dayNames[dateFromIso(iso).getDay()]; }
+  function fmt(n){ return '$' + (Math.round((n + Number.EPSILON)*100)/100).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+  function mondayOf(iso){
+    const dt = dateFromIso(iso); const day = dt.getDay();
+    const diff = (day === 0) ? -6 : (1 - day);
+    dt.setDate(dt.getDate() + diff);
+    return isoFromDate(dt);
+  }
+  function addDays(iso, n){ const dt = dateFromIso(iso); dt.setDate(dt.getDate() + n); return isoFromDate(dt); }
+  function shortLabel(iso){ const dt = dateFromIso(iso); return dt.getDate() + '/' + (dt.getMonth()+1); }
+  function escapeHtml(s){ const div = document.createElement('div'); div.textContent = s; return div.innerHTML; }
+  function normCat(cat){ return (cat || '').trim().toLowerCase(); }
+
+  // ---------- inventario de precios ----------
+  const DEFAULT_PRICE_LIST = [
+    { name:'Dishwasher', aliases:['Lavaplatos','Dishwasher Install','Dish Washer','Dish Washer Installation'], price:125 },
+    { name:'OTR Microwave', aliases:['OTR','Microwave','Over the Range'], price:150 },
+    { name:'Range', aliases:['Stove'], price:100 },
+    { name:'Refrigerator', aliases:['Fridge','Refrigerador','Nevera'], price:180 },
+    { name:'Washer', aliases:['Lavadora'], price:120 },
+    { name:'Dryer', aliases:['Secadora'], price:120 },
+    { name:'Garbage Disposal', aliases:['Triturador'], price:90 },
+    { name:'Service Call', aliases:['Exception Category','Orden de servicio'], price:75 }
+  ];
+
+  function makeId(prefix){ return prefix + Date.now() + Math.random().toString(36).slice(2,7); }
+
+  function seedPriceListIfEmpty(){
+    if(state.priceList && state.priceList.length > 0) return;
+    state.priceList = DEFAULT_PRICE_LIST.map(p => ({
+      id: makeId('p'), name: p.name, aliases: p.aliases.slice(), price: p.price, active: true
+    }));
+    persistPriceList();
+  }
+
+  function migrateLegacyRates(legacyRates){
+    if(!legacyRates) return;
+    const existingNames = new Set(state.priceList.map(p=>p.name.toLowerCase()));
+    Object.keys(legacyRates).forEach(key=>{
+      const r = legacyRates[key];
+      if(!r) return;
+      if(existingNames.has((r.label||key).toLowerCase())) return; // ya existe, no duplicar
+      state.priceList.push({ id: makeId('p'), name: r.label || key, aliases: [r.label || key], price: r.price, active: true });
+    });
+  }
+
+  function matchPrice(categoryText){
+    const t = (categoryText || '').toLowerCase();
+    let best = null, bestLen = 0;
+    state.priceList.forEach(item=>{
+      if(!item.active) return;
+      const terms = [item.name, ...(item.aliases||[])];
+      terms.forEach(term=>{
+        const tt = (term||'').trim().toLowerCase();
+        if(!tt) return;
+        let matched = false;
+        if(tt.length <= 4 && !/\s/.test(tt)){
+          const re = new RegExp('\\b' + tt.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '\\b', 'i');
+          matched = re.test(t);
+        } else {
+          matched = t.includes(tt);
+        }
+        if(matched && tt.length > bestLen){ best = item; bestLen = tt.length; }
+      });
+    });
+    return best;
+  }
+
+  function addOrUpdatePriceItem(name, aliasesArr, price){
+    const existing = state.priceList.find(p => p.name.toLowerCase() === name.trim().toLowerCase());
+    if(existing){
+      existing.price = price;
+      (aliasesArr||[]).forEach(a=>{
+        if(a && !existing.aliases.some(x=>x.toLowerCase()===a.toLowerCase())) existing.aliases.push(a);
+      });
+    } else {
+      state.priceList.push({ id: makeId('p'), name: name.trim(), aliases: (aliasesArr||[]).filter(Boolean), price, active: true });
+    }
+    persistPriceList();
+  }
+
+  // ---------- duplicados ----------
+  function dedupeKey(date, category, po){
+    return `${date}||${normCat(category)}||${(po||'').trim().toLowerCase()}`;
+  }
+  function existingKeysSet(){
+    const set = new Set();
+    state.entries.forEach(e=>{
+      if(e.type !== 'income') return;
+      set.add(dedupeKey(e.date, e.category, e.po));
+    });
+    return set;
+  }
+
+  // ---------- persistencia ----------
+  async function loadState(){
+    try{
+      const e = await window.storage.get('wl:entries', false);
+      state.entries = e ? JSON.parse(e.value) : [];
+    }catch(err){ state.entries = []; }
+
+    // compatibilidad: estados antiguos en español -> nuevos valores en inglés
+    const statusMigration = { pendiente:'pending', completado:'completed', cancelado:'cancelled', pagado:'paid' };
+    state.entries.forEach(e=>{
+      if(e.type !== 'income') return;
+      if(statusMigration[e.status]) e.status = statusMigration[e.status];
+      if(!e.status) e.status = 'completed';
+    });
+
+    try{
+      const r = await window.storage.get('wl:rate', false);
+      state.rate = r ? parseFloat(r.value) : 90;
+    }catch(err){ state.rate = 90; }
+
+    try{
+      const pl = await window.storage.get('wl:pricelist', false);
+      state.priceList = pl ? JSON.parse(pl.value) : [];
+    }catch(err){ state.priceList = []; }
+
+    if(state.priceList.length === 0){
+      // primera vez: revisar si existía el sistema anterior de "tarifas" (wl:rates)
+      try{
+        const legacy = await window.storage.get('wl:rates', false);
+        if(legacy) migrateLegacyRates(JSON.parse(legacy.value));
+      }catch(err){ /* no había tarifas previas */ }
+      seedPriceListIfEmpty();
+    }
+
+    rateInput.value = state.rate;
+    render();
+    statusLine.textContent = 'datos guardados en este dispositivo';
+  }
+  async function persistEntries(){
+    try{
+      await window.storage.set('wl:entries', JSON.stringify(state.entries), false);
+      statusLine.textContent = 'guardado ✓';
+    }catch(err){
+      statusLine.textContent = 'no se pudo guardar (revisa tu conexión) — el registro sigue visible en esta sesión';
+    }
+  }
+  async function persistRate(){ try{ await window.storage.set('wl:rate', String(state.rate), false); }catch(err){} }
+  async function persistPriceList(){ try{ await window.storage.set('wl:pricelist', JSON.stringify(state.priceList), false); }catch(err){} }
+
+  // ---------- categorías conocidas (autocompletado) ----------
+  function categories(){
+    const set = new Set();
+    state.entries.forEach(e=> set.add(e.category));
+    state.priceList.forEach(p=> set.add(p.name));
+    return Array.from(set).sort((a,b)=>a.localeCompare(b));
+  }
+  function refreshDatalist(){
+    const dl = document.getElementById('cat-list');
+    dl.innerHTML = '';
+    categories().forEach(c=>{
+      const opt = document.createElement('option');
+      opt.value = c;
+      dl.appendChild(opt);
+    });
+  }
+
+  // ---------- agregación ----------
+  function aggregate(dateFilter){
+    const counts = { total:0, completed:0, pending:0, cancelled:0, missing:0, paid:0 };
+    let totalSistemaValido = 0; // suma bruta (100%) de trabajos completed + paid
+    let expense = 0;
+
+    state.entries.forEach(e=>{
+      if(!dateFilter(e.date)) return;
+      if(e.type === 'expense'){ expense += e.amount; return; }
+
+      counts.total++;
+      const st = e.status || 'completed';
+      if(st === 'completed'){ counts.completed++; totalSistemaValido += e.amount; }
+      else if(st === 'paid'){ counts.paid++; totalSistemaValido += e.amount; }
+      else if(st === 'pending'){ counts.pending++; }
+      else if(st === 'cancelled'){ counts.cancelled++; }
+      else if(st === 'missing_price'){ counts.missing++; }
+    });
+
+    const rate = state.rate / 100;
+    const pagoEsperado = totalSistemaValido * rate;
+    const neto = pagoEsperado - expense;
+
+    return { counts, totalSistemaValido, pagoEsperado, expense, neto };
+  }
+  function dayAgg(iso){ return aggregate(d => d === iso); }
+  function rangeAgg(dates){ const set = new Set(dates); return aggregate(d => set.has(d)); }
+  function monthAgg(yyyymm){ return aggregate(d => d.slice(0,7) === yyyymm); }
+
+  // usado para los encabezados de día/semana en la bitácora (ledger)
+  function ledgerAgg(iso){
+    const a = dayAgg(iso);
+    return { income: a.totalSistemaValido * (state.rate/100), expense: a.expense, net: a.pagoEsperado - a.expense };
+  }
+
+  function countRowHtml(agg){
+    return `
+      <div class="count-chip"><div class="n">${agg.counts.total}</div><div class="l">Detectados</div></div>
+      <div class="count-chip completed"><div class="n">${agg.counts.completed}</div><div class="l">Completados</div></div>
+      <div class="count-chip pending"><div class="n">${agg.counts.pending}</div><div class="l">Pendientes</div></div>
+      <div class="count-chip cancelled"><div class="n">${agg.counts.cancelled}</div><div class="l">Cancelados</div></div>
+      <div class="count-chip missing"><div class="n">${agg.counts.missing}</div><div class="l">Sin precio</div></div>
+      <div class="count-chip paid"><div class="n">${agg.counts.paid}</div><div class="l">Pagados</div></div>
+    `;
+  }
+  function amountsRowHtml(agg){
+    return `
+      <div class="stat system"><div class="label">Total sistema válido</div><div class="value">${fmt(agg.totalSistemaValido)}</div></div>
+      <div class="stat expected"><div class="label">Pago esperado Mega ${state.rate}%</div><div class="value">${fmt(agg.pagoEsperado)}</div></div>
+      <div class="stat expense"><div class="label">Gastos</div><div class="value">${fmt(agg.expense)}</div></div>
+      <div class="stat net"><div class="label">Neto</div><div class="value">${fmt(agg.neto)}</div></div>
+    `;
+  }
+
+  function renderSummaries(){
+    const today = todayISO();
+
+    const d = dayAgg(today);
+    document.getElementById('caption-day').textContent = dayNameFromISO(today) + ' ' + shortLabel(today);
+    document.getElementById('counts-day').innerHTML = countRowHtml(d);
+    document.getElementById('amounts-day').innerHTML = amountsRowHtml(d);
+
+    const monday = mondayOf(today);
+    const saturday = addDays(monday, 5);
+    const weekDates = [0,1,2,3,4,5].map(n=> addDays(monday, n));
+    const w = rangeAgg(weekDates);
+    document.getElementById('caption-week').textContent = 'lunes ' + shortLabel(monday) + ' – sábado ' + shortLabel(saturday);
+    document.getElementById('counts-week').innerHTML = countRowHtml(w);
+    document.getElementById('amounts-week').innerHTML = amountsRowHtml(w);
+
+    const monthKey = today.slice(0,7);
+    const dt = dateFromIso(today);
+    const monthNames = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    document.getElementById('caption-month').textContent = monthNames[dt.getMonth()] + ' ' + dt.getFullYear();
+    const m = monthAgg(monthKey);
+    document.getElementById('counts-month').innerHTML = countRowHtml(m);
+    document.getElementById('amounts-month').innerHTML = amountsRowHtml(m);
+  }
+
+  // ---------- inventario de precios: render ----------
+  function renderPriceList(){
+    const wrap = document.getElementById('prices-list');
+    wrap.innerHTML = '';
+    if(state.priceList.length === 0){
+      wrap.innerHTML = '<div class="rate-empty">Todavía no hay precios en el inventario.</div>';
+      return;
+    }
+    const sorted = state.priceList.slice().sort((a,b)=> a.name.localeCompare(b.name));
+    sorted.forEach(item=>{
+      const row = document.createElement('div');
+      row.className = 'price-row' + (item.active ? '' : ' inactive');
+      row.innerHTML = `
+        <input type="checkbox" class="p-active" data-id="${item.id}" ${item.active ? 'checked' : ''} title="Activo" />
+        <input type="text" class="p-name" data-id="${item.id}" value="${escapeHtml(item.name)}" />
+        <input type="text" class="p-aliases" data-id="${item.id}" value="${escapeHtml((item.aliases||[]).join(', '))}" placeholder="alias, separados, por coma" />
+        <input type="number" step="0.01" min="0" class="p-price" data-id="${item.id}" value="${item.price}" />
+        <button class="rm-price" data-id="${item.id}" title="Eliminar">✕</button>
+      `;
+      wrap.appendChild(row);
+    });
+
+    wrap.querySelectorAll('.p-active').forEach(cb=>{
+      cb.addEventListener('change', ()=>{
+        const item = state.priceList.find(p=>p.id===cb.dataset.id);
+        if(item){ item.active = cb.checked; persistPriceList(); renderPriceList(); }
+      });
+    });
+    wrap.querySelectorAll('.p-name').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const item = state.priceList.find(p=>p.id===inp.dataset.id);
+        if(item && inp.value.trim()){ item.name = inp.value.trim(); persistPriceList(); }
+      });
+    });
+    wrap.querySelectorAll('.p-aliases').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const item = state.priceList.find(p=>p.id===inp.dataset.id);
+        if(item){ item.aliases = inp.value.split(',').map(s=>s.trim()).filter(Boolean); persistPriceList(); }
+      });
+    });
+    wrap.querySelectorAll('.p-price').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const item = state.priceList.find(p=>p.id===inp.dataset.id);
+        const val = parseFloat(inp.value);
+        if(item && !isNaN(val) && val >= 0){ item.price = val; persistPriceList(); statusLine.textContent = 'precio actualizado ✓'; }
+      });
+    });
+    wrap.querySelectorAll('.rm-price').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        state.priceList = state.priceList.filter(p=>p.id !== btn.dataset.id);
+        persistPriceList();
+        renderPriceList();
+      });
+    });
+  }
+
+  document.getElementById('np-add-btn').addEventListener('click', ()=>{
+    const name = document.getElementById('np-name').value.trim();
+    const aliases = document.getElementById('np-aliases').value.split(',').map(s=>s.trim()).filter(Boolean);
+    const price = parseFloat(document.getElementById('np-price').value);
+    if(!name || isNaN(price) || price < 0){
+      statusLine.textContent = 'escribe un nombre y un precio válido para agregarlo al inventario';
+      return;
+    }
+    addOrUpdatePriceItem(name, aliases, price);
+    document.getElementById('np-name').value = '';
+    document.getElementById('np-aliases').value = '';
+    document.getElementById('np-price').value = '';
+    renderPriceList();
+    statusLine.textContent = 'precio agregado al inventario ✓';
+  });
+
+  // ---------- trabajos sin precio: render ----------
+  function renderMissingList(){
+    const wrap = document.getElementById('missing-list');
+    const badge = document.getElementById('missing-badge');
+    const missing = state.entries.filter(e=> e.type === 'income' && e.status === 'missing_price');
+
+    if(missing.length === 0){
+      badge.style.display = 'none';
+      wrap.innerHTML = '<div class="rate-empty">No hay trabajos pendientes de precio.</div>';
+      return;
+    }
+    badge.style.display = 'inline-block';
+    badge.textContent = missing.length;
+
+    wrap.innerHTML = '';
+    missing.forEach(e=>{
+      const row = document.createElement('div');
+      row.className = 'missing-row';
+      row.innerHTML = `
+        <span class="m-cat">${escapeHtml(e.category)}</span>
+        <span class="m-date">${shortLabel(e.date)}</span>
+        <input type="number" step="0.01" min="0" class="m-amount" data-id="${e.id}" placeholder="0.00" />
+        <label class="chk"><input type="checkbox" class="m-save-inventory" data-id="${e.id}" checked /> Guardar en inventario</label>
+        <button class="btn-mini m-apply" data-id="${e.id}">Aplicar precio</button>
+      `;
+      wrap.appendChild(row);
+    });
+
+    wrap.querySelectorAll('.m-apply').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.id;
+        const row = btn.closest('.missing-row');
+        const amount = parseFloat(row.querySelector('.m-amount').value);
+        const saveToInventory = row.querySelector('.m-save-inventory').checked;
+        if(!amount || amount <= 0 || isNaN(amount)){
+          statusLine.textContent = 'escribe un monto válido antes de aplicar el precio';
+          return;
+        }
+        const entry = state.entries.find(e=> e.id === id);
+        if(entry){
+          entry.amount = amount;
+          entry.net = Math.round(amount * ((entry.rate||state.rate)/100) * 100) / 100;
+          entry.status = 'pending';
+          if(saveToInventory) addOrUpdatePriceItem(entry.category, [entry.category], amount);
+          persistEntries();
+        }
+        render();
+        statusLine.textContent = 'precio aplicado, el trabajo pasó a Pendiente ✓';
+      });
+    });
+  }
+
+  // ---------- formulario ----------
+  const typeToggle = document.querySelectorAll('.type-toggle button');
+  let currentType = 'income';
+  typeToggle.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      currentType = btn.dataset.type;
+      typeToggle.forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('status-row').classList.toggle('hidden', currentType !== 'income');
+      updatePreview();
+    });
+  });
+
+  const dateInput = document.getElementById('f-date');
+  const catInput = document.getElementById('f-cat');
+  const amountInput = document.getElementById('f-amount');
+  const rateInput = document.getElementById('rate-input');
+  const previewLine = document.getElementById('preview-line');
+  const formError = document.getElementById('form-error');
+  const statusLine = document.getElementById('status-line');
+  const todayLabel = document.getElementById('today-label');
+
+  dateInput.value = todayISO();
+  todayLabel.textContent = 'hoy es ' + dayNameFromISO(todayISO()) + ' ' + shortLabel(todayISO());
+
+  function updatePreview(){
+    const raw = (amountInput.value || '').replace(',', '.');
+    const amt = parseFloat(raw);
+    const rate = parseFloat(rateInput.value) || 0;
+    if(!amt || amt <= 0){ previewLine.innerHTML = ''; return; }
+    if(currentType === 'income'){
+      const net = amt * (rate/100);
+      previewLine.innerHTML = `Pago esperado de Mega: <strong>${fmt(net)}</strong> (${rate}% de ${fmt(amt)})`;
+    } else {
+      previewLine.innerHTML = `Se guardará como gasto: <strong>${fmt(amt)}</strong>`;
+    }
+  }
+  amountInput.addEventListener('input', updatePreview);
+  rateInput.addEventListener('input', updatePreview);
+
+  catInput.addEventListener('input', ()=>{
+    if(amountInput.value) return;
+    const match = matchPrice(catInput.value);
+    if(match){ amountInput.value = match.price; updatePreview(); }
+  });
+
+  document.querySelectorAll('.section-toggle').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      btn.classList.toggle('open');
+      document.getElementById('body-' + btn.dataset.section).classList.toggle('open');
+    });
+  });
+
+  function addEntry(){
+    formError.textContent = '';
+    catInput.classList.remove('error');
+    amountInput.classList.remove('error');
+    dateInput.classList.remove('error');
+
+    const cat = (catInput.value || '').trim();
+    const rawAmount = (amountInput.value || '').replace(',', '.');
+    const amount = parseFloat(rawAmount);
+    const rate = parseFloat(rateInput.value) || 90;
+    const date = dateInput.value || todayISO();
+
+    let hasError = false;
+    if(!date){ dateInput.classList.add('error'); hasError = true; }
+    if(!cat){ catInput.classList.add('error'); hasError = true; }
+    if(!amount || amount <= 0 || isNaN(amount)){ amountInput.classList.add('error'); hasError = true; }
+
+    if(hasError){
+      formError.textContent = 'Completa la categoría y un monto válido antes de agregar.';
+      return;
+    }
+
+    const net = currentType === 'income' ? Math.round(amount * (rate/100) * 100) / 100 : amount;
+
+    const entry = {
+      id: makeId('e'), date, type: currentType, category: cat, amount, rate, net, po: null, note: null
+    };
+    if(currentType === 'income'){
+      entry.status = document.getElementById('f-status').value || 'completed';
+    }
+
+    state.entries.push(entry);
+    state.rate = rate;
+    persistEntries();
+    persistRate();
+    if(currentType === 'income') addOrUpdatePriceItem(cat, [cat], amount);
+
+    catInput.value = '';
+    amountInput.value = '';
+    previewLine.innerHTML = '';
+    catInput.focus();
+
+    render();
+  }
+
+  document.getElementById('submit-btn').addEventListener('click', addEntry);
+  [catInput, amountInput].forEach(inp=>{
+    inp.addEventListener('keydown', function(ev){
+      if(ev.key === 'Enter'){ ev.preventDefault(); addEntry(); }
+    });
+  });
+
+  // ---------- render principal (bitácora / ledger) ----------
+  function render(){
+    refreshDatalist();
+    renderSummaries();
+    renderPriceList();
+    renderMissingList();
+
+    const container = document.getElementById('entries-container');
+    container.innerHTML = '';
+
+    const visible = state.entries.filter(e => e.type === 'expense' || e.status !== 'missing_price');
+
+    if(visible.length === 0){
+      container.innerHTML = '<div class="empty">Todavía no hay registros. Agrega tu primer trabajo del día arriba.</div>';
+      return;
+    }
+
+    const byDate = {};
+    visible.forEach(e=>{
+      if(!byDate[e.date]) byDate[e.date] = [];
+      byDate[e.date].push(e);
+    });
+
+    const byWeek = {};
+    Object.keys(byDate).forEach(date=>{
+      const wk = mondayOf(date);
+      if(!byWeek[wk]) byWeek[wk] = [];
+      byWeek[wk].push(date);
+    });
+
+    const weekKeys = Object.keys(byWeek).sort((a,b)=> b.localeCompare(a));
+
+    weekKeys.forEach(wk=>{
+      const sat = addDays(wk, 5);
+      const weekDates = [0,1,2,3,4,5].map(n=> addDays(wk, n));
+      let wIncome=0, wExpense=0;
+      weekDates.forEach(d=>{ const a = ledgerAgg(d); wIncome += a.income; wExpense += a.expense; });
+
+      const weekWrap = document.createElement('div');
+      weekWrap.className = 'week-group';
+      const wHead = document.createElement('div');
+      wHead.className = 'week-head';
+      wHead.innerHTML = `<span class="week-name">Semana: lun ${shortLabel(wk)} – sáb ${shortLabel(sat)}</span>
+        <span class="week-totals">pago esperado <b>${fmt(wIncome)}</b> · gasto <b>${fmt(wExpense)}</b> · neto <b>${fmt(wIncome-wExpense)}</b></span>`;
+      weekWrap.appendChild(wHead);
+
+      const datesInThisWeek = byWeek[wk].sort((a,b)=> b.localeCompare(a));
+      datesInThisWeek.forEach(date=>{
+        const group = byDate[date];
+        const dA = ledgerAgg(date);
+
+        const dayWrap = document.createElement('div');
+        dayWrap.className = 'day-group';
+        const head = document.createElement('div');
+        head.className = 'day-head';
+        head.innerHTML = `<span class="day-name">${dayNameFromISO(date)} · ${shortLabel(date)}</span>
+          <span class="day-totals">pago esperado <b>${fmt(dA.income)}</b> · gasto <b>${fmt(dA.expense)}</b> · neto <b>${fmt(dA.income-dA.expense)}</b></span>`;
+        dayWrap.appendChild(head);
+
+        group.slice().reverse().forEach(e=>{
+          const t = document.createElement('div');
+          const st = e.type === 'income' ? (e.status || 'completed') : null;
+          t.className = 'ticket ' + e.type + (st === 'cancelled' ? ' is-cancelled' : '') + (st === 'pending' ? ' is-pending' : '');
+
+          if(editingId === e.id){
+            const statusOptions = ['pending','completed','paid','cancelled'].map(s=>{
+              const labels = {pending:'Pendiente', completed:'Completado', paid:'Pagado', cancelled:'Cancelado'};
+              return `<option value="${s}" ${e.status===s?'selected':''}>${labels[s]}</option>`;
+            }).join('');
+            t.innerHTML = `
+              <div class="ticket-edit">
+                <input type="text" class="edit-cat" value="${escapeHtml(e.category)}" />
+                <input type="number" step="0.01" min="0" class="edit-amount" value="${e.amount}" />
+                <input type="date" class="edit-date" value="${e.date}" />
+                ${e.type === 'income' ? `<select class="edit-status">${statusOptions}</select>` : ''}
+                <button class="save-edit" data-id="${e.id}">Guardar</button>
+                <button class="cancel-edit">Cancelar</button>
+              </div>`;
+          } else if(e.type === 'income'){
+            const labels = {pending:'Pendiente', completed:'Completado', paid:'Pagado', cancelled:'Cancelado'};
+            const quickButtons = ['pending','completed','cancelled','paid'].map(s=>
+              `<button class="status-btn ${s===st?'active '+s:''}" data-id="${e.id}" data-status="${s}">${labels[s]}</button>`
+            ).join('');
+            t.innerHTML = `
+              <div class="ticket-top">
+                <div class="desc">
+                  <span class="cat" data-id="${e.id}" title="Clic para editar">${escapeHtml(e.category)}</span>
+                  ${e.note ? `<span class="note-tag">${escapeHtml(e.note)}</span>` : ''}
+                </div>
+                <div class="amounts">
+                  <span class="gross">${fmt(e.amount)}</span>
+                  <span class="net">${fmt(e.net)}</span>
+                  <button class="del" title="Eliminar" data-id="${e.id}">✕</button>
+                </div>
+              </div>
+              <div class="status-row-quick">${quickButtons}</div>`;
+          } else {
+            t.innerHTML = `
+              <div class="ticket-top">
+                <div class="desc"><span class="cat" data-id="${e.id}" title="Clic para editar">${escapeHtml(e.category)}</span></div>
+                <div class="amounts">
+                  <span class="net">${fmt(e.amount)}</span>
+                  <button class="del" title="Eliminar" data-id="${e.id}">✕</button>
+                </div>
+              </div>`;
+          }
+          dayWrap.appendChild(t);
+        });
+
+        weekWrap.appendChild(dayWrap);
+      });
+
+      container.appendChild(weekWrap);
+    });
+
+    container.querySelectorAll('.del').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.id;
+        state.entries = state.entries.filter(e=> e.id !== id);
+        persistEntries();
+        render();
+      });
+    });
+
+    container.querySelectorAll('.cat').forEach(span=>{
+      span.addEventListener('click', ()=>{ editingId = span.dataset.id; render(); });
+    });
+
+    container.querySelectorAll('.status-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const entry = state.entries.find(e=> e.id === btn.dataset.id);
+        if(entry){
+          entry.status = btn.dataset.status;
+          persistEntries();
+          render();
+        }
+      });
+    });
+
+    container.querySelectorAll('.save-edit').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.id;
+        const row = btn.closest('.ticket-edit');
+        const newCat = row.querySelector('.edit-cat').value.trim();
+        const newAmount = parseFloat(row.querySelector('.edit-amount').value);
+        const newDate = row.querySelector('.edit-date').value;
+        const statusEl = row.querySelector('.edit-status');
+        const newStatus = statusEl ? statusEl.value : null;
+
+        if(!newCat || !newAmount || newAmount <= 0 || !newDate){
+          statusLine.textContent = 'revisa los datos: categoría, monto y fecha son obligatorios';
+          return;
+        }
+
+        const entry = state.entries.find(e=> e.id === id);
+        if(entry){
+          entry.category = newCat;
+          entry.date = newDate;
+          entry.amount = newAmount;
+          if(newStatus) entry.status = newStatus;
+          entry.net = entry.type === 'income' ? Math.round(newAmount * (entry.rate/100) * 100) / 100 : newAmount;
+          if(entry.type === 'income') addOrUpdatePriceItem(newCat, [newCat], newAmount);
+          persistEntries();
+        }
+        editingId = null;
+        render();
+      });
+    });
+
+    container.querySelectorAll('.cancel-edit').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ editingId = null; render(); });
+    });
+  }
+
+  // ---------- importar desde correo ----------
+  const monthMap = {january:1,february:2,march:3,april:4,may:5,june:6,july:7,august:8,september:9,october:10,november:11,december:12,
+    enero:1,febrero:2,marzo:3,abril:4,mayo:5,junio:6,julio:7,agosto:8,septiembre:9,octubre:10,noviembre:11,diciembre:12};
+
+  function headerDateFallback(text){
+    const m = text.match(/for\s+\w+\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})/i);
+    if(!m) return null;
+    const month = monthMap[m[1].toLowerCase()];
+    if(!month) return null;
+    return `${m[3]}-${String(month).padStart(2,'0')}-${String(m[2]).padStart(2,'0')}`;
+  }
+
+  const CANCEL_RE = /\bcancell?ed\b|\bcancel\b|\bcancelad[oa]\b/i;
+  const RESCHED_RE = /\brescheduled\b|\breprogramad[oa]\b/i;
+
+  function parseEmailJobs(rawText){
+    const fallbackDate = headerDateFallback(rawText) || todayISO();
+    const lines = rawText.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0);
+    const jobs = [];
+
+    for(let i=0;i<lines.length;i++){
+      if(!/^PO:/i.test(lines[i])) continue;
+
+      const po = lines[i].replace(/^PO:\s*/i,'').trim();
+      let category = lines[i-1] || 'Trabajo';
+
+      let dateIso = null;
+      for(let j=i; j<Math.min(i+3, lines.length); j++){
+        const m = lines[j].match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        if(m){ dateIso = `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`; break; }
+      }
+      if(!dateIso) dateIso = fallbackDate;
+
+      let scopeText = '';
+      for(let j=i+1; j<lines.length && !/^PO:/i.test(lines[j]); j++){
+        scopeText += ' ' + lines[j];
+      }
+      const blockText = (lines[i-2]||'') + ' ' + (lines[i-1]||'') + ' ' + scopeText;
+
+      if(/EXCEPTION CATEGORY/i.test(category) || /^scheduled/i.test(category)){
+        let better = null;
+        let m2 = scopeText.match(/Installation type:\s*([A-Za-z][A-Za-z ]*?)(?=\s+(Job#|Description|Delivery|Product|$))/i);
+        if(m2) better = m2[1].trim();
+        if(!better){
+          let m3 = scopeText.match(/General nature of issue:\s*([A-Za-z][A-Za-z ]*?)(?=\s+(Job#|Installation type|Description|Product|Delivery|$))/i);
+          if(m3) better = m3[1].trim();
+        }
+        category = better ? better : 'Service Call';
+      }
+
+      const cancelled = CANCEL_RE.test(blockText);
+      const rescheduled = RESCHED_RE.test(blockText);
+
+      const priceMatch = matchPrice(category);
+      let status = priceMatch ? 'pending' : 'missing_price';
+      let note = null;
+      if(cancelled) status = 'cancelled';
+      if(rescheduled) note = 'Reprogramado';
+
+      jobs.push({
+        category,
+        date: dateIso,
+        po,
+        amount: priceMatch ? priceMatch.price : null,
+        status,
+        note
+      });
+    }
+    return jobs;
+  }
+
+  function renderImportPreview(jobs){
+    const wrap = document.getElementById('import-preview');
+
+    // quitar duplicados: contra lo ya guardado y dentro del mismo lote pegado
+    const existing = existingKeysSet();
+    const seenBatch = new Set();
+    const uniqueJobs = [];
+    let dupCount = 0;
+    jobs.forEach(j=>{
+      const key = dedupeKey(j.date, j.category, j.po);
+      if(existing.has(key) || seenBatch.has(key)){ dupCount++; return; }
+      seenBatch.add(key);
+      uniqueJobs.push(j);
+    });
+
+    if(uniqueJobs.length === 0){
+      wrap.innerHTML = dupCount > 0
+        ? `<div class="rate-empty">Los ${dupCount} trabajo(s) de este correo ya estaban agregados — no se detectó nada nuevo.</div>`
+        : '<div class="rate-empty">No se detectó ningún trabajo en ese texto. Verifica que hayas pegado el correo completo.</div>';
+      return;
+    }
+
+    const labels = {pending:'Pendiente', completed:'Completado', paid:'Pagado', cancelled:'Cancelado'};
+    let html = '';
+    uniqueJobs.forEach((j, idx)=>{
+      const flag = j.amount !== null ? 'precio encontrado' : 'sin precio — revisión';
+      const flagClass = j.amount !== null ? '' : 'missing';
+      html += `
+        <div class="import-row" data-idx="${idx}" data-po="${escapeHtml(j.po || '')}">
+          <input type="text" class="imp-cat" value="${escapeHtml(j.category)}" />
+          <input type="date" class="imp-date" value="${j.date}" />
+          <input type="number" step="0.01" min="0" class="imp-amount" value="${j.amount !== null ? j.amount : ''}" placeholder="0.00" />
+          <select class="imp-status">
+            ${['pending','completed','paid','cancelled'].map(s=>`<option value="${s}" ${s===j.status?'selected':''}>${labels[s]}</option>`).join('')}
+          </select>
+          <span class="rate-flag ${flagClass}">${flag}</span>
+          ${j.note ? `<span class="note-flag">${escapeHtml(j.note)}</span>` : ''}
+          <button class="rm-row" title="Quitar">✕</button>
+        </div>`;
+    });
+    const dupNote = dupCount > 0 ? ` (${dupCount} duplicado(s) ya agregado(s) fueron omitidos)` : '';
+    wrap.innerHTML = html + `
+      <div class="import-actions">
+        <span class="import-count">${uniqueJobs.length} trabajo(s) nuevo(s) detectado(s)${dupNote}</span>
+        <button class="btn-outline" id="import-confirm-btn" type="button">Agregar todos</button>
+      </div>`;
+
+    wrap.querySelectorAll('.rm-row').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        btn.closest('.import-row').remove();
+        const remaining = wrap.querySelectorAll('.import-row').length;
+        const countEl = wrap.querySelector('.import-count');
+        if(countEl) countEl.textContent = remaining + ' trabajo(s) nuevo(s) detectado(s)';
+      });
+    });
+
+    wrap.querySelectorAll('.imp-cat').forEach(inp=>{
+      inp.addEventListener('input', ()=>{
+        const row = inp.closest('.import-row');
+        const amountEl = row.querySelector('.imp-amount');
+        const flagEl = row.querySelector('.rate-flag');
+        const match = matchPrice(inp.value);
+        if(match){
+          amountEl.value = match.price;
+          flagEl.textContent = 'precio encontrado';
+          flagEl.classList.remove('missing');
+        } else {
+          flagEl.textContent = 'sin precio — revisión';
+          flagEl.classList.add('missing');
+        }
+      });
+    });
+
+    document.getElementById('import-confirm-btn').addEventListener('click', ()=>{
+      const rows = wrap.querySelectorAll('.import-row');
+      const rate = parseFloat(rateInput.value) || 90;
+      let added = 0;
+
+      rows.forEach(row=>{
+        const cat = row.querySelector('.imp-cat').value.trim();
+        const date = row.querySelector('.imp-date').value;
+        const amountRaw = row.querySelector('.imp-amount').value;
+        const amount = amountRaw === '' ? null : parseFloat(amountRaw);
+        const status = row.querySelector('.imp-status').value;
+        const noteEl = row.querySelector('.note-flag');
+        const note = noteEl ? noteEl.textContent : null;
+        const po = row.dataset.po || null;
+
+        if(!cat || !date) return;
+
+        const hasAmount = amount !== null && !isNaN(amount) && amount > 0;
+        const finalStatus = hasAmount ? status : 'missing_price';
+
+        const entry = {
+          id: makeId('e'),
+          date, type: 'income', category: cat,
+          amount: hasAmount ? amount : 0,
+          rate,
+          net: hasAmount ? Math.round(amount * (rate/100) * 100) / 100 : 0,
+          status: finalStatus,
+          po: po,
+          note: note || null
+        };
+        state.entries.push(entry);
+        if(hasAmount && finalStatus !== 'cancelled') addOrUpdatePriceItem(cat, [cat], amount);
+        added++;
+      });
+
+      persistEntries();
+      document.getElementById('import-text').value = '';
+      wrap.innerHTML = '';
+      statusLine.textContent = added + ' trabajo(s) agregado(s) ✓';
+      render();
+    });
+  }
+
+  document.getElementById('detect-btn').addEventListener('click', ()=>{
+    const text = document.getElementById('import-text').value;
+    if(!text || !text.trim()){
+      document.getElementById('import-preview').innerHTML = '<div class="rate-empty">Pega primero el texto del correo.</div>';
+      return;
+    }
+    const jobs = parseEmailJobs(text);
+    renderImportPreview(jobs);
+  });
+
+  // ---------- reporte para imprimir / guardar como PDF ----------
+  const STATUS_LABELS = { pending:'Pendiente', completed:'Completado', paid:'Pagado', cancelled:'Cancelado', missing_price:'Sin precio' };
+
+  function reportSectionHtml(title, dateRangeLabel, agg, dates){
+    const entriesInRange = state.entries.filter(e => dates.includes(e.date))
+      .sort((a,b)=> a.date.localeCompare(b.date));
+
+    let rows = '';
+    entriesInRange.forEach(e=>{
+      if(e.type === 'expense'){
+        rows += `<tr><td>${shortLabel(e.date)}</td><td>${escapeHtml(e.category)}</td><td class="status-tag">Gasto</td><td class="num">${fmt(e.amount)}</td></tr>`;
+      } else {
+        rows += `<tr><td>${shortLabel(e.date)}</td><td>${escapeHtml(e.category)}</td><td class="status-tag">${STATUS_LABELS[e.status]||e.status}</td><td class="num">${fmt(e.amount)}</td></tr>`;
+      }
+    });
+    if(!rows) rows = '<tr><td colspan="4">Sin registros en este periodo.</td></tr>';
+
+    return `
+      <h2>${title} — ${dateRangeLabel}</h2>
+      <div class="totals-line">Detectados: <b>${agg.counts.total}</b> · Completados: <b>${agg.counts.completed}</b> · Pendientes: <b>${agg.counts.pending}</b> · Cancelados: <b>${agg.counts.cancelled}</b> · Sin precio: <b>${agg.counts.missing}</b> · Pagados: <b>${agg.counts.paid}</b></div>
+      <div class="totals-line">Total sistema válido: <b>${fmt(agg.totalSistemaValido)}</b> &nbsp; | &nbsp; Pago esperado Mega ${state.rate}%: <b>${fmt(agg.pagoEsperado)}</b></div>
+      <div class="totals-line">Gastos: <b>${fmt(agg.expense)}</b> &nbsp; | &nbsp; Neto: <b>${fmt(agg.neto)}</b></div>
+      <table>
+        <thead><tr><th>Fecha</th><th>Trabajo</th><th>Estado</th><th class="num">Monto</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  function standaloneReportDoc(bodyHtml, todayIso){
+    return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Reporte Mega — ${todayIso}</title>
+<style>
+  body{ font-family: Georgia, 'Times New Roman', serif; color:#1B1A17; background:#fff; max-width: 720px; margin: 0 auto; padding: 30px 24px 60px; }
+  h1{ font-size: 24px; margin: 0 0 2px; }
+  .print-sub{ font-size: 12px; color:#777; margin-bottom: 10px; }
+  h2{ font-size: 17px; border-bottom: 1px solid #B08D4F; padding-bottom: 6px; margin-top: 26px; }
+  table{ width:100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  th, td{ border-bottom: 1px solid #e8e0cc; padding: 7px 6px; text-align: left; }
+  th{ font-size: 10px; text-transform: uppercase; color:#777; }
+  td.num, th.num{ text-align: right; font-variant-numeric: tabular-nums; }
+  .totals-line{ font-size: 14px; margin: 6px 0; color:#555; }
+  .totals-line b{ font-size: 15px; color:#8A6A32; }
+  .status-tag{ font-size: 10px; text-transform: uppercase; color:#777; }
+  .footer-note{ margin-top: 30px; font-size: 11px; color:#999; text-align:center; }
+  @media print{ .footer-note{ display:none; } }
+</style>
+</head>
+<body>
+  ${bodyHtml}
+  <div class="footer-note">Para guardar como PDF: usa la opción "Imprimir" o "Guardar como PDF" de tu navegador o impresora.</div>
+</body>
+</html>`;
+  }
+
+  function downloadReportFile(bodyHtml, todayIso){
+    const doc = standaloneReportDoc(bodyHtml, todayIso);
+    const blob = new Blob([doc], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `reporte-mega-${todayIso}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=> URL.revokeObjectURL(url), 2000);
+  }
+
+  function generateReport(){
+    const today = todayISO();
+
+    const monday = mondayOf(today);
+    const saturday = addDays(monday, 5);
+    const weekDates = [0,1,2,3,4,5].map(n=> addDays(monday, n));
+    const weekAgg = rangeAgg(weekDates);
+    const weekLabel = 'lunes ' + shortLabel(monday) + ' – sábado ' + shortLabel(saturday);
+
+    const monthKey = today.slice(0,7);
+    const dt = dateFromIso(today);
+    const monthNames = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+    const monthLabel = monthNames[dt.getMonth()] + ' ' + dt.getFullYear();
+    const monthDates = state.entries.filter(e=> e.date.slice(0,7) === monthKey).map(e=>e.date);
+    const uniqueMonthDates = Array.from(new Set(monthDates));
+    const monthAggResult = monthAgg(monthKey);
+
+    const reportBody = `
+      <h1>Bitácora de Trabajo — Mega</h1>
+      <div class="print-sub">Generado el ${today} · ${dayNameFromISO(today)}</div>
+      ${reportSectionHtml('Resumen semanal', weekLabel, weekAgg, weekDates)}
+      ${reportSectionHtml('Resumen mensual', monthLabel, monthAggResult, uniqueMonthDates)}
+    `;
+
+    const html = reportBody + `
+      <div class="close-report-row">
+        <button class="btn-mini" id="download-report-btn" type="button">Descargar como archivo</button>
+        <button class="btn-mini" id="close-report-btn" type="button">Cerrar reporte</button>
+      </div>
+    `;
+    const reportEl = document.getElementById('print-report');
+    reportEl.innerHTML = html;
+    reportEl.classList.add('open');
+    reportEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('close-report-btn').addEventListener('click', ()=>{
+      reportEl.classList.remove('open');
+    });
+    document.getElementById('download-report-btn').addEventListener('click', ()=>{
+      downloadReportFile(reportBody, today);
+      statusLine.textContent = 'reporte descargado ✓ ábrelo y usa Imprimir/Compartir para guardarlo como PDF';
+    });
+  }
+
+  document.getElementById('report-btn').addEventListener('click', generateReport);
+
+
+  loadState();
+})();
+</script>
+</body>
+</html>
