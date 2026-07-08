@@ -406,6 +406,36 @@
   </div>
 
   <div class="section-card">
+    <button class="section-toggle" data-section="backup" type="button">
+      <span>Copia de seguridad</span>
+      <span class="chev">▾</span>
+    </button>
+    <div class="section-body" id="body-backup">
+      <div class="section-hint">Descarga un archivo con todos tus trabajos, tarifas y ajustes. Guárdalo en Archivos o mándatelo por correo — así puedes restaurarlo aquí mismo si algo le pasa a los datos de tu teléfono, o pasarlo a otro dispositivo.</div>
+      <button class="btn-outline" id="export-btn" type="button">Descargar / compartir copia de seguridad</button>
+
+      <div id="export-fallback" style="display:none; margin-top:16px;">
+        <div class="section-hint">Si no se abrió el cuadro para guardar o compartir, copia el texto de abajo y guárdalo en Notas, Archivos o mándatelo por correo.</div>
+        <textarea id="export-text-fallback" readonly style="width:100%; min-height:110px; font-size:10.5px; font-family:monospace; background:var(--ivory); border:1px solid var(--hairline); padding:10px; color:var(--ink);"></textarea>
+        <button class="btn-mini" id="copy-export-btn" type="button" style="margin-top:8px;">Copiar al portapapeles</button>
+      </div>
+
+      <div style="margin-top:22px; border-top:1px solid var(--hairline); padding-top:16px;">
+        <label style="font-size:10px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:1.2px; display:block; margin-bottom:8px;">Restaurar desde un archivo</label>
+        <input type="file" id="import-backup-input" accept=".json" style="font-size:12px;" />
+      </div>
+
+      <div style="margin-top:16px;">
+        <label style="font-size:10px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:1.2px; display:block; margin-bottom:8px;">O pega aquí el contenido del respaldo</label>
+        <textarea id="import-text-paste" placeholder="Pega aquí el texto que copiaste antes…" style="width:100%; min-height:90px; font-size:10.5px; font-family:monospace; background:var(--ivory); border:1px solid var(--hairline); padding:10px; color:var(--ink);"></textarea>
+        <button class="btn-mini" id="import-paste-btn" type="button" style="margin-top:8px;">Restaurar desde este texto</button>
+      </div>
+
+      <div class="form-error" id="backup-msg"></div>
+    </div>
+  </div>
+
+  <div class="section-card">
     <button class="section-toggle" data-section="prices" type="button">
       <span>Inventario de precios</span>
       <span class="chev">▾</span>
@@ -723,7 +753,7 @@
         <input type="checkbox" class="p-active" data-id="${item.id}" ${item.active ? 'checked' : ''} title="Activo" />
         <input type="text" class="p-name" data-id="${item.id}" value="${escapeHtml(item.name)}" />
         <input type="text" class="p-aliases" data-id="${item.id}" value="${escapeHtml((item.aliases||[]).join(', '))}" placeholder="alias, separados, por coma" />
-        <input type="number" step="0.01" min="0" class="p-price" data-id="${item.id}" value="${item.price}" />
+        <input type="number" step="0.01" min="0" class="p-price" data-id="${item.id}" value="${Number(item.price).toFixed(2)}" />
         <button class="rm-price" data-id="${item.id}" title="Eliminar">✕</button>
       `;
       wrap.appendChild(row);
@@ -1017,7 +1047,7 @@
             t.innerHTML = `
               <div class="ticket-edit">
                 <input type="text" class="edit-cat" value="${escapeHtml(e.category)}" />
-                <input type="number" step="0.01" min="0" class="edit-amount" value="${e.amount}" />
+                <input type="number" step="0.01" min="0" class="edit-amount" value="${Number(e.amount).toFixed(2)}" />
                 <input type="date" class="edit-date" value="${e.date}" />
                 ${e.type === 'income' ? `<select class="edit-status">${statusOptions}</select>` : ''}
                 <button class="save-edit" data-id="${e.id}">Guardar</button>
@@ -1133,6 +1163,8 @@
 
   const CANCEL_RE = /\bcancell?ed\b|\bcancel\b|\bcancelad[oa]\b/i;
   const RESCHED_RE = /\brescheduled\b|\breprogramad[oa]\b/i;
+  const NO_HAUL_RE = /no\s*haul\s*away/i;
+  const HAUL_RE = /\bhaul\s*away\b/i;
 
   function parseEmailJobs(rawText){
     const fallbackDate = headerDateFallback(rawText) || todayISO();
@@ -1168,6 +1200,12 @@
         }
         category = better ? better : 'Service Call';
       }
+
+      // variantes que cambian el precio del mismo trabajo (aplica a cualquier categoría)
+      let haulTag = null;
+      if(NO_HAUL_RE.test(blockText)) haulTag = 'No Haul Away';
+      else if(HAUL_RE.test(blockText)) haulTag = 'Haul Away';
+      if(haulTag) category = category + ' - ' + haulTag;
 
       const cancelled = CANCEL_RE.test(blockText);
       const rescheduled = RESCHED_RE.test(blockText);
@@ -1221,7 +1259,7 @@
         <div class="import-row" data-idx="${idx}" data-po="${escapeHtml(j.po || '')}">
           <input type="text" class="imp-cat" value="${escapeHtml(j.category)}" />
           <input type="date" class="imp-date" value="${j.date}" />
-          <input type="number" step="0.01" min="0" class="imp-amount" value="${j.amount !== null ? j.amount : ''}" placeholder="0.00" />
+          <input type="number" step="0.01" min="0" class="imp-amount" value="${j.amount !== null ? Number(j.amount).toFixed(2) : ''}" placeholder="0.00" />
           <select class="imp-status">
             ${['pending','completed','paid','cancelled'].map(s=>`<option value="${s}" ${s===j.status?'selected':''}>${labels[s]}</option>`).join('')}
           </select>
@@ -1432,6 +1470,134 @@
 
   document.getElementById('report-btn').addEventListener('click', generateReport);
 
+  // ---------- copia de seguridad ----------
+  function buildBackupJson(){
+    const backup = {
+      exportedAt: new Date().toISOString(),
+      app: 'bitacora-de-trabajo-mega',
+      version: 1,
+      entries: state.entries,
+      rate: state.rate,
+      priceList: state.priceList
+    };
+    return JSON.stringify(backup, null, 2);
+  }
+
+  function applyRestoredData(data, msg){
+    if(!data || !Array.isArray(data.entries) || !Array.isArray(data.priceList)){
+      msg.style.color = 'var(--wine)';
+      msg.textContent = 'Ese contenido no parece una copia de seguridad válida.';
+      return false;
+    }
+    state.entries = data.entries;
+    state.priceList = data.priceList;
+    state.rate = data.rate || 90;
+    persistEntries();
+    persistRate();
+    persistPriceList();
+    rateInput.value = state.rate;
+    render();
+    msg.style.color = 'var(--gold-deep)';
+    msg.textContent = `Restaurado ✓ (${data.entries.length} registros, ${data.priceList.length} precios)`;
+    return true;
+  }
+
+  async function exportBackup(){
+    const msg = document.getElementById('backup-msg');
+    const jsonStr = buildBackupJson();
+    const stamp = todayISO();
+    const filename = `respaldo-bitacora-mega-${stamp}.json`;
+    let shared = false;
+
+    // Intento 1: hoja de compartir nativa (lo más confiable en iPhone/iPad, incluso como ícono instalado)
+    try{
+      if(navigator.canShare && navigator.share){
+        const file = new File([jsonStr], filename, { type: 'application/json' });
+        if(navigator.canShare({ files: [file] })){
+          await navigator.share({ files: [file], title: 'Copia de seguridad — Bitácora Mega' });
+          shared = true;
+        }
+      }
+    }catch(err){ /* el usuario cerró la hoja de compartir o no está disponible; seguimos abajo */ }
+
+    if(shared){
+      msg.style.color = 'var(--gold-deep)';
+      msg.textContent = 'Copia de seguridad compartida ✓';
+      return;
+    }
+
+    // Intento 2: descarga tradicional (funciona bien en computadora y Safari normal)
+    try{
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(()=> URL.revokeObjectURL(url), 2000);
+    }catch(err){ /* seguimos con el respaldo de texto de todas formas */ }
+
+    // Respaldo garantizado: mostramos el texto para copiar a mano
+    document.getElementById('export-text-fallback').value = jsonStr;
+    document.getElementById('export-fallback').style.display = 'block';
+    msg.style.color = 'var(--gold-deep)';
+    msg.textContent = 'Si no se abrió el cuadro de guardar, copia el texto de abajo y guárdalo tú mismo.';
+  }
+
+  document.getElementById('export-btn').addEventListener('click', exportBackup);
+
+  document.getElementById('copy-export-btn').addEventListener('click', async ()=>{
+    const ta = document.getElementById('export-text-fallback');
+    const msg = document.getElementById('backup-msg');
+    try{
+      await navigator.clipboard.writeText(ta.value);
+      msg.style.color = 'var(--gold-deep)';
+      msg.textContent = 'Copiado al portapapeles ✓ — pégalo en Notas o en un correo para guardarlo.';
+    }catch(err){
+      ta.select();
+      msg.style.color = 'var(--gold-deep)';
+      msg.textContent = 'Selecciona el texto de arriba y cópialo manualmente.';
+    }
+  });
+
+  document.getElementById('import-backup-input').addEventListener('change', function(ev){
+    const file = ev.target.files && ev.target.files[0];
+    const msg = document.getElementById('backup-msg');
+    msg.style.color = 'var(--wine)';
+    if(!file){ return; }
+
+    const reader = new FileReader();
+    reader.onload = function(){
+      try{
+        const data = JSON.parse(reader.result);
+        applyRestoredData(data, msg);
+        ev.target.value = '';
+      }catch(err){
+        msg.textContent = 'No se pudo leer ese archivo. Asegúrate de elegir un respaldo generado por esta misma app.';
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  document.getElementById('import-paste-btn').addEventListener('click', ()=>{
+    const text = document.getElementById('import-text-paste').value.trim();
+    const msg = document.getElementById('backup-msg');
+    if(!text){
+      msg.style.color = 'var(--wine)';
+      msg.textContent = 'Pega primero el contenido del respaldo en el cuadro de arriba.';
+      return;
+    }
+    try{
+      const data = JSON.parse(text);
+      const ok = applyRestoredData(data, msg);
+      if(ok) document.getElementById('import-text-paste').value = '';
+    }catch(err){
+      msg.style.color = 'var(--wine)';
+      msg.textContent = 'No se pudo leer ese texto como respaldo válido.';
+    }
+  });
 
   loadState();
 })();
