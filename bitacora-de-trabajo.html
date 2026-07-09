@@ -16,19 +16,37 @@
   :root{
     --white:#FFFFFF;
     --ivory:#FBF9F4;
-    --ink:#1B1A17;
-    --ink-soft:#8C8574;
-    --gold:#B08D4F;
-    --gold-deep:#8A6A32;
-    --gold-pale:#F3ECDA;
-    --hairline:#E8E0CC;
-    --wine:#7C3F35;
+    --ink:#1A1A1A;
+    --ink-soft:#6B6558;
+    --gold:#D4A017;
+    --gold-deep:#B8860B;
+    --gold-pale:#FDF4E3;
+    --hairline:#E5DEC8;
+    --wine:#8A2A10;
     --slate:#5B6670;
   }
   *{ box-sizing: border-box; }
   body, .app{ margin:0; padding:0; }
+  body{
+    background-color: var(--ivory);
+    background-image:
+      radial-gradient(circle at 10% 8%, rgba(190,188,180,0.16) 0%, transparent 35%),
+      radial-gradient(circle at 90% 18%, rgba(180,178,170,0.14) 0%, transparent 40%),
+      radial-gradient(circle at 70% 85%, rgba(200,198,190,0.15) 0%, transparent 45%),
+      linear-gradient(122deg, transparent 38%, rgba(212,160,23,0.18) 39%, transparent 40%),
+      linear-gradient(122deg, transparent 60%, rgba(212,160,23,0.12) 61%, transparent 62%),
+      linear-gradient(65deg, transparent 24%, rgba(160,158,150,0.10) 25%, transparent 26%);
+    background-attachment: fixed;
+  }
+  #bg-photo-layer{
+    position: fixed; inset: 0; z-index: 0; overflow: hidden;
+  }
+  #bg-photo-layer img{
+    width: 100%; height: 100%; object-fit: cover; object-position: center;
+  }
   .app{
-    background: var(--ivory);
+    position: relative; z-index: 1;
+    background: transparent;
     color: var(--ink);
     font-family: 'Jost', sans-serif;
     font-weight: 300;
@@ -166,7 +184,10 @@
   }
   textarea#import-text:focus{ outline: none; border-color: var(--gold); }
 
-  .import-row{ display:flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--hairline); flex-wrap: wrap; }
+  .import-row-block{ border-bottom: 1px solid var(--hairline); padding: 10px 0; }
+  .imp-customer{ font-family:'Cormorant Garamond', serif; font-size:14px; font-weight:600; color:var(--ink); margin-bottom:6px; }
+  .import-row{ display:flex; align-items: center; gap: 10px; padding: 4px 0; border-bottom: none; flex-wrap: wrap; }
+  .imp-service-select{ width: auto; min-width: 160px; flex: 1 1 160px; font-size: 12px; border-bottom: 1px solid var(--gold); }
   .import-row input[type=text]{ flex: 2; min-width: 140px; border-bottom: 1px solid var(--hairline); font-size: 13px; padding: 4px 2px; }
   .import-row input[type=date]{ flex: 1; min-width: 120px; font-size: 12px; padding: 4px 2px; }
   .import-row input[type=number]{ width: 90px; font-size: 14px; padding: 4px 2px; font-family: 'Cormorant Garamond', serif; }
@@ -291,9 +312,96 @@
     }
     #print-report .close-report-row{ display:none; }
   }
+
+  /* ---------- ruta del día ---------- */
+  .route-date-row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
+  .route-date-row label{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--ink-soft); }
+  .route-date-row input[type=date]{ width:auto; flex:0 0 auto; border-bottom:1px solid var(--hairline); padding:4px 2px; }
+  .route-hint{ font-size:11px; color:var(--ink-soft); font-style:italic; font-family:'Cormorant Garamond', serif; flex:1 1 100%; min-width:0; }
+
+  .route-stop{
+    background: var(--white); border: 1px solid var(--hairline); border-left: 3px solid var(--gold);
+    padding: 16px; margin-bottom: 14px; max-width: 100%; overflow-wrap: break-word;
+  }
+  .route-stop.decided{ border-left-color: var(--hairline); background: var(--ivory); }
+
+  .route-header-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  .route-order{
+    width: 46px; text-align:center; font-family:'Cormorant Garamond', serif; font-size:18px; font-weight:600;
+    border: 1px solid var(--hairline); background: var(--white); color: var(--gold-deep); padding: 5px 2px; flex: 0 0 auto;
+  }
+  .route-customer{
+    font-family:'Cormorant Garamond', serif; font-size:18px; font-weight:600; color:var(--ink);
+    flex: 1 1 140px; min-width: 0; overflow-wrap: break-word;
+  }
+  .route-amount{
+    font-family:'Cormorant Garamond', serif; font-size:17px; font-weight:600; color:var(--gold-deep);
+    flex: 0 0 auto; white-space:nowrap; margin-left: auto;
+  }
+  .route-amount.missing{ color: var(--wine); font-size:12px; font-family:'Jost', sans-serif; }
+  .route-del{ background:none; border:none; color:var(--hairline); cursor:pointer; font-size:15px; padding:2px 4px; flex: 0 0 auto; }
+  .route-del:hover{ color:var(--wine); }
+
+  .route-category{ font-size:13px; color:var(--gold-deep); font-weight:500; margin: 2px 0; }
+  .route-meta{ font-size:11.5px; color:var(--ink-soft); margin: 4px 0; line-height:1.5; overflow-wrap: break-word; }
+  .route-notes{ font-size:11.5px; color:var(--ink-soft); font-style:italic; font-family:'Cormorant Garamond', serif; margin: 6px 0 0; overflow-wrap: break-word; }
+  .route-flag-line{ font-size:12px; color:var(--gold-deep); font-weight:500; margin: 6px 0 0; background:var(--gold-pale); padding:5px 8px; overflow-wrap: break-word; }
+  .flag-chip{ display:inline-flex; align-items:center; gap:3px; margin-right:4px; }
+  .chip-del{ background:none; border:none; color:var(--wine); cursor:pointer; font-size:11px; padding:0 2px; opacity:0.7; }
+  .chip-del:hover{ opacity:1; }
+
+  .route-decided .route-customer, .route-decided .route-category, .route-decided .route-meta{
+    text-decoration: line-through; text-decoration-color: var(--ink-soft); opacity: 0.6;
+  }
+
+  .route-actions{ display:flex; gap:6px; flex-wrap:wrap; margin-top:12px; }
+  .route-variant{ margin-top:8px; font-size:12px; max-width:280px; border-bottom:1px solid var(--gold); }
+
+  .route-extra-row{ margin-top:10px; }
+  .route-extra-form{ display:none; gap:8px; margin-top:10px; flex-wrap:wrap; align-items:flex-end; background:var(--ivory); padding:10px; border:1px dashed var(--hairline); }
+  .route-extra-form.open{ display:flex; }
+  .route-extra-form input{ font-size:13px; }
+  .route-extra-form .field{ min-width:110px; flex:1; }
+
+  .route-empty{ text-align:center; color:var(--ink-soft); padding:40px 10px; font-family:'Cormorant Garamond', serif; font-style:italic; font-size:15px; border:1px dashed var(--hairline); }
+
+  /* ---------- pantallas y barra de navegación inferior ---------- */
+  .screen{ display:none; }
+  .screen.active{ display:block; }
+
+  .bottom-nav{
+    position: fixed; left:0; right:0; bottom:0; z-index: 10;
+    display:flex; background: var(--white); border-top: 0.5px solid var(--hairline);
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.06);
+  }
+  .bottom-nav button{
+    flex:1; background:none; border:none; padding: 9px 2px 8px; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    color: var(--ink-soft); font-family:'Jost', sans-serif;
+  }
+  .bottom-nav button .nav-icon{ font-size:18px; line-height:1; }
+  .bottom-nav button .nav-label{ font-size:9.5px; font-weight:500; letter-spacing:0.2px; }
+  .bottom-nav button.active{ color: var(--gold-deep); }
+  .bottom-nav button.active .nav-icon{ color: var(--gold); }
+  .bottom-nav .nav-badge{
+    position:absolute; top:3px; right:22%; background:var(--wine); color:var(--white);
+    font-size:8px; font-weight:700; border-radius:8px; padding:1px 4px; min-width:12px; text-align:center; line-height:1.3;
+  }
+  .bottom-nav .nav-item{ position:relative; flex:1; display:flex; }
+
+  .app{ padding-bottom: 90px !important; }
+
+  @media (min-width: 700px){
+    .app{ max-width: 960px; }
+    .route-stop{ padding: 20px 22px; }
+  }
 </style>
 </head>
 <body>
+
+<div id="bg-photo-layer">
+  <img src="fondo-app.jpg" alt="" onerror="this.remove()" />
+</div>
 
 <div class="app">
   <div class="header">
@@ -308,6 +416,8 @@
       <div class="sub" id="today-label">—</div>
     </div>
   </div>
+
+  <div class="screen active" id="screen-hoy">
 
   <div class="tabs">
     <button data-tab="day" class="active">Hoy</button>
@@ -331,12 +441,33 @@
     <div class="summary" id="amounts-month"></div>
   </div>
 
-  <div class="report-btn-row">
-    <button class="btn-outline" id="report-btn" type="button">Generar reporte (semana + mes)</button>
-  </div>
-  <div class="report-hint">El reporte aparece abajo. Para guardarlo como PDF: toca Compartir en Safari → Imprimir → pellizca para hacer zoom en la vista previa → Compartir → Guardar en Archivos.</div>
+  <div class="section-card" id="route-card">
+    <button class="section-toggle open" data-section="route" type="button">
+      <span>Ruta del día</span>
+      <span class="chev">▾</span>
+    </button>
+    <div class="section-body open" id="body-route">
+      <div class="route-date-row">
+        <label>Ver / agregar a la ruta de:</label>
+        <input type="date" id="route-date" />
+        <span class="route-hint">Puedes subir la ruta de cualquier día, no solo hoy. Pega el correo completo o solo el tiquete de un cliente a la vez — se va sumando a la lista.</span>
+      </div>
 
-  <div id="print-report"></div>
+      <div class="section-hint">Pega aquí el correo completo, o el tiquete de un solo cliente. Detecta cada trabajo, evita duplicados (por fecha + categoría + PO), busca el precio en tu inventario, y marca como cancelado o pendiente/reprogramado según el contenido.</div>
+      <textarea id="import-text" placeholder="Pega el correo completo o el tiquete de un cliente aquí…"></textarea>
+      <button class="btn-outline" id="detect-btn" type="button">Detectar trabajos</button>
+      <div id="import-preview"></div>
+
+      <div style="margin-top:26px; border-top:1px solid var(--hairline); padding-top:18px;">
+        <div id="route-list"></div>
+      </div>
+
+      <div style="margin-top:22px; border-top:1px solid var(--hairline); padding-top:18px; text-align:center;">
+        <button class="btn-outline" id="finish-route-btn" type="button">Ruta terminada — Generar PDF del día</button>
+        <div class="report-hint" style="margin:10px 0 0;">Arma un resumen de esta fecha (paradas, montos, partes usadas) para guardar como PDF en iPhone, Android o computadora.</div>
+      </div>
+    </div>
+  </div>
 
   <div class="form-card">
     <div id="entry-form">
@@ -381,18 +512,9 @@
     </div>
   </div>
 
-  <div class="section-card">
-    <button class="section-toggle" data-section="import" type="button">
-      <span>Importar trabajos de un correo</span>
-      <span class="chev">▾</span>
-    </button>
-    <div class="section-body" id="body-import">
-      <div class="section-hint">Pega el texto completo del correo de rutas. La app detecta cada trabajo, evita duplicados (por fecha + categoría + PO), busca el precio en tu inventario, y marca como cancelado o pendiente/reprogramado según el contenido del correo.</div>
-      <textarea id="import-text" placeholder="Pega el correo completo aquí…"></textarea>
-      <button class="btn-outline" id="detect-btn" type="button">Detectar trabajos</button>
-      <div id="import-preview"></div>
-    </div>
   </div>
+
+  <div class="screen" id="screen-precios">
 
   <div class="section-card">
     <button class="section-toggle" data-section="missing" type="button">
@@ -402,36 +524,6 @@
     <div class="section-body" id="body-missing">
       <div class="section-hint">Estos trabajos se detectaron pero no coinciden con ningún precio del inventario. Agrégales un monto para que pasen a "Pendiente".</div>
       <div id="missing-list"></div>
-    </div>
-  </div>
-
-  <div class="section-card">
-    <button class="section-toggle" data-section="backup" type="button">
-      <span>Copia de seguridad</span>
-      <span class="chev">▾</span>
-    </button>
-    <div class="section-body" id="body-backup">
-      <div class="section-hint">Descarga un archivo con todos tus trabajos, tarifas y ajustes. Guárdalo en Archivos o mándatelo por correo — así puedes restaurarlo aquí mismo si algo le pasa a los datos de tu teléfono, o pasarlo a otro dispositivo.</div>
-      <button class="btn-outline" id="export-btn" type="button">Descargar / compartir copia de seguridad</button>
-
-      <div id="export-fallback" style="display:none; margin-top:16px;">
-        <div class="section-hint">Si no se abrió el cuadro para guardar o compartir, copia el texto de abajo y guárdalo en Notas, Archivos o mándatelo por correo.</div>
-        <textarea id="export-text-fallback" readonly style="width:100%; min-height:110px; font-size:10.5px; font-family:monospace; background:var(--ivory); border:1px solid var(--hairline); padding:10px; color:var(--ink);"></textarea>
-        <button class="btn-mini" id="copy-export-btn" type="button" style="margin-top:8px;">Copiar al portapapeles</button>
-      </div>
-
-      <div style="margin-top:22px; border-top:1px solid var(--hairline); padding-top:16px;">
-        <label style="font-size:10px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:1.2px; display:block; margin-bottom:8px;">Restaurar desde un archivo</label>
-        <input type="file" id="import-backup-input" accept=".json" style="font-size:12px;" />
-      </div>
-
-      <div style="margin-top:16px;">
-        <label style="font-size:10px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:1.2px; display:block; margin-bottom:8px;">O pega aquí el contenido del respaldo</label>
-        <textarea id="import-text-paste" placeholder="Pega aquí el texto que copiaste antes…" style="width:100%; min-height:90px; font-size:10.5px; font-family:monospace; background:var(--ivory); border:1px solid var(--hairline); padding:10px; color:var(--ink);"></textarea>
-        <button class="btn-mini" id="import-paste-btn" type="button" style="margin-top:8px;">Restaurar desde este texto</button>
-      </div>
-
-      <div class="form-error" id="backup-msg"></div>
     </div>
   </div>
 
@@ -449,13 +541,142 @@
         <div class="field" style="max-width:100px"><label>Precio</label><input type="number" step="0.01" min="0" id="np-price" placeholder="0.00" /></div>
         <button class="btn-mini" id="np-add-btn" type="button" style="height:36px;">Agregar</button>
       </div>
+
+      <div style="margin-top:22px; border-top:1px solid var(--hairline); padding-top:16px;">
+        <button class="btn-mini" id="reset-prices-btn" type="button">Restablecer inventario a los precios confirmados</button>
+        <div id="reset-confirm-box" style="display:none; margin-top:12px; padding:12px; border:1px dashed var(--wine); background:var(--ivory);">
+          <div style="font-size:12px; color:var(--wine); margin-bottom:10px;">Esto borra TODOS los precios guardados ahora mismo y los reemplaza por la lista confirmada (Dishwasher, OTR Microwave, Toilet con sus variantes, Trip Charge, Detail, etc.). Los trabajos ya agregados en tu bitácora e historial NO se borran, solo el inventario de precios. ¿Confirmas?</div>
+          <button class="btn-mini" id="reset-confirm-yes" type="button" style="border-color:var(--wine); color:var(--wine);">Sí, reemplazar</button>
+          <button class="btn-mini" id="reset-confirm-no" type="button">Cancelar</button>
+        </div>
+      </div>
     </div>
   </div>
 
+  </div>
+
+  <div class="screen" id="screen-partes">
+
+  <div class="section-card">
+    <button class="section-toggle" data-section="parts" type="button">
+      <span>Inventario de partes<span class="badge-count" id="parts-low-badge" style="display:none">0</span></span>
+      <span class="chev">▾</span>
+    </button>
+    <div class="section-body" id="body-parts">
+      <div class="section-hint">Lleva el conteo de tus repuestos. Cuando registras una parte usada en un cliente, se descuenta sola de aquí. Si una parte llega al mínimo que definas, aparece marcada para que sepas que debes ordenar más.</div>
+      <div id="parts-low-alert"></div>
+      <div id="parts-list"></div>
+      <div class="price-add-row">
+        <div class="field"><label>Nombre de la parte</label><input type="text" id="pp-name" placeholder="ej. Manguera de faucet" /></div>
+        <div class="field" style="max-width:110px"><label>Cantidad</label><input type="number" step="1" min="0" id="pp-qty" placeholder="0" /></div>
+        <div class="field" style="max-width:110px"><label>Aviso en</label><input type="number" step="1" min="0" id="pp-threshold" placeholder="5" /></div>
+        <button class="btn-mini" id="pp-add-btn" type="button" style="height:36px;">Agregar</button>
+      </div>
+
+      <div style="margin-top:22px; border-top:1px solid var(--hairline); padding-top:16px;">
+        <div class="route-hint" style="margin-bottom:10px; display:block;">Historial de uso de partes</div>
+        <div id="parts-usage-list"></div>
+      </div>
+    </div>
+  </div>
+
+  </div>
+
+  <div class="screen" id="screen-ajustes">
+
+  <div class="section-card">
+    <button class="section-toggle" data-section="backup" type="button">
+      <span>Copia de seguridad</span>
+      <span class="chev">▾</span>
+    </button>
+    <div class="section-body" id="body-backup">
+      <div class="section-hint">La app maneja dos tipos de respaldo. <b>Completo</b>: incluye tus clientes y trabajos actuales. <b>Solo configuración</b>: guarda únicamente el inventario de precios, el inventario de partes y tus ajustes — sin clientes ni trabajos, ya que esa información vive en el sistema de Mega y se vuelve a llenar cada día importando la ruta.</div>
+      <button class="btn-outline" id="export-full-btn" type="button">Descargar respaldo completo</button>
+      <button class="btn-outline" id="export-config-btn" type="button" style="margin-top:10px;">Descargar solo configuración (sin clientes/trabajos)</button>
+
+      <div id="export-fallback" style="display:none; margin-top:16px;">
+        <div class="section-hint">Si no se abrió el cuadro para guardar o compartir, copia el texto de abajo y guárdalo en Notas, Archivos o mándatelo por correo.</div>
+        <textarea id="export-text-fallback" readonly style="width:100%; min-height:110px; font-size:10.5px; font-family:monospace; background:var(--ivory); border:1px solid var(--hairline); padding:10px; color:var(--ink);"></textarea>
+        <button class="btn-mini" id="copy-export-btn" type="button" style="margin-top:8px;">Copiar al portapapeles</button>
+      </div>
+
+      <div style="margin-top:22px; border-top:1px solid var(--hairline); padding-top:16px;">
+        <label style="font-size:10px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:1.2px; display:block; margin-bottom:8px;">Restaurar desde un archivo</label>
+        <input type="file" id="import-backup-input" accept=".json,application/json,.txt,text/plain" style="font-size:12px;" />
+      </div>
+
+      <div style="margin-top:16px;">
+        <label style="font-size:10px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:1.2px; display:block; margin-bottom:8px;">O pega aquí el contenido del respaldo</label>
+        <textarea id="import-text-paste" placeholder="Pega aquí el texto que copiaste antes…" style="width:100%; min-height:90px; font-size:10.5px; font-family:monospace; background:var(--ivory); border:1px solid var(--hairline); padding:10px; color:var(--ink);"></textarea>
+        <button class="btn-mini" id="import-paste-btn" type="button" style="margin-top:8px;">Restaurar desde este texto</button>
+      </div>
+
+      <div class="form-error" id="backup-msg"></div>
+
+      <div style="margin-top:24px; border-top:1px solid var(--hairline); padding-top:16px;">
+        <button class="btn-mini" id="reset-entries-btn" type="button" style="border-color:var(--wine); color:var(--wine);">Borrar todos los clientes y trabajos</button>
+        <div id="reset-entries-confirm-box" style="display:none; margin-top:12px; padding:12px; border:1px dashed var(--wine); background:var(--ivory);">
+          <div style="font-size:12px; color:var(--wine); margin-bottom:10px;">Esto borra TODOS los clientes, trabajos e historial de partes usadas guardados ahora mismo. El inventario de precios, el inventario de partes y tus ajustes (% de Mega) NO se tocan. ¿Confirmas?</div>
+          <button class="btn-mini" id="reset-entries-confirm-yes" type="button" style="border-color:var(--wine); color:var(--wine);">Sí, borrar todo</button>
+          <button class="btn-mini" id="reset-entries-confirm-no" type="button">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  </div>
+
+  <div class="screen" id="screen-reportes">
+
+  <div class="report-btn-row">
+    <button class="btn-outline" id="report-btn" type="button">Generar reporte (semana + mes)</button>
+  </div>
+  <div class="report-hint">El reporte aparece abajo. Para guardarlo como PDF: toca Compartir en Safari → Imprimir → pellizca para hacer zoom en la vista previa → Compartir → Guardar en Archivos.</div>
+
+  <div id="print-report"></div>
+
   <div id="entries-container"></div>
+
+  </div>
 
   <div class="status" id="status-line">cargando…</div>
 </div>
+
+<div class="bottom-nav">
+  <div class="nav-item">
+    <button class="nav-btn active" data-screen="hoy">
+      <span class="nav-icon">⌂</span>
+      <span class="nav-label">Hoy</span>
+    </button>
+  </div>
+  <div class="nav-item">
+    <button class="nav-btn" data-screen="precios">
+      <span class="nav-icon">$</span>
+      <span class="nav-label">Precios</span>
+      <span class="nav-badge" id="nav-badge-precios" style="display:none">0</span>
+    </button>
+  </div>
+  <div class="nav-item">
+    <button class="nav-btn" data-screen="partes">
+      <span class="nav-icon">🔧</span>
+      <span class="nav-label">Partes</span>
+      <span class="nav-badge" id="nav-badge-partes" style="display:none">0</span>
+    </button>
+  </div>
+  <div class="nav-item">
+    <button class="nav-btn" data-screen="reportes">
+      <span class="nav-icon">▤</span>
+      <span class="nav-label">Reportes</span>
+    </button>
+  </div>
+  <div class="nav-item">
+    <button class="nav-btn" data-screen="ajustes">
+      <span class="nav-icon">⚙</span>
+      <span class="nav-label">Ajustes</span>
+    </button>
+  </div>
+</div>
+
 <script>
 (function(){
   // Si se abre fuera de Claude (archivo guardado y abierto en Safari, sin wifi),
@@ -487,7 +708,7 @@
     };
   }
 
-  const state = { entries: [], rate: 90, priceList: [] };
+  const state = { entries: [], rate: 90, priceList: [], parts: [], partUsage: [] };
   let editingId = null;
 
   // ---------- utilidades de fecha ----------
@@ -512,15 +733,34 @@
   function normCat(cat){ return (cat || '').trim().toLowerCase(); }
 
   // ---------- inventario de precios ----------
+  // Subir este número obliga a un reinicio único de historial + inventario en el próximo cambio grande de precios.
+  const DATA_RESET_VERSION = 2;
+
   const DEFAULT_PRICE_LIST = [
-    { name:'Dishwasher', aliases:['Lavaplatos','Dishwasher Install','Dish Washer','Dish Washer Installation'], price:125 },
-    { name:'OTR Microwave', aliases:['OTR','Microwave','Over the Range'], price:150 },
+    // Dishwasher: sin mención o "con/yes haul away" = precio más alto (por defecto). "no haul away" explícito = precio bajo.
+    { name:'Dishwasher - Haul Away', aliases:['Lavaplatos','Dishwasher Install','Dish Washer','Dish Washer Installation','Dishwasher'], price:88.35 },
+    { name:'Dishwasher - No Haul Away', aliases:['Lavaplatos','Dishwasher Install','Dish Washer','Dish Washer Installation','Dishwasher'], price:74.10 },
+    // OTR Microwave: misma lógica
+    { name:'OTR Microwave - Haul Away', aliases:['OTR','Microwave','Over the Range','OTR Microwave','OTR Microwave Installation'], price:82.65 },
+    { name:'OTR Microwave - No Haul Away', aliases:['OTR','Microwave','Over the Range','OTR Microwave','OTR Microwave Installation'], price:68.40 },
+    // Toilet: "con delivery" (por defecto) vs "no delivery" explícito
+    { name:'Toilet - Delivery', aliases:['Toilet'], price:133.95 },
+    { name:'Toilet - No Delivery', aliases:['Toilet'], price:114.00 },
+    // categorías con precio consistente en tus invoices reales
+    { name:'Trip Charge', aliases:[], price:28.50 },
+    { name:'Detail', aliases:[], price:19.95 },
+    { name:'Dump Fee', aliases:[], price:19.95 },
+    { name:'Exception Category', aliases:['Service Call','Orden de servicio'], price:28.50 },
+    { name:'Garbage Disposal', aliases:['Garbage Disposaal','Triturador'], price:85.50 },
+    { name:'Faucet', aliases:[], price:85.50 },
+    { name:'Kitchen Sink', aliases:[], price:171.00 },
+    { name:'Range Hood', aliases:[], price:70.11 },
+    { name:'Shower Head', aliases:[], price:34.66 },
+    // el resto de tu lista original que aún no tiene datos reales de invoice
     { name:'Range', aliases:['Stove'], price:100 },
     { name:'Refrigerator', aliases:['Fridge','Refrigerador','Nevera'], price:180 },
     { name:'Washer', aliases:['Lavadora'], price:120 },
-    { name:'Dryer', aliases:['Secadora'], price:120 },
-    { name:'Garbage Disposal', aliases:['Triturador'], price:90 },
-    { name:'Service Call', aliases:['Exception Category','Orden de servicio'], price:75 }
+    { name:'Dryer', aliases:['Secadora'], price:120 }
   ];
 
   function makeId(prefix){ return prefix + Date.now() + Math.random().toString(36).slice(2,7); }
@@ -546,9 +786,14 @@
 
   function matchPrice(categoryText){
     const t = (categoryText || '').toLowerCase();
+    const queryIsCheap = /-\s*no\s+(haul away|delivery)/i.test(t);
     let best = null, bestLen = 0;
     state.priceList.forEach(item=>{
       if(!item.active) return;
+      const itemIsCheap = /-\s*no\s+(haul away|delivery)/i.test(item.name);
+      // si la categoría dice "No Haul Away/Delivery", solo debe emparejar con esa variante barata
+      // (nunca con la variante cara), y viceversa — así nunca se mezclan los precios.
+      if(itemIsCheap !== queryIsCheap) return;
       const terms = [item.name, ...(item.aliases||[])];
       terms.forEach(term=>{
         const tt = (term||'').trim().toLowerCase();
@@ -577,6 +822,33 @@
       state.priceList.push({ id: makeId('p'), name: name.trim(), aliases: (aliasesArr||[]).filter(Boolean), price, active: true });
     }
     persistPriceList();
+  }
+
+  // ---------- inventario de partes ----------
+  function addPart(name, quantity, threshold){
+    state.parts.push({ id: makeId('pt'), name: name.trim(), quantity, threshold: (threshold===null||isNaN(threshold)) ? 5 : threshold });
+    persistParts();
+  }
+  function usePart(partId, qty, customerName, jobId, date){
+    const part = state.parts.find(p=> p.id === partId);
+    if(!part) return;
+    part.quantity = part.quantity - qty;
+    state.partUsage.push({
+      id: makeId('pu'), partId, partName: part.name, quantity: qty,
+      customerName: customerName || '', jobId, date: date || todayISO()
+    });
+    persistParts();
+    persistPartUsage();
+    statusLine.textContent = `${qty} × ${part.name} descontado del inventario (quedan ${part.quantity}) ✓`;
+  }
+  function undoPartUsage(usageId){
+    const usage = state.partUsage.find(u=> u.id === usageId);
+    if(!usage) return;
+    const part = state.parts.find(p=> p.id === usage.partId);
+    if(part) part.quantity = part.quantity + usage.quantity;
+    state.partUsage = state.partUsage.filter(u=> u.id !== usageId);
+    persistParts();
+    persistPartUsage();
   }
 
   // ---------- duplicados ----------
@@ -617,7 +889,33 @@
       state.priceList = pl ? JSON.parse(pl.value) : [];
     }catch(err){ state.priceList = []; }
 
-    if(state.priceList.length === 0){
+    try{
+      const pt = await window.storage.get('wl:parts', false);
+      state.parts = pt ? JSON.parse(pt.value) : [];
+    }catch(err){ state.parts = []; }
+
+    try{
+      const pu = await window.storage.get('wl:partusage', false);
+      state.partUsage = pu ? JSON.parse(pu.value) : [];
+    }catch(err){ state.partUsage = []; }
+
+    // reinicio único: esta versión de la app llega con el historial vacío y solo
+    // los precios ya confirmados contigo. Se aplica una sola vez por dispositivo.
+    let resetVersion = 0;
+    try{
+      const rv = await window.storage.get('wl:reset_version', false);
+      resetVersion = rv ? parseInt(rv.value, 10) || 0 : 0;
+    }catch(err){ resetVersion = 0; }
+
+    if(resetVersion < DATA_RESET_VERSION){
+      state.entries = [];
+      state.priceList = DEFAULT_PRICE_LIST.map(p => ({
+        id: makeId('p'), name: p.name, aliases: p.aliases.slice(), price: p.price, active: true
+      }));
+      await persistEntries();
+      await persistPriceList();
+      try{ await window.storage.set('wl:reset_version', String(DATA_RESET_VERSION), false); }catch(err){}
+    } else if(state.priceList.length === 0){
       // primera vez: revisar si existía el sistema anterior de "tarifas" (wl:rates)
       try{
         const legacy = await window.storage.get('wl:rates', false);
@@ -640,6 +938,8 @@
   }
   async function persistRate(){ try{ await window.storage.set('wl:rate', String(state.rate), false); }catch(err){} }
   async function persistPriceList(){ try{ await window.storage.set('wl:pricelist', JSON.stringify(state.priceList), false); }catch(err){} }
+  async function persistParts(){ try{ await window.storage.set('wl:parts', JSON.stringify(state.parts), false); }catch(err){} }
+  async function persistPartUsage(){ try{ await window.storage.set('wl:partusage', JSON.stringify(state.partUsage), false); }catch(err){} }
 
   // ---------- categorías conocidas (autocompletado) ----------
   function categories(){
@@ -793,6 +1093,118 @@
     });
   }
 
+  function renderPartsList(){
+    const wrap = document.getElementById('parts-list');
+    const badge = document.getElementById('parts-low-badge');
+    const navBadge = document.getElementById('nav-badge-partes');
+    const alertBox = document.getElementById('parts-low-alert');
+
+    const lowParts = state.parts.filter(p=> p.quantity <= p.threshold);
+    if(lowParts.length > 0){
+      badge.style.display = 'inline-block';
+      badge.textContent = lowParts.length;
+      if(navBadge){ navBadge.style.display = 'block'; navBadge.textContent = lowParts.length; }
+      alertBox.innerHTML = `<div class="form-error" style="margin-bottom:14px;">Ordena más: ${lowParts.map(p=> escapeHtml(p.name) + ' (quedan ' + p.quantity + ')').join(' · ')}</div>`;
+    } else {
+      badge.style.display = 'none';
+      if(navBadge) navBadge.style.display = 'none';
+      alertBox.innerHTML = '';
+    }
+
+    wrap.innerHTML = '';
+    if(state.parts.length === 0){
+      wrap.innerHTML = '<div class="rate-empty">Todavía no hay partes en el inventario.</div>';
+      return;
+    }
+    const sorted = state.parts.slice().sort((a,b)=> a.name.localeCompare(b.name));
+    sorted.forEach(part=>{
+      const low = part.quantity <= part.threshold;
+      const row = document.createElement('div');
+      row.className = 'price-row' + (low ? ' inactive' : '');
+      row.style.opacity = low ? '1' : '';
+      row.innerHTML = `
+        <input type="text" class="pt-name" data-id="${part.id}" value="${escapeHtml(part.name)}" style="flex:1.4;" />
+        <input type="number" step="1" class="pt-qty" data-id="${part.id}" value="${part.quantity}" style="width:80px; ${low ? 'color:var(--wine); font-weight:700;' : ''}" />
+        <input type="number" step="1" min="0" class="pt-threshold" data-id="${part.id}" value="${part.threshold}" style="width:70px;" title="Avisar cuando llegue a este número" />
+        ${low ? '<span class="rate-flag missing">reordenar</span>' : ''}
+        <button class="rm-price" data-id="${part.id}" title="Eliminar">✕</button>
+      `;
+      wrap.appendChild(row);
+    });
+
+    wrap.querySelectorAll('.pt-name').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const part = state.parts.find(p=>p.id===inp.dataset.id);
+        if(part && inp.value.trim()){ part.name = inp.value.trim(); persistParts(); render(); }
+      });
+    });
+    wrap.querySelectorAll('.pt-qty').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const part = state.parts.find(p=>p.id===inp.dataset.id);
+        const val = parseInt(inp.value, 10);
+        if(part && !isNaN(val)){ part.quantity = val; persistParts(); render(); }
+      });
+    });
+    wrap.querySelectorAll('.pt-threshold').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const part = state.parts.find(p=>p.id===inp.dataset.id);
+        const val = parseInt(inp.value, 10);
+        if(part && !isNaN(val) && val >= 0){ part.threshold = val; persistParts(); render(); }
+      });
+    });
+    wrap.querySelectorAll('.rm-price').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        state.parts = state.parts.filter(p=>p.id !== btn.dataset.id);
+        persistParts();
+        render();
+      });
+    });
+  }
+
+  function renderPartsUsageList(){
+    const wrap = document.getElementById('parts-usage-list');
+    if(!wrap) return;
+    if(state.partUsage.length === 0){
+      wrap.innerHTML = '<div class="rate-empty">Todavía no has registrado uso de partes.</div>';
+      return;
+    }
+    const sorted = state.partUsage.slice().sort((a,b)=> b.date.localeCompare(a.date));
+    wrap.innerHTML = '';
+    sorted.forEach(u=>{
+      const row = document.createElement('div');
+      row.className = 'missing-row';
+      row.innerHTML = `
+        <span class="m-date">${shortLabel(u.date)}</span>
+        <span class="m-cat" style="flex:1.5;">${escapeHtml(u.partName)} × ${u.quantity}${u.customerName ? ' — ' + escapeHtml(u.customerName) : ''}</span>
+        <button class="btn-mini undo-usage" data-id="${u.id}">Deshacer</button>
+      `;
+      wrap.appendChild(row);
+    });
+    wrap.querySelectorAll('.undo-usage').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        undoPartUsage(btn.dataset.id);
+        render();
+        statusLine.textContent = 'uso de parte deshecho, cantidad restaurada ✓';
+      });
+    });
+  }
+
+  document.getElementById('pp-add-btn').addEventListener('click', ()=>{
+    const name = document.getElementById('pp-name').value.trim();
+    const qty = parseInt(document.getElementById('pp-qty').value, 10);
+    const threshold = parseInt(document.getElementById('pp-threshold').value, 10);
+    if(!name || isNaN(qty) || qty < 0){
+      statusLine.textContent = 'escribe un nombre y una cantidad válida para agregar la parte';
+      return;
+    }
+    addPart(name, qty, isNaN(threshold) ? 5 : threshold);
+    document.getElementById('pp-name').value = '';
+    document.getElementById('pp-qty').value = '';
+    document.getElementById('pp-threshold').value = '';
+    render();
+    statusLine.textContent = 'parte agregada al inventario ✓';
+  });
+
   document.getElementById('np-add-btn').addEventListener('click', ()=>{
     const name = document.getElementById('np-name').value.trim();
     const aliases = document.getElementById('np-aliases').value.split(',').map(s=>s.trim()).filter(Boolean);
@@ -809,18 +1221,53 @@
     statusLine.textContent = 'precio agregado al inventario ✓';
   });
 
+  document.getElementById('reset-prices-btn').addEventListener('click', ()=>{
+    document.getElementById('reset-confirm-box').style.display = 'block';
+  });
+  document.getElementById('reset-confirm-no').addEventListener('click', ()=>{
+    document.getElementById('reset-confirm-box').style.display = 'none';
+  });
+  document.getElementById('reset-confirm-yes').addEventListener('click', ()=>{
+    state.priceList = DEFAULT_PRICE_LIST.map(p => ({
+      id: makeId('p'), name: p.name, aliases: p.aliases.slice(), price: p.price, active: true
+    }));
+    persistPriceList();
+    document.getElementById('reset-confirm-box').style.display = 'none';
+    renderPriceList();
+    statusLine.textContent = `inventario restablecido ✓ (${state.priceList.length} precios cargados)`;
+  });
+
+  document.getElementById('reset-entries-btn').addEventListener('click', ()=>{
+    document.getElementById('reset-entries-confirm-box').style.display = 'block';
+  });
+  document.getElementById('reset-entries-confirm-no').addEventListener('click', ()=>{
+    document.getElementById('reset-entries-confirm-box').style.display = 'none';
+  });
+  document.getElementById('reset-entries-confirm-yes').addEventListener('click', ()=>{
+    state.entries = [];
+    state.partUsage = [];
+    persistEntries();
+    persistPartUsage();
+    document.getElementById('reset-entries-confirm-box').style.display = 'none';
+    render();
+    statusLine.textContent = 'clientes y trabajos borrados ✓ (precios, partes y ajustes se mantuvieron intactos)';
+  });
+
   // ---------- trabajos sin precio: render ----------
   function renderMissingList(){
     const wrap = document.getElementById('missing-list');
     const badge = document.getElementById('missing-badge');
+    const navBadge = document.getElementById('nav-badge-precios');
     const missing = state.entries.filter(e=> e.type === 'income' && e.status === 'missing_price');
 
     if(missing.length === 0){
       badge.style.display = 'none';
+      if(navBadge) navBadge.style.display = 'none';
       wrap.innerHTML = '<div class="rate-empty">No hay trabajos pendientes de precio.</div>';
       return;
     }
     badge.style.display = 'inline-block';
+    if(navBadge){ navBadge.style.display = 'block'; navBadge.textContent = missing.length; }
     badge.textContent = missing.length;
 
     wrap.innerHTML = '';
@@ -861,7 +1308,282 @@
     });
   }
 
-  // ---------- formulario ----------
+  // ---------- ruta del día ----------
+  const routeStatusLabels = {pending:'Pendiente', completed:'Completado', paid:'Pagado', cancelled:'Cancelado'};
+
+  function stripVariantSuffix(cat){
+    return (cat || '').replace(/\s*-\s*No\s+(Haul Away|Delivery)\s*$/i, '').trim();
+  }
+  function distinctServiceNames(){
+    const set = new Set();
+    state.priceList.forEach(p=>{
+      if(!p.active) return;
+      set.add(stripVariantSuffix(p.name).replace(/\s*-\s*(Haul Away|Delivery)\s*$/i, '').trim());
+    });
+    return Array.from(set).sort((a,b)=>a.localeCompare(b));
+  }
+  function cheapVariantSuffixFor(cat){
+    return /toilet/i.test(cat) ? ' - No Delivery' : ' - No Haul Away';
+  }
+
+  function reorderStop(id, newOrderRaw, dateIso){
+    const dayStops = state.entries
+      .filter(e=> e.type==='income' && e.date===dateIso && e.status !== 'missing_price')
+      .sort((a,b)=> (a.order ?? 9999) - (b.order ?? 9999));
+
+    const idx = dayStops.findIndex(e=> e.id === id);
+    if(idx === -1) return;
+    const [moved] = dayStops.splice(idx, 1);
+
+    let newPos = parseInt(newOrderRaw, 10);
+    if(isNaN(newPos) || newPos < 1) newPos = 1;
+    newPos = Math.min(newPos, dayStops.length + 1);
+
+    dayStops.splice(newPos - 1, 0, moved);
+    dayStops.forEach((stop, i)=>{ stop.order = i + 1; });
+    persistEntries();
+  }
+
+  function renderRoute(){
+    const dateInput2 = document.getElementById('route-date');
+    if(!dateInput2.value) dateInput2.value = todayISO();
+    const dateIso = dateInput2.value;
+
+    const wrap = document.getElementById('route-list');
+    const stops = state.entries
+      .filter(e=> e.type==='income' && e.date===dateIso && e.status !== 'missing_price')
+      .sort((a,b)=> (a.order ?? 9999) - (b.order ?? 9999));
+
+    if(stops.length === 0){
+      wrap.innerHTML = '<div class="route-empty">No hay paradas para este día. Importa un correo o agrega un trabajo con esta fecha.</div>';
+      return;
+    }
+
+    wrap.innerHTML = '';
+    stops.forEach((e, i)=>{
+      const decided = e.status !== 'pending';
+      const el = document.createElement('div');
+      el.className = 'route-stop' + (decided ? ' decided' : '');
+
+      const timeRange = (e.timeStart && e.timeEnd) ? `${e.timeStart} – ${e.timeEnd}` : '';
+      const metaParts = [e.address, e.phone, timeRange].filter(Boolean).join(' · ');
+
+      const quickButtons = ['pending','completed','cancelled'].map(s=>
+        `<button class="status-btn ${s===e.status?'active '+s:''}" data-id="${e.id}" data-status="${s}">${routeStatusLabels[s]}</button>`
+      ).join('');
+
+      const isVariantJob = /dish\s*washer|dishwasher|otr|microwave|toilet/i.test(e.category);
+      const isCheapVariant = /-\s*No\s+(Haul Away|Delivery)/i.test(e.category);
+      const variantSelector = isVariantJob ? `
+        <select class="route-variant" data-id="${e.id}">
+          <option value="expensive" ${!isCheapVariant ? 'selected' : ''}>Con Haul Away / Delivery (más caro)</option>
+          <option value="cheap" ${isCheapVariant ? 'selected' : ''}>Sin Haul Away / Delivery (más barato)</option>
+        </select>` : '';
+
+      // partes usadas en ESTE trabajo específico
+      const partsUsedHere = state.partUsage.filter(u=> u.jobId === e.id);
+      const partsLine = partsUsedHere.length > 0
+        ? `<div class="route-flag-line">🔧 Partes usadas:
+            ${partsUsedHere.map(u=> `<span class="flag-chip">${escapeHtml(u.partName)} ×${u.quantity} <button class="chip-del undo-part-inline" data-usage-id="${u.id}" title="Eliminar y devolver al inventario">✕</button></span>`).join(' ')}
+           </div>`
+        : '';
+
+      // trabajos adicionales agregados para este mismo cliente/día (solo se muestra en el tiquete original)
+      const linkedAdditional = !e.isAdditional
+        ? state.entries.filter(e2=> e2.isAdditional && e2.customerName === e.customerName && e2.date === e.date && e2.id !== e.id)
+        : [];
+      const additionalLine = linkedAdditional.length > 0
+        ? `<div class="route-flag-line">➕ Trabajo adicional:
+            ${linkedAdditional.map(a=> `<span class="flag-chip">${escapeHtml(a.category)} (${fmt(a.amount)}) <button class="chip-del del-additional-inline" data-entry-id="${a.id}" title="Eliminar este trabajo adicional">✕</button></span>`).join(' ')}
+           </div>`
+        : '';
+
+      el.innerHTML = `
+        <div class="route-header-row ${decided ? 'route-decided' : ''}">
+          <input type="number" min="1" class="route-order" data-id="${e.id}" value="${e.order || (i+1)}" />
+          <div class="route-customer">${escapeHtml(e.customerName || 'Cliente sin nombre')}${e.isAdditional ? ' <span class="note-tag">Adicional</span>' : ''}</div>
+          <div class="route-amount">${fmt(e.net)}</div>
+          <button class="route-del" data-id="${e.id}" title="Eliminar">✕</button>
+        </div>
+        <div class="${decided ? 'route-decided' : ''}">
+          <div class="route-category">${escapeHtml(e.category)}</div>
+          ${metaParts ? `<div class="route-meta">${escapeHtml(metaParts)}</div>` : ''}
+        </div>
+        ${e.scopeNotes ? `<div class="route-notes">${escapeHtml(e.scopeNotes)}</div>` : ''}
+        ${partsLine}
+        ${additionalLine}
+        ${variantSelector}
+        <div class="route-actions">${quickButtons}
+          <button class="btn-mini route-extra-toggle" data-id="${e.id}">+ Trabajo adicional</button>
+          <button class="btn-mini route-part-toggle" data-id="${e.id}">+ Usar parte</button>
+        </div>
+        <div class="route-extra-row">
+          <div class="route-extra-form" id="extra-form-${e.id}">
+            <div class="field"><label>Categoría</label><input type="text" class="extra-cat" list="cat-list" placeholder="ej. Faucet" /></div>
+            <div class="field" style="max-width:100px"><label>Monto</label><input type="number" step="0.01" min="0" class="extra-amount" placeholder="0.00" /></div>
+            <button class="btn-mini extra-save" data-id="${e.id}">Agregar</button>
+          </div>
+          <div class="route-extra-form" id="part-form-${e.id}">
+            <div class="field" style="flex:1.5"><label>Parte</label>
+              <select class="part-select">
+                <option value="">— elegir parte —</option>
+                ${state.parts.map(p=>`<option value="${p.id}">${escapeHtml(p.name)} (quedan ${p.quantity})</option>`).join('')}
+              </select>
+            </div>
+            <div class="field" style="max-width:90px"><label>Cantidad usada</label><input type="number" step="1" min="1" class="part-qty" placeholder="1" /></div>
+            <button class="btn-mini part-save" data-id="${e.id}">Registrar uso</button>
+          </div>
+        </div>
+      `;
+      wrap.appendChild(el);
+    });
+
+    wrap.querySelectorAll('.route-order').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        reorderStop(inp.dataset.id, inp.value, dateIso);
+        render();
+      });
+    });
+
+    wrap.querySelectorAll('.route-variant').forEach(sel=>{
+      sel.addEventListener('change', ()=>{
+        const entry = state.entries.find(e=> e.id === sel.dataset.id);
+        if(!entry) return;
+        const base = stripVariantSuffix(entry.category);
+        const newCat = sel.value === 'cheap' ? (base + cheapVariantSuffixFor(base)) : base;
+        const match = matchPrice(newCat);
+        entry.category = newCat;
+        if(match){
+          entry.amount = match.price;
+          entry.net = Math.round(match.price * ((entry.rate || state.rate)/100) * 100) / 100;
+          if(entry.status === 'missing_price') entry.status = 'pending';
+        } else {
+          entry.amount = 0;
+          entry.net = 0;
+          entry.status = 'missing_price';
+        }
+        persistEntries();
+        render();
+        statusLine.textContent = match ? `variante actualizada: ${fmt(match.price)} ✓` : 'no hay precio guardado para esa variante — revisa "Trabajos sin precio"';
+      });
+    });
+
+    wrap.querySelectorAll('.route-stop .status-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const entry = state.entries.find(e=> e.id === btn.dataset.id);
+        if(entry){
+          entry.status = btn.dataset.status;
+          persistEntries();
+          render();
+        }
+      });
+    });
+
+    wrap.querySelectorAll('.route-del').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        state.entries = state.entries.filter(e=> e.id !== btn.dataset.id);
+        persistEntries();
+        render();
+      });
+    });
+
+    wrap.querySelectorAll('.undo-part-inline').forEach(btn=>{
+      btn.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        undoPartUsage(btn.dataset.usageId);
+        render();
+        statusLine.textContent = 'parte eliminada del trabajo y devuelta al inventario ✓';
+      });
+    });
+
+    wrap.querySelectorAll('.del-additional-inline').forEach(btn=>{
+      btn.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        // solo se borra este registro de trabajo adicional; el precio/categoría
+        // sigue guardado en el Inventario de precios para usarlo después.
+        state.entries = state.entries.filter(e=> e.id !== btn.dataset.entryId);
+        persistEntries();
+        render();
+        statusLine.textContent = 'trabajo adicional eliminado (el precio se mantiene guardado en el inventario) ✓';
+      });
+    });
+
+    wrap.querySelectorAll('.route-extra-toggle').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.getElementById('extra-form-' + btn.dataset.id).classList.toggle('open');
+      });
+    });
+
+    wrap.querySelectorAll('.route-part-toggle').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.getElementById('part-form-' + btn.dataset.id).classList.toggle('open');
+      });
+    });
+
+    wrap.querySelectorAll('.part-save').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.id;
+        const entry = state.entries.find(e=> e.id === id);
+        if(!entry) return;
+        const form = document.getElementById('part-form-' + id);
+        const partId = form.querySelector('.part-select').value;
+        const qty = parseInt(form.querySelector('.part-qty').value, 10);
+        if(!partId){
+          statusLine.textContent = 'elige qué parte usaste';
+          return;
+        }
+        if(!qty || qty <= 0 || isNaN(qty)){
+          statusLine.textContent = 'escribe una cantidad válida de partes usadas';
+          return;
+        }
+        usePart(partId, qty, entry.customerName, entry.id, entry.date);
+        form.querySelector('.part-qty').value = '';
+        render();
+      });
+    });
+
+    wrap.querySelectorAll('.extra-save').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.id;
+        const original = state.entries.find(e=> e.id === id);
+        if(!original) return;
+        const form = document.getElementById('extra-form-' + id);
+        const cat = form.querySelector('.extra-cat').value.trim();
+        const amountRaw = form.querySelector('.extra-amount').value;
+        const amount = parseFloat(amountRaw);
+        if(!cat || !amount || amount <= 0 || isNaN(amount)){
+          statusLine.textContent = 'escribe una categoría y un monto válido para el trabajo adicional';
+          return;
+        }
+        const rate = state.rate;
+        const dayStopsCount = state.entries.filter(e2=> e2.type==='income' && e2.date===dateIso).length;
+        const newEntry = {
+          id: makeId('e'),
+          date: dateIso, type: 'income', category: cat,
+          amount, rate,
+          net: Math.round(amount * (rate/100) * 100) / 100,
+          status: 'pending',
+          po: null, note: null,
+          order: dayStopsCount + 1,
+          isAdditional: true,
+          customerName: original.customerName || '',
+          address: original.address || '',
+          phone: original.phone || '',
+          store: original.store || '',
+          timeStart: null, timeEnd: null,
+          scopeNotes: ''
+        };
+        state.entries.push(newEntry);
+        addOrUpdatePriceItem(cat, [cat], amount);
+        persistEntries();
+        render();
+        statusLine.textContent = 'trabajo adicional agregado ✓';
+      });
+    });
+  }
+
+  document.getElementById('route-date').addEventListener('change', render);
+
   const typeToggle = document.querySelectorAll('.type-toggle button');
   let currentType = 'income';
   typeToggle.forEach(btn=>{
@@ -914,6 +1636,20 @@
       btn.classList.add('active');
       document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
     });
+  });
+
+  function showScreen(name){
+    document.querySelectorAll('.screen').forEach(s=> s.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b=> b.classList.remove('active'));
+    const target = document.getElementById('screen-' + name);
+    if(target) target.classList.add('active');
+    const navBtn = document.querySelector('.nav-btn[data-screen="' + name + '"]');
+    if(navBtn) navBtn.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  document.querySelectorAll('.nav-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=> showScreen(btn.dataset.screen));
   });
 
   document.querySelectorAll('.section-toggle').forEach(btn=>{
@@ -981,6 +1717,9 @@
     renderSummaries();
     renderPriceList();
     renderMissingList();
+    renderPartsList();
+    renderPartsUsageList();
+    renderRoute();
 
     const container = document.getElementById('entries-container');
     container.innerHTML = '';
@@ -1164,33 +1903,58 @@
   const CANCEL_RE = /\bcancell?ed\b|\bcancel\b|\bcancelad[oa]\b/i;
   const RESCHED_RE = /\brescheduled\b|\breprogramad[oa]\b/i;
   const NO_HAUL_RE = /no\s*haul\s*away/i;
-  const HAUL_RE = /\bhaul\s*away\b/i;
+  const NO_DELIVERY_RE = /no\s*delivery|without\s*delivery|self\s*haul|will\s*call|customer\s*pick\s*up/i;
 
-  function parseEmailJobs(rawText){
-    const fallbackDate = headerDateFallback(rawText) || todayISO();
+  function parseEmailJobs(rawText, referenceDate){
+    const fallbackDate = headerDateFallback(rawText) || referenceDate || todayISO();
     const lines = rawText.split(/\r?\n/).map(l=>l.trim()).filter(l=>l.length>0);
     const jobs = [];
 
-    for(let i=0;i<lines.length;i++){
-      if(!/^PO:/i.test(lines[i])) continue;
+    const poIndices = [];
+    for(let k=0;k<lines.length;k++){ if(/^PO:/i.test(lines[k])) poIndices.push(k); }
+
+    for(let pIdx=0; pIdx<poIndices.length; pIdx++){
+      const i = poIndices[pIdx];
+      const nextPoIndex = poIndices[pIdx+1];
+      // el bloque de datos del próximo cliente (6 líneas) empieza justo antes de su PO;
+      // no debemos leer más allá de ahí para evitar mezclar las notas con el siguiente trabajo
+      const scanLimit = nextPoIndex !== undefined ? Math.max(i+1, nextPoIndex - 6) : lines.length;
 
       const po = lines[i].replace(/^PO:\s*/i,'').trim();
       let category = lines[i-1] || 'Trabajo';
 
+      // datos del cliente: siguen un patrón fijo de líneas antes de la categoría
+      const customerName = lines[i-6] || '';
+      const address = lines[i-5] || '';
+      const phone = (lines[i-4] || '').replace(/^Phone:\s*/i, '');
+      const store = lines[i-3] || '';
+
       let dateIso = null;
+      let timeStart = null, timeEnd = null;
       for(let j=i; j<Math.min(i+3, lines.length); j++){
         const m = lines[j].match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-        if(m){ dateIso = `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`; break; }
+        if(m){
+          dateIso = `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+          const t = lines[j].match(/(\d{1,2}:\d{2}\s*[AP]M)\s*-\s*(\d{1,2}:\d{2}\s*[AP]M)/i);
+          if(t){ timeStart = t[1]; timeEnd = t[2]; }
+          break;
+        }
       }
       if(!dateIso) dateIso = fallbackDate;
 
       let scopeText = '';
-      for(let j=i+1; j<lines.length && !/^PO:/i.test(lines[j]); j++){
+      for(let j=i+1; j<scanLimit; j++){
         scopeText += ' ' + lines[j];
       }
       const blockText = (lines[i-2]||'') + ' ' + (lines[i-1]||'') + ' ' + scopeText;
 
-      if(/EXCEPTION CATEGORY/i.test(category) || /^scheduled/i.test(category)){
+      let scopeNotes = '';
+      const notesMatch = scopeText.match(/Delivery info \/ scheduling notes:\s*(.+)/i);
+      if(notesMatch) scopeNotes = notesMatch[1].trim();
+      if(scopeNotes.length > 160) scopeNotes = scopeNotes.slice(0, 160) + '…';
+
+      const wasExceptionCategory = /EXCEPTION CATEGORY/i.test(category);
+      if(wasExceptionCategory || /^scheduled/i.test(category)){
         let better = null;
         let m2 = scopeText.match(/Installation type:\s*([A-Za-z][A-Za-z ]*?)(?=\s+(Job#|Description|Delivery|Product|$))/i);
         if(m2) better = m2[1].trim();
@@ -1198,14 +1962,21 @@
           let m3 = scopeText.match(/General nature of issue:\s*([A-Za-z][A-Za-z ]*?)(?=\s+(Job#|Installation type|Description|Product|Delivery|$))/i);
           if(m3) better = m3[1].trim();
         }
-        category = better ? better : 'Service Call';
+        if(wasExceptionCategory){
+          // es una orden de servicio/reparación, NO una instalación nueva — nunca debe tomar el precio de instalación
+          category = better ? ('Exception Category - ' + better) : 'Exception Category';
+        } else {
+          category = better ? better : 'Service Call';
+        }
       }
 
-      // variantes que cambian el precio del mismo trabajo (aplica a cualquier categoría)
-      let haulTag = null;
-      if(NO_HAUL_RE.test(blockText)) haulTag = 'No Haul Away';
-      else if(HAUL_RE.test(blockText)) haulTag = 'Haul Away';
-      if(haulTag) category = category + ' - ' + haulTag;
+      // variantes que cambian el precio: si no se menciona nada, se asume la opción más cara (con haul away / con delivery).
+      // Solo si el texto dice explícitamente "no haul away" o "no delivery" se usa la variante barata.
+      if(NO_HAUL_RE.test(blockText)){
+        category = category + ' - No Haul Away';
+      } else if(/toilet/i.test(category) && NO_DELIVERY_RE.test(blockText)){
+        category = category + ' - No Delivery';
+      }
 
       const cancelled = CANCEL_RE.test(blockText);
       const rescheduled = RESCHED_RE.test(blockText);
@@ -1222,7 +1993,14 @@
         po,
         amount: priceMatch ? priceMatch.price : null,
         status,
-        note
+        note,
+        customerName,
+        address,
+        phone,
+        store,
+        timeStart,
+        timeEnd,
+        scopeNotes
       });
     }
     return jobs;
@@ -1251,21 +2029,31 @@
     }
 
     const labels = {pending:'Pendiente', completed:'Completado', paid:'Pagado', cancelled:'Cancelado'};
+    const serviceNames = distinctServiceNames();
     let html = '';
     uniqueJobs.forEach((j, idx)=>{
       const flag = j.amount !== null ? 'precio encontrado' : 'sin precio — revisión';
       const flagClass = j.amount !== null ? '' : 'missing';
+      const jobEncoded = btoa(unescape(encodeURIComponent(JSON.stringify(j))));
+      const custLine = [j.customerName, j.address].filter(Boolean).join(' · ');
       html += `
-        <div class="import-row" data-idx="${idx}" data-po="${escapeHtml(j.po || '')}">
-          <input type="text" class="imp-cat" value="${escapeHtml(j.category)}" />
-          <input type="date" class="imp-date" value="${j.date}" />
-          <input type="number" step="0.01" min="0" class="imp-amount" value="${j.amount !== null ? Number(j.amount).toFixed(2) : ''}" placeholder="0.00" />
-          <select class="imp-status">
-            ${['pending','completed','paid','cancelled'].map(s=>`<option value="${s}" ${s===j.status?'selected':''}>${labels[s]}</option>`).join('')}
-          </select>
-          <span class="rate-flag ${flagClass}">${flag}</span>
-          ${j.note ? `<span class="note-flag">${escapeHtml(j.note)}</span>` : ''}
-          <button class="rm-row" title="Quitar">✕</button>
+        <div class="import-row-block">
+          ${custLine ? `<div class="imp-customer">${escapeHtml(custLine)}</div>` : ''}
+          <div class="import-row" data-idx="${idx}" data-po="${escapeHtml(j.po || '')}" data-job="${jobEncoded}">
+            <select class="imp-service-select">
+              <option value="">— elegir servicio —</option>
+              ${serviceNames.map(n=>`<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('')}
+            </select>
+            <input type="text" class="imp-cat" value="${escapeHtml(j.category)}" />
+            <input type="date" class="imp-date" value="${j.date}" />
+            <input type="number" step="0.01" min="0" class="imp-amount" value="${j.amount !== null ? Number(j.amount).toFixed(2) : ''}" placeholder="0.00" />
+            <select class="imp-status">
+              ${['pending','completed','paid','cancelled'].map(s=>`<option value="${s}" ${s===j.status?'selected':''}>${labels[s]}</option>`).join('')}
+            </select>
+            <span class="rate-flag ${flagClass}">${flag}</span>
+            ${j.note ? `<span class="note-flag">${escapeHtml(j.note)}</span>` : ''}
+            <button class="rm-row" title="Quitar">✕</button>
+          </div>
         </div>`;
     });
     const dupNote = dupCount > 0 ? ` (${dupCount} duplicado(s) ya agregado(s) fueron omitidos)` : '';
@@ -1277,27 +2065,38 @@
 
     wrap.querySelectorAll('.rm-row').forEach(btn=>{
       btn.addEventListener('click', ()=>{
-        btn.closest('.import-row').remove();
+        btn.closest('.import-row-block').remove();
         const remaining = wrap.querySelectorAll('.import-row').length;
         const countEl = wrap.querySelector('.import-count');
         if(countEl) countEl.textContent = remaining + ' trabajo(s) nuevo(s) detectado(s)';
       });
     });
 
+    function refreshRowPrice(row){
+      const inp = row.querySelector('.imp-cat');
+      const amountEl = row.querySelector('.imp-amount');
+      const flagEl = row.querySelector('.rate-flag');
+      const match = matchPrice(inp.value);
+      if(match){
+        amountEl.value = Number(match.price).toFixed(2);
+        flagEl.textContent = 'precio encontrado';
+        flagEl.classList.remove('missing');
+      } else {
+        flagEl.textContent = 'sin precio — revisión';
+        flagEl.classList.add('missing');
+      }
+    }
+
     wrap.querySelectorAll('.imp-cat').forEach(inp=>{
-      inp.addEventListener('input', ()=>{
-        const row = inp.closest('.import-row');
-        const amountEl = row.querySelector('.imp-amount');
-        const flagEl = row.querySelector('.rate-flag');
-        const match = matchPrice(inp.value);
-        if(match){
-          amountEl.value = match.price;
-          flagEl.textContent = 'precio encontrado';
-          flagEl.classList.remove('missing');
-        } else {
-          flagEl.textContent = 'sin precio — revisión';
-          flagEl.classList.add('missing');
-        }
+      inp.addEventListener('input', ()=> refreshRowPrice(inp.closest('.import-row')));
+    });
+
+    wrap.querySelectorAll('.imp-service-select').forEach(sel=>{
+      sel.addEventListener('change', ()=>{
+        if(!sel.value) return;
+        const row = sel.closest('.import-row');
+        row.querySelector('.imp-cat').value = sel.value;
+        refreshRowPrice(row);
       });
     });
 
@@ -1305,6 +2104,18 @@
       const rows = wrap.querySelectorAll('.import-row');
       const rate = parseFloat(rateInput.value) || 90;
       let added = 0;
+      const dateOrderCounters = {};
+
+      function nextOrderFor(date){
+        if(dateOrderCounters[date] === undefined){
+          const existingOrders = state.entries
+            .filter(e=> e.date===date && e.type==='income' && typeof e.order === 'number')
+            .map(e=> e.order);
+          dateOrderCounters[date] = existingOrders.length ? Math.max(...existingOrders) : 0;
+        }
+        dateOrderCounters[date] += 1;
+        return dateOrderCounters[date];
+      }
 
       rows.forEach(row=>{
         const cat = row.querySelector('.imp-cat').value.trim();
@@ -1315,6 +2126,9 @@
         const noteEl = row.querySelector('.note-flag');
         const note = noteEl ? noteEl.textContent : null;
         const po = row.dataset.po || null;
+
+        let jobData = {};
+        try{ jobData = JSON.parse(decodeURIComponent(escape(atob(row.dataset.job || '')))); }catch(err){ jobData = {}; }
 
         if(!cat || !date) return;
 
@@ -1329,7 +2143,16 @@
           net: hasAmount ? Math.round(amount * (rate/100) * 100) / 100 : 0,
           status: finalStatus,
           po: po,
-          note: note || null
+          note: note || null,
+          order: nextOrderFor(date),
+          isAdditional: false,
+          customerName: jobData.customerName || '',
+          address: jobData.address || '',
+          phone: jobData.phone || '',
+          store: jobData.store || '',
+          timeStart: jobData.timeStart || null,
+          timeEnd: jobData.timeEnd || null,
+          scopeNotes: jobData.scopeNotes || ''
         };
         state.entries.push(entry);
         if(hasAmount && finalStatus !== 'cancelled') addOrUpdatePriceItem(cat, [cat], amount);
@@ -1347,10 +2170,11 @@
   document.getElementById('detect-btn').addEventListener('click', ()=>{
     const text = document.getElementById('import-text').value;
     if(!text || !text.trim()){
-      document.getElementById('import-preview').innerHTML = '<div class="rate-empty">Pega primero el texto del correo.</div>';
+      document.getElementById('import-preview').innerHTML = '<div class="rate-empty">Pega primero el texto del correo o el tiquete del cliente.</div>';
       return;
     }
-    const jobs = parseEmailJobs(text);
+    const routeDateVal = document.getElementById('route-date').value || todayISO();
+    const jobs = parseEmailJobs(text, routeDateVal);
     renderImportPreview(jobs);
   });
 
@@ -1426,6 +2250,7 @@
   }
 
   function generateReport(){
+    showScreen('reportes');
     const today = todayISO();
 
     const monday = mondayOf(today);
@@ -1470,43 +2295,125 @@
 
   document.getElementById('report-btn').addEventListener('click', generateReport);
 
+  function routeReportSectionHtml(dateIso){
+    const agg = dayAgg(dateIso);
+    const stops = state.entries
+      .filter(e=> e.type==='income' && e.date===dateIso && e.status !== 'missing_price')
+      .sort((a,b)=> (a.order ?? 9999) - (b.order ?? 9999));
+    const expenses = state.entries.filter(e=> e.type==='expense' && e.date===dateIso);
+
+    let rows = '';
+    stops.forEach(e=>{
+      const partsUsedHere = state.partUsage.filter(u=> u.jobId === e.id);
+      const partsText = partsUsedHere.length ? partsUsedHere.map(u=> u.partName+' ×'+u.quantity).join(', ') : '—';
+      rows += `<tr>
+        <td>${escapeHtml(e.customerName || '—')}</td>
+        <td>${escapeHtml(e.category)}${e.isAdditional ? ' (adicional)' : ''}</td>
+        <td class="status-tag">${STATUS_LABELS[e.status]||e.status}</td>
+        <td class="num">${fmt(e.amount)}</td>
+        <td>${escapeHtml(partsText)}</td>
+      </tr>`;
+    });
+    expenses.forEach(e=>{
+      rows += `<tr><td colspan="2">${escapeHtml(e.category)}</td><td class="status-tag">Gasto</td><td class="num">${fmt(e.amount)}</td><td>—</td></tr>`;
+    });
+    if(!rows) rows = '<tr><td colspan="5">Sin paradas registradas este día.</td></tr>';
+
+    return `
+      <h2>Ruta del ${dateIso} — ${dayNameFromISO(dateIso)}</h2>
+      <div class="totals-line">Paradas: <b>${agg.counts.total}</b> · Completados: <b>${agg.counts.completed}</b> · Pendientes: <b>${agg.counts.pending}</b> · Cancelados: <b>${agg.counts.cancelled}</b> · Pagados: <b>${agg.counts.paid}</b></div>
+      <div class="totals-line">Total sistema válido: <b>${fmt(agg.totalSistemaValido)}</b> &nbsp; | &nbsp; Pago esperado Mega ${state.rate}%: <b>${fmt(agg.pagoEsperado)}</b></div>
+      <div class="totals-line">Gastos: <b>${fmt(agg.expense)}</b> &nbsp; | &nbsp; Neto: <b>${fmt(agg.neto)}</b></div>
+      <table>
+        <thead><tr><th>Cliente</th><th>Trabajo</th><th>Estado</th><th class="num">Monto</th><th>Partes usadas</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  function generateRouteReport(){
+    const dateIso = document.getElementById('route-date').value || todayISO();
+    showScreen('reportes');
+    const reportBody = `
+      <h1>Bitácora de Trabajo — Mega</h1>
+      <div class="print-sub">Ruta terminada · generado el ${todayISO()}</div>
+      ${routeReportSectionHtml(dateIso)}
+    `;
+    const html = reportBody + `
+      <div class="close-report-row">
+        <button class="btn-mini" id="download-report-btn" type="button">Descargar como archivo</button>
+        <button class="btn-mini" id="close-report-btn" type="button">Cerrar reporte</button>
+      </div>
+    `;
+    const reportEl = document.getElementById('print-report');
+    reportEl.innerHTML = html;
+    reportEl.classList.add('open');
+    reportEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('close-report-btn').addEventListener('click', ()=>{
+      reportEl.classList.remove('open');
+    });
+    document.getElementById('download-report-btn').addEventListener('click', ()=>{
+      downloadReportFile(reportBody, dateIso);
+      statusLine.textContent = 'reporte de ruta descargado ✓ ábrelo y usa Imprimir/Compartir para guardarlo como PDF';
+    });
+  }
+
+  document.getElementById('finish-route-btn').addEventListener('click', generateRouteReport);
+
   // ---------- copia de seguridad ----------
-  function buildBackupJson(){
+  function buildBackupJson(type){
     const backup = {
       exportedAt: new Date().toISOString(),
       app: 'bitacora-de-trabajo-mega',
       version: 1,
-      entries: state.entries,
+      backupType: type, // 'full' o 'config'
       rate: state.rate,
-      priceList: state.priceList
+      priceList: state.priceList,
+      parts: state.parts
     };
+    if(type === 'full'){
+      backup.entries = state.entries;
+      backup.partUsage = state.partUsage;
+    }
     return JSON.stringify(backup, null, 2);
   }
 
   function applyRestoredData(data, msg){
-    if(!data || !Array.isArray(data.entries) || !Array.isArray(data.priceList)){
+    if(!data || !Array.isArray(data.priceList)){
       msg.style.color = 'var(--wine)';
       msg.textContent = 'Ese contenido no parece una copia de seguridad válida.';
       return false;
     }
-    state.entries = data.entries;
+    const isFull = data.backupType === 'full' || Array.isArray(data.entries);
+
     state.priceList = data.priceList;
-    state.rate = data.rate || 90;
-    persistEntries();
+    state.parts = Array.isArray(data.parts) ? data.parts : state.parts;
+    state.rate = data.rate || state.rate || 90;
+
+    if(isFull){
+      state.entries = Array.isArray(data.entries) ? data.entries : [];
+      state.partUsage = Array.isArray(data.partUsage) ? data.partUsage : [];
+      persistEntries();
+      persistPartUsage();
+    }
+
     persistRate();
     persistPriceList();
+    persistParts();
     rateInput.value = state.rate;
     render();
     msg.style.color = 'var(--gold-deep)';
-    msg.textContent = `Restaurado ✓ (${data.entries.length} registros, ${data.priceList.length} precios)`;
+    msg.textContent = isFull
+      ? `Restaurado completo ✓ (${state.entries.length} registros, ${state.priceList.length} precios, ${state.parts.length} partes)`
+      : `Restaurado solo configuración ✓ (${state.priceList.length} precios, ${state.parts.length} partes) — tus clientes/trabajos actuales no se tocaron.`;
     return true;
   }
 
-  async function exportBackup(){
+  async function exportBackup(type){
     const msg = document.getElementById('backup-msg');
-    const jsonStr = buildBackupJson();
+    const jsonStr = buildBackupJson(type);
     const stamp = todayISO();
-    const filename = `respaldo-bitacora-mega-${stamp}.json`;
+    const filename = `respaldo-bitacora-mega-${type === 'full' ? 'completo' : 'config'}-${stamp}.json`;
     let shared = false;
 
     // Intento 1: hoja de compartir nativa (lo más confiable en iPhone/iPad, incluso como ícono instalado)
@@ -1546,7 +2453,8 @@
     msg.textContent = 'Si no se abrió el cuadro de guardar, copia el texto de abajo y guárdalo tú mismo.';
   }
 
-  document.getElementById('export-btn').addEventListener('click', exportBackup);
+  document.getElementById('export-full-btn').addEventListener('click', ()=> exportBackup('full'));
+  document.getElementById('export-config-btn').addEventListener('click', ()=> exportBackup('config'));
 
   document.getElementById('copy-export-btn').addEventListener('click', async ()=>{
     const ta = document.getElementById('export-text-fallback');
@@ -1565,16 +2473,26 @@
   document.getElementById('import-backup-input').addEventListener('change', function(ev){
     const file = ev.target.files && ev.target.files[0];
     const msg = document.getElementById('backup-msg');
-    msg.style.color = 'var(--wine)';
-    if(!file){ return; }
+    msg.style.color = 'var(--gold-deep)';
+    if(!file){
+      msg.style.color = 'var(--wine)';
+      msg.textContent = 'No se detectó ningún archivo seleccionado.';
+      return;
+    }
+    msg.textContent = `Leyendo "${file.name}"…`;
 
     const reader = new FileReader();
+    reader.onerror = function(){
+      msg.style.color = 'var(--wine)';
+      msg.textContent = 'No se pudo leer el archivo (error del navegador). Intenta con "pegar el texto" en su lugar.';
+    };
     reader.onload = function(){
       try{
         const data = JSON.parse(reader.result);
         applyRestoredData(data, msg);
         ev.target.value = '';
       }catch(err){
+        msg.style.color = 'var(--wine)';
         msg.textContent = 'No se pudo leer ese archivo. Asegúrate de elegir un respaldo generado por esta misma app.';
       }
     };
