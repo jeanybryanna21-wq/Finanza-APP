@@ -331,12 +331,21 @@
   .route-stop{
     background: var(--white); border: 1px solid var(--hairline); border-left: 3px solid var(--gold);
     padding: 16px; margin-bottom: 14px; max-width: 100%; overflow-wrap: break-word;
+    transition: box-shadow 0.15s ease;
   }
   .route-stop.decided{ border-left-color: var(--hairline); background: var(--ivory); }
+  .route-stop.dragging{ box-shadow: 0 10px 24px rgba(0,0,0,0.22); position: relative; z-index: 40; opacity: 0.96; }
+  .route-stop.drop-target{ border-top: 3px dashed var(--gold-deep); }
 
-  .route-header-row{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  .drag-handle{
+    flex: 0 0 auto; font-size: 20px; color: var(--ink-soft); cursor: grab; padding: 4px 6px;
+    touch-action: none; user-select: none; -webkit-user-select: none;
+  }
+  .drag-handle:active{ cursor: grabbing; color: var(--gold-deep); }
+
+  .route-header-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
   .route-order{
-    width: 46px; text-align:center; font-family:'Cormorant Garamond', serif; font-size:18px; font-weight:600;
+    width: 40px; text-align:center; font-family:'Cormorant Garamond', serif; font-size:18px; font-weight:600;
     border: 1px solid var(--hairline); background: var(--white); color: var(--gold-deep); padding: 5px 2px; flex: 0 0 auto;
   }
   .route-customer{
@@ -351,15 +360,24 @@
   .route-del{ background:none; border:none; color:var(--hairline); cursor:pointer; font-size:15px; padding:2px 4px; flex: 0 0 auto; }
   .route-del:hover{ color:var(--wine); }
 
-  .route-category{ font-size:13px; color:var(--gold-deep); font-weight:500; margin: 2px 0; }
-  .route-meta{ font-size:11.5px; color:var(--ink-soft); margin: 4px 0; line-height:1.5; overflow-wrap: break-word; }
+  .route-category{ font-size:13px; color:var(--gold-deep); font-weight:600; margin: 2px 0; }
+  .route-po-store{ margin: 6px 0; display:flex; gap:6px; flex-wrap:wrap; }
+  .po-badge, .store-badge{
+    display:inline-block; background:var(--gold-pale); color:var(--gold-deep); font-weight:700;
+    padding:3px 9px; border-radius:6px; font-size:11.5px; border:1px solid var(--gold);
+  }
+  .store-badge{ background: var(--ink); color: var(--gold); border-color: var(--ink); }
+  .route-meta-list{ list-style:none; margin: 6px 0 0; padding: 0; }
+  .route-meta-list li{ font-size:13px; color: var(--ink); font-weight: 500; margin: 3px 0; line-height:1.5; overflow-wrap: break-word; }
+  .tel-link{ color: var(--gold-deep); font-weight: 700; text-decoration: underline; text-decoration-color: var(--hairline); }
   .route-notes{ font-size:11.5px; color:var(--ink-soft); font-style:italic; font-family:'Cormorant Garamond', serif; margin: 6px 0 0; overflow-wrap: break-word; }
   .route-flag-line{ font-size:12px; color:var(--gold-deep); font-weight:500; margin: 6px 0 0; background:var(--gold-pale); padding:5px 8px; overflow-wrap: break-word; }
   .flag-chip{ display:inline-flex; align-items:center; gap:3px; margin-right:4px; }
   .chip-del{ background:none; border:none; color:var(--wine); cursor:pointer; font-size:11px; padding:0 2px; opacity:0.7; }
   .chip-del:hover{ opacity:1; }
+  .onway-toggle, .onway-send, .delay-toggle, .delay-send{ border-color: var(--gold); color: var(--gold-deep); font-weight:600; }
 
-  .route-decided .route-customer, .route-decided .route-category, .route-decided .route-meta{
+  .route-decided .route-customer, .route-decided .route-category, .route-decided .route-meta-list li{
     text-decoration: line-through; text-decoration-color: var(--ink-soft); opacity: 0.6;
   }
 
@@ -1362,6 +1380,52 @@
   function stripVariantSuffix(cat){
     return (cat || '').replace(/\s*-\s*No\s+(Haul Away|Delivery)\s*$/i, '').trim();
   }
+  function simplifyServiceName(cat){
+    let c = (cat || '');
+    c = c.replace(/\s*-\s*(No\s+)?(Haul Away|Delivery)\s*$/i, '').trim();
+    c = c.replace(/^Exception Category\s*-\s*/i, '').trim();
+    c = c.replace(/\s*Installation\s*$/i, '').trim();
+    return c || 'service';
+  }
+  function getFirstName(customerName){
+    if(!customerName) return 'there';
+    const parts = customerName.split(',');
+    if(parts.length > 1 && parts[1].trim()) return parts[1].trim();
+    return parts[0].trim();
+  }
+  function parseEtaInput(raw){
+    const t = (raw || '').trim();
+    if(!t) return '';
+    // ya trae "minute(s)"/"hour(s)" o AM/PM explicito -> se deja tal cual
+    if(/\b(am|pm)\b/i.test(t) || /minute|hour/i.test(t)) return t;
+    // solo un numero -> minutos
+    if(/^\d+$/.test(t)){
+      const n = parseInt(t, 10);
+      return `${n} minute${n === 1 ? '' : 's'}`;
+    }
+    // formato H:MM -> horas y minutos (ej. "1:40" = 1 hora y 40 minutos)
+    const hm = t.match(/^(\d{1,2}):(\d{2})$/);
+    if(hm){
+      const h = parseInt(hm[1], 10);
+      const m = parseInt(hm[2], 10);
+      const parts = [];
+      if(h > 0) parts.push(`${h} hour${h === 1 ? '' : 's'}`);
+      if(m > 0) parts.push(`${m} minute${m === 1 ? '' : 's'}`);
+      return parts.length ? parts.join(' and ') : '0 minutes';
+    }
+    return t;
+  }
+  function formatStoreName(raw){
+    if(!raw) return '';
+    const numMatch = raw.match(/^0*(\d+)-/);
+    const storeNum = numMatch ? numMatch[1] : '';
+    let rest = raw.replace(/\[Store ID:[^\]]*\]/i, '').trim();
+    rest = rest.replace(/^\d+-\s*/, '').trim();
+    rest = rest.replace(/\bOF\b/i, ' ').replace(/\s+/g, ' ').trim();
+    rest = rest.replace(/\b\w+/g, w => (w.length <= 2 && w === w.toUpperCase()) ? w : (w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()));
+    rest = rest.replace(/,\s*/g, ' ').trim();
+    return storeNum ? `${rest} Store ${storeNum}` : rest;
+  }
   function distinctServiceNames(){
     const set = new Set();
     state.priceList.forEach(p=>{
@@ -1392,6 +1456,82 @@
     persistEntries();
   }
 
+  // ---------- arrastrar y soltar para reordenar (estilo mover apps en iPhone) ----------
+  function attachDragHandlers(wrap, dateIso){
+    let dragEl = null, startY = 0, stopsSnapshot = [], targetIndex = -1;
+    let longPressTimer = null;
+
+    function clearIndicators(){
+      stopsSnapshot.forEach(el=> el.classList.remove('drop-target'));
+    }
+
+    function beginDrag(clientY, handle){
+      dragEl = handle.closest('.route-stop');
+      if(!dragEl) return;
+      stopsSnapshot = Array.from(wrap.querySelectorAll('.route-stop'));
+      startY = clientY;
+      targetIndex = stopsSnapshot.indexOf(dragEl);
+      dragEl.classList.add('dragging');
+    }
+
+    function moveDrag(clientY){
+      if(!dragEl) return;
+      const delta = clientY - startY;
+      dragEl.style.transform = `translateY(${delta}px)`;
+      const dragRect = dragEl.getBoundingClientRect();
+      const dragMid = dragRect.top + dragRect.height/2;
+
+      let newIndex = stopsSnapshot.length - 1;
+      for(let i=0;i<stopsSnapshot.length;i++){
+        const el = stopsSnapshot[i];
+        if(el === dragEl) continue;
+        const r = el.getBoundingClientRect();
+        const mid = r.top + r.height/2;
+        if(dragMid < mid){ newIndex = i > stopsSnapshot.indexOf(dragEl) ? i-1 : i; break; }
+      }
+      targetIndex = Math.max(0, Math.min(newIndex, stopsSnapshot.length-1));
+      clearIndicators();
+      const targetEl = stopsSnapshot[targetIndex];
+      if(targetEl && targetEl !== dragEl) targetEl.classList.add('drop-target');
+    }
+
+    function endDrag(){
+      if(!dragEl) return;
+      dragEl.classList.remove('dragging');
+      dragEl.style.transform = '';
+      clearIndicators();
+      const id = dragEl.dataset.id;
+      reorderStop(id, targetIndex+1, dateIso);
+      dragEl = null;
+      render();
+    }
+
+    wrap.querySelectorAll('.drag-handle').forEach(handle=>{
+      handle.addEventListener('touchstart', (e)=>{
+        e.preventDefault();
+        beginDrag(e.touches[0].clientY, handle);
+      }, {passive:false});
+      handle.addEventListener('touchmove', (e)=>{
+        e.preventDefault();
+        moveDrag(e.touches[0].clientY);
+      }, {passive:false});
+      handle.addEventListener('touchend', endDrag);
+      handle.addEventListener('touchcancel', endDrag);
+
+      handle.addEventListener('mousedown', (e)=>{
+        beginDrag(e.clientY, handle);
+        const onMouseMove = (ev)=> moveDrag(ev.clientY);
+        const onMouseUp = ()=>{
+          endDrag();
+          document.removeEventListener('mousemove', onMouseMove);
+          document.removeEventListener('mouseup', onMouseUp);
+        };
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+      });
+    });
+  }
+
   function renderRoute(){
     const dateInput2 = document.getElementById('route-date');
     if(!dateInput2.value) dateInput2.value = todayISO();
@@ -1412,9 +1552,16 @@
       const decided = e.status !== 'pending';
       const el = document.createElement('div');
       el.className = 'route-stop' + (decided ? ' decided' : '');
+      el.dataset.id = e.id;
 
       const timeRange = (e.timeStart && e.timeEnd) ? `${e.timeStart} – ${e.timeEnd}` : '';
-      const metaParts = [e.address, e.phone, timeRange].filter(Boolean).join(' · ');
+      const phoneDigits = (e.phone || '').replace(/[^\d+]/g, '');
+
+      const metaBullets = [
+        e.address ? `<li>📍 ${escapeHtml(e.address)}</li>` : '',
+        e.phone ? `<li>📞 <a class="tel-link" href="tel:${phoneDigits}">${escapeHtml(e.phone)}</a></li>` : '',
+        timeRange ? `<li>🕐 ${escapeHtml(timeRange)}</li>` : ''
+      ].filter(Boolean).join('');
 
       const quickButtons = ['pending','completed','cancelled'].map(s=>
         `<button class="status-btn ${s===e.status?'active '+s:''}" data-id="${e.id}" data-status="${s}">${routeStatusLabels[s]}</button>`
@@ -1448,6 +1595,7 @@
 
       el.innerHTML = `
         <div class="route-header-row ${decided ? 'route-decided' : ''}">
+          <span class="drag-handle" title="Mantén presionado para reordenar">⠿</span>
           <input type="number" min="1" class="route-order" data-id="${e.id}" value="${e.order || (i+1)}" />
           <div class="route-customer">${escapeHtml(e.customerName || 'Cliente sin nombre')}${e.isAdditional ? ' <span class="note-tag">Adicional</span>' : ''}</div>
           <div class="route-amount">${fmt(e.net)}</div>
@@ -1455,13 +1603,19 @@
         </div>
         <div class="${decided ? 'route-decided' : ''}">
           <div class="route-category">${escapeHtml(e.category)}</div>
-          ${metaParts ? `<div class="route-meta">${escapeHtml(metaParts)}</div>` : ''}
+          ${(e.po || e.store) ? `<div class="route-po-store">
+            ${e.po ? `<span class="po-badge">PO ${escapeHtml(e.po)}</span>` : ''}
+            ${e.store ? `<span class="store-badge">${escapeHtml(formatStoreName(e.store))}</span>` : ''}
+          </div>` : ''}
+          ${metaBullets ? `<ul class="route-meta-list">${metaBullets}</ul>` : ''}
         </div>
         ${e.scopeNotes ? `<div class="route-notes">${escapeHtml(e.scopeNotes)}</div>` : ''}
         ${partsLine}
         ${additionalLine}
         ${variantSelector}
         <div class="route-actions">${quickButtons}
+          ${e.phone ? `<button class="btn-mini onway-toggle" data-id="${e.id}">On the way</button>` : ''}
+          ${e.phone ? `<button class="btn-mini delay-toggle" data-id="${e.id}">Delay</button>` : ''}
           <button class="btn-mini route-extra-toggle" data-id="${e.id}">+ Trabajo adicional</button>
           <button class="btn-mini route-part-toggle" data-id="${e.id}">+ Usar parte</button>
         </div>
@@ -1481,6 +1635,16 @@
             <div class="field" style="max-width:90px"><label>Cantidad usada</label><input type="number" step="1" min="1" class="part-qty" placeholder="1" /></div>
             <button class="btn-mini part-save" data-id="${e.id}">Registrar uso</button>
           </div>
+          ${e.phone ? `
+          <div class="route-extra-form" id="onway-form-${e.id}">
+            <div class="field"><label>Estimated time (ej. 30 minutes / 3:00 PM)</label><input type="text" class="onway-eta" placeholder="30 minutes" /></div>
+            <button class="btn-mini onway-send" data-id="${e.id}" data-phone="${phoneDigits}">Send message</button>
+          </div>` : ''}
+          ${e.phone ? `
+          <div class="route-extra-form" id="delay-form-${e.id}">
+            <div class="field"><label>Delay time (ej. 15 minutes)</label><input type="text" class="delay-eta" placeholder="15 minutes" /></div>
+            <button class="btn-mini delay-send" data-id="${e.id}" data-phone="${phoneDigits}">Send message</button>
+          </div>` : ''}
         </div>
       `;
       wrap.appendChild(el);
@@ -1492,6 +1656,60 @@
         render();
       });
     });
+
+    wrap.querySelectorAll('.onway-toggle').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.getElementById('onway-form-' + btn.dataset.id).classList.toggle('open');
+      });
+    });
+
+    wrap.querySelectorAll('.onway-send').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.id;
+        const entry = state.entries.find(e2=> e2.id === id);
+        if(!entry) return;
+        const form = document.getElementById('onway-form-' + id);
+        const eta = parseEtaInput(form.querySelector('.onway-eta').value.trim());
+        if(!eta){
+          statusLine.textContent = 'write an estimated time before sending';
+          return;
+        }
+        const firstName = getFirstName(entry.customerName);
+        const service = simplifyServiceName(entry.category);
+        const message = `Hello ${firstName}, this is your Lowe's installer reaching out about your ${service} installation. We will be arriving in ${eta}. We look forward to seeing you soon, and thank you for choosing us.`;
+        const url = 'sms:' + btn.dataset.phone + '&body=' + encodeURIComponent(message);
+        window.location.href = url;
+        statusLine.textContent = 'Messages opened with the note ready to send ✓';
+      });
+    });
+
+    wrap.querySelectorAll('.delay-toggle').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.getElementById('delay-form-' + btn.dataset.id).classList.toggle('open');
+      });
+    });
+
+    wrap.querySelectorAll('.delay-send').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.dataset.id;
+        const entry = state.entries.find(e2=> e2.id === id);
+        if(!entry) return;
+        const form = document.getElementById('delay-form-' + id);
+        const delayTime = parseEtaInput(form.querySelector('.delay-eta').value.trim());
+        if(!delayTime){
+          statusLine.textContent = 'write a delay time before sending';
+          return;
+        }
+        const firstName = getFirstName(entry.customerName);
+        const service = simplifyServiceName(entry.category);
+        const message = `Hello ${firstName}, this is your Lowe's installer reaching out about your ${service} installation. We wanted to let you know we are running behind schedule and will be delayed by ${delayTime}. We sincerely apologize for the inconvenience and thank you for your patience.`;
+        const url = 'sms:' + btn.dataset.phone + '&body=' + encodeURIComponent(message);
+        window.location.href = url;
+        statusLine.textContent = 'Messages opened with the note ready to send ✓';
+      });
+    });
+
+    attachDragHandlers(wrap, dateIso);
 
     wrap.querySelectorAll('.route-variant').forEach(sel=>{
       sel.addEventListener('change', ()=>{
