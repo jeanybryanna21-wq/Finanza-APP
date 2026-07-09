@@ -1909,8 +1909,8 @@
 
   const CANCEL_RE = /\bcancell?ed\b|\bcancel\b|\bcancelad[oa]\b/i;
   const RESCHED_RE = /\brescheduled\b|\breprogramad[oa]\b/i;
-  const NO_HAUL_RE = /no\s*haul\s*away/i;
-  const NO_DELIVERY_RE = /no\s*delivery|without\s*delivery|self\s*haul|will\s*call|customer\s*pick\s*up/i;
+  const NO_HAUL_RE = /no\s*haul/i;
+  const NO_DELIVERY_RE = /no\s*deliv|without\s*deliv|self\s*haul|will\s*call|customer\s*pick/i;
 
   function parseEmailJobs(rawText, referenceDate){
     const fallbackDate = headerDateFallback(rawText) || referenceDate || todayISO();
