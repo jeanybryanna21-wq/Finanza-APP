@@ -16,7 +16,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Jost:wght@300;400;500;600&family=Pinyon+Script&display=swap" rel="stylesheet">
 <style>
   :root{
-    --white:rgba(40,38,34,0.40);
+    --white:rgba(40,38,34,0.22);
     --ivory:#252320;
     --ink:#F3EFE6;
     --ink-soft:#BFB8AA;
@@ -31,14 +31,6 @@
   body, .app{ margin:0; padding:0; }
   body{
     background-color: var(--ivory);
-    background-image:
-      radial-gradient(circle at 10% 8%, rgba(255,255,255,0.035) 0%, transparent 35%),
-      radial-gradient(circle at 90% 18%, rgba(255,255,255,0.028) 0%, transparent 40%),
-      radial-gradient(circle at 70% 85%, rgba(255,255,255,0.032) 0%, transparent 45%),
-      linear-gradient(122deg, transparent 38%, rgba(232,185,35,0.14) 39%, transparent 40%),
-      linear-gradient(122deg, transparent 60%, rgba(232,185,35,0.09) 61%, transparent 62%),
-      linear-gradient(65deg, transparent 24%, rgba(255,255,255,0.025) 25%, transparent 26%);
-    background-attachment: fixed;
   }
   #bg-photo-layer{
     position: fixed; inset: 0; z-index: 0; overflow: hidden;
@@ -56,6 +48,10 @@
     padding: 40px 24px 70px;
     max-width: 860px;
     margin: 0 auto;
+    transform: scale(0.7);
+    transform-origin: top center;
+    width: 142.857%;
+    margin-left: -21.4285%;
   }
 
   /* ---------- header ---------- */
@@ -63,7 +59,7 @@
   .header-badge-row{ display:flex; justify-content:flex-end; margin-bottom: 10px; }
   .header-titles{
     text-align: center; display: inline-block; margin: 0 auto;
-    background: rgba(30,28,25,0.32); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 14px; padding: 14px 22px;
+    background: rgba(30,28,25,0.16); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 14px; padding: 14px 22px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.08);
   }
   .header h1{
@@ -88,7 +84,7 @@
   /* ---------- tabs ---------- */
   .tabs{
     display:flex; justify-content: center; gap: 30px; margin-bottom: 22px; border-bottom: 1px solid var(--hairline);
-    background: rgba(30,28,25,0.32); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 12px; padding: 10px 12px 0; box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    background: rgba(30,28,25,0.16); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 12px; padding: 10px 12px 0; box-shadow: 0 2px 12px rgba(0,0,0,0.06);
   }
   .tabs button{
     background: none; border: none; color: var(--ink-soft); padding: 0 0 12px; font-size: 15px; letter-spacing: 1.5px;
@@ -102,8 +98,8 @@
   .summary-panel.active{ display:block; }
   .summary-caption{ text-align: center; font-family: 'Jost', sans-serif; font-weight: 500; font-size: 18px; color: var(--ink-soft); margin-bottom: 14px; }
 
-  .count-row{ display:grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 14px; }
-  .count-chip{ background: var(--white); border: 1px solid var(--hairline); text-align:center; padding: 10px 4px; border-radius: 16px; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+  .count-row{ display:grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 20px; }
+  .count-chip{ background: var(--white); border: 1px solid var(--hairline); text-align:center; padding: 8px 4px; border-radius: 14px; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
   .count-chip .n{ font-family: 'Jost', sans-serif; font-size: 23px; font-weight: 800; color: var(--ink); text-shadow: 0 1px 4px rgba(0,0,0,0.55); }
   .count-chip .l{ font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--ink-soft); margin-top: 2px; }
   .count-chip.completed .n{ color: var(--gold-deep); }
@@ -112,8 +108,8 @@
   .count-chip.paid .n{ color: var(--gold); }
   .count-chip.missing .n{ color: var(--wine); }
 
-  .summary{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-  .stat{ background: var(--white); border: 1px solid var(--hairline); border-top: 2px solid var(--gold); padding: 16px 10px; text-align: center; border-radius: 16px; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+  .summary{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .stat{ background: var(--white); border: 1px solid var(--hairline); border-top: 2px solid var(--gold); padding: 12px 10px; text-align: center; border-radius: 14px; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
   .stat .label{ font-size: 12.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--ink-soft); margin-bottom: 8px; font-weight: 600; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
   .stat .value{ font-family: 'Jost', sans-serif; font-size: 25px; font-weight: 800; word-break: break-all; text-shadow: 0 1px 4px rgba(0,0,0,0.55); }
   .stat.system .value{ color: var(--gold-deep); }
@@ -123,9 +119,19 @@
   .stat.net .value{ color: var(--ink); }
 
   /* ---------- form ---------- */
-  .form-card{ background: var(--white); border: 1px solid var(--hairline); padding: 26px 24px; margin-bottom: 32px; border-radius: 20px; overflow: hidden; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+  .form-card{ background: var(--white); border: 1px solid var(--hairline); padding: 20px 22px; margin-bottom: 38px; border-radius: 18px; overflow: hidden; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
   .form-row{ display:flex; gap: 20px; margin-bottom: 18px; flex-wrap: wrap; }
   .field{ flex: 1; min-width: 130px; display:flex; flex-direction: column; gap: 6px; position: relative; }
+  .map-choice-menu{
+    display:flex; margin: 6px 0; width: fit-content;
+    background: rgba(20,19,17,0.85); border: 1px solid var(--gold); border-radius: 12px; overflow:hidden;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.35); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  }
+  .map-choice-menu a{
+    padding: 10px 16px; font-size: 15px; font-weight:600; color: var(--gold); text-decoration:none;
+    border-right: 1px solid var(--hairline); white-space: nowrap;
+  }
+  .map-choice-menu a:last-child{ border-right: none; }
   .suggest-box{
     display:none; position:absolute; top:100%; left:0; right:0; z-index:60; margin-top:2px;
     background: var(--white); border: 1px solid var(--gold); border-radius: 8px; max-height: 220px; overflow-y: auto;
@@ -190,7 +196,7 @@
   .btn-mini:hover{ border-color: var(--gold); color: var(--gold-deep); }
 
   /* ---------- collapsible section cards ---------- */
-  .section-card{ background: var(--white); border: 1px solid var(--hairline); margin-bottom: 22px; border-radius: 20px; overflow: hidden; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+  .section-card{ background: var(--white); border: 1px solid var(--hairline); margin-bottom: 28px; border-radius: 18px; overflow: hidden; backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
   .section-toggle{
     width: 100%; display:flex; justify-content: space-between; align-items: center; background: none; border: none;
     padding: 16px 22px; cursor: pointer; font-family: 'Jost', sans-serif; font-size: 17px; font-weight: 600; color: var(--ink);
@@ -238,7 +244,7 @@
   .price-row .rm-price:hover{ color: var(--wine); }
   .price-add-row{ display:flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; align-items: flex-end; }
   .price-add-row .field{ min-width: 100px; }
-  .rate-empty{ font-family: 'Jost', sans-serif; color: var(--ink-soft); font-size: 17px; padding: 10px 12px; background: rgba(30,28,25,0.32); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 10px; }
+  .rate-empty{ font-family: 'Jost', sans-serif; color: var(--ink-soft); font-size: 17px; padding: 10px 12px; background: rgba(30,28,25,0.16); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 10px; }
 
   /* ---------- missing price review ---------- */
   .missing-row{ display:flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--hairline); flex-wrap: wrap; }
@@ -302,8 +308,8 @@
   .ticket-edit .save-edit{ color: var(--gold-deep); font-weight:600; }
   .ticket-edit .cancel-edit{ color: var(--ink-soft); }
 
-  .empty{ text-align:center; color: var(--ink-soft); padding: 50px 10px; font-family: 'Jost', sans-serif; font-size: 17px; border: 1px dashed var(--hairline); background: rgba(30,28,25,0.32); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 10px; }
-  .status{ text-align:center; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-soft); margin-top: 30px; font-family: 'Jost', sans-serif; background: rgba(30,28,25,0.32); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 8px; padding: 8px 10px; }
+  .empty{ text-align:center; color: var(--ink-soft); padding: 50px 10px; font-family: 'Jost', sans-serif; font-size: 17px; border: 1px dashed var(--hairline); background: rgba(30,28,25,0.16); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 10px; }
+  .status{ text-align:center; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink-soft); margin-top: 30px; font-family: 'Jost', sans-serif; background: rgba(30,28,25,0.16); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 8px; padding: 8px 10px; }
 
   @media (max-width: 560px){
     .count-row{ grid-template-columns: repeat(3, 1fr); }
@@ -327,7 +333,7 @@
   #print-report .totals-line b{ font-size: 17px; color: var(--gold-deep); }
   #print-report .status-tag{ font-size: 13px; text-transform: uppercase; color: var(--ink-soft); }
   #print-report .close-report-row{ text-align:right; margin-top: 18px; display:flex; justify-content:flex-end; gap: 10px; }
-  .report-hint{ font-family:'Jost', sans-serif; font-size: 14.5px; color: var(--ink-soft); text-align:center; margin: 4px 0 28px; line-height:1.5; padding: 10px 14px; background: rgba(30,28,25,0.32); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 10px; }
+  .report-hint{ font-family:'Jost', sans-serif; font-size: 14.5px; color: var(--ink-soft); text-align:center; margin: 4px 0 28px; line-height:1.5; padding: 10px 14px; background: rgba(30,28,25,0.16); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 10px; }
   .report-btn-row{ display:flex; justify-content:center; margin-bottom: 8px; }
 
   @media print{
@@ -348,11 +354,17 @@
 
   .route-stop{
     background: var(--white); border: 1px solid var(--hairline); border-left: 4px solid var(--gold);
-    border-radius: 16px; padding: 12px 14px; margin-bottom: 10px; max-width: 100%; overflow-wrap: break-word;
+    border-radius: 14px; padding: 8px 12px; margin-bottom: 10px; max-width: 100%; overflow-wrap: break-word;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   }
-  .route-stop.decided{ border-left-color: var(--hairline); background: rgba(30,28,25,0.32); }
+  .route-stop.decided{ border-left-color: var(--hairline); background: rgba(30,28,25,0.16); }
+  .route-stop.store-stop{ border-left-color: #6FA8DC; }
+  .store-tag{ background: rgba(111,168,220,0.18); border-color: #6FA8DC; color: #6FA8DC; }
+  .store-addr-input{
+    background: rgba(20,19,17,0.4); border: 1px solid var(--hairline); border-radius: 8px; padding: 5px 8px;
+    color: var(--ink); font-family: 'Jost', sans-serif; font-size: 15px; width: 100%; max-width: 260px;
+  }
   .route-stop.dragging{
     box-shadow: 0 16px 32px rgba(0,0,0,0.28); position: relative; z-index: 40;
     opacity: 0.45; transform-origin: center; will-change: transform;
@@ -364,24 +376,24 @@
   }
   .drag-handle:active{ cursor: grabbing; color: var(--gold-deep); }
 
-  .route-header-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:4px; }
+  .route-header-row{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; margin-bottom:0; }
   .route-order{
     width: 40px; text-align:center; font-family: 'Jost', sans-serif; font-size:18px; font-weight:700;
     border: 1px solid var(--hairline); background: rgba(20,19,17,0.35); color: var(--gold-deep); padding: 5px 2px; flex: 0 0 auto;
     text-shadow: 0 1px 3px rgba(0,0,0,0.5);
   }
   .route-customer{
-    font-family: 'Jost', sans-serif; font-size:18px; font-weight:700; color:var(--ink);
-    flex: 1 1 140px; min-width: 0; overflow-wrap: break-word;
+    font-family: 'Jost', sans-serif; font-size:16px; font-weight:700; color:var(--ink);
+    flex: 1 1 auto; min-width: 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
     text-shadow: 0 1px 4px rgba(0,0,0,0.55);
   }
   .route-amount{
-    font-family: 'Jost', sans-serif; font-size:18px; font-weight:700; color:var(--gold-deep);
-    flex: 0 0 auto; white-space:nowrap; margin-left: auto;
+    font-family: 'Jost', sans-serif; font-size:16px; font-weight:700; color:var(--gold-deep);
+    flex: 0 0 auto; white-space:nowrap;
     text-shadow: 0 1px 4px rgba(0,0,0,0.55);
   }
-  .route-amount.missing{ color: var(--wine); font-size:15px; font-family:'Jost', sans-serif; }
-  .route-del{ background:none; border:none; color:var(--hairline); cursor:pointer; font-size:18px; padding:2px 4px; flex: 0 0 auto; }
+  .route-amount.missing{ color: var(--wine); font-size:14px; font-family:'Jost', sans-serif; }
+  .route-del{ background:none; border:none; color:var(--hairline); cursor:pointer; font-size:16px; padding:2px 4px; flex: 0 0 auto; }
   .route-del:hover{ color:var(--wine); }
 
   .route-category{ font-size:16px; color:var(--gold-deep); font-weight:700; margin: 0 0 4px; text-shadow: 0 1px 3px rgba(0,0,0,0.5); }
@@ -414,6 +426,20 @@
   }
 
   .route-actions{ display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+  .route-stop.compact-mode{
+    max-height: 46px; overflow: hidden; opacity: 0.7;
+  }
+  .route-stop.compact-mode .route-compact-line,
+  .route-stop.compact-mode .route-actions,
+  .route-stop.compact-mode .route-expanded{
+    display: none !important;
+  }
+  .route-compact-line{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:2px; }
+  .route-compact-line .route-category{ margin:0; }
+  .store-badge.sm{ font-size:12px; padding:2px 7px; }
+  .route-expand-toggle{ flex:0 0 auto; border-color:var(--hairline); color:var(--ink-soft); padding:6px 10px; font-size:14px; }
+  .route-expanded{ display:none; margin-top:8px; }
+  .route-expanded.open{ display:block; }
   .route-variant{ margin-top:8px; font-size:15px; max-width:280px; border-bottom:1px solid var(--gold); }
 
   .route-extra-row{ margin-top:8px; }
@@ -475,9 +501,15 @@
 
   <div class="screen active" id="screen-hoy">
 
+  <div id="route-list"></div>
+
+  </div>
+
+  <div class="screen" id="screen-gestion">
+
   <div class="section-card" id="route-card">
     <button class="section-toggle open" data-section="route" type="button">
-      <span>Ruta del día</span>
+      <span>Gestión de ruta</span>
       <span class="chev">▾</span>
     </button>
     <div class="section-body open" id="body-route">
@@ -492,11 +524,22 @@
       <button class="btn-outline" id="detect-btn" type="button">Detectar trabajos</button>
       <div id="import-preview"></div>
 
-      <div style="margin-top:26px; border-top:1px solid var(--hairline); padding-top:18px;">
-        <div id="route-list"></div>
+      <div style="margin-top:22px; border-top:1px solid var(--hairline); padding-top:18px; text-align:center;">
+        <button class="btn-outline" id="navigate-route-btn" type="button">🗺️ Completar ruta — Abrir en Google Maps</button>
+        <div class="report-hint" style="margin:10px 0 0;">Arma el viaje completo del día con todas las paradas en el orden en que las tienes puestas (incluyendo tiendas), y lo abre en Google Maps.</div>
       </div>
 
-      <div style="margin-top:22px; border-top:1px solid var(--hairline); padding-top:18px; text-align:center;">
+      <div style="margin-top:18px; border-top:1px solid var(--hairline); padding-top:16px;">
+        <div class="section-hint">Después de abrir la ruta en Maps, copia las millas totales que te muestra y ponlas aquí para estimar el gasto de gasolina de tu Ram ProMaster 2500.</div>
+        <div class="form-row">
+          <div class="field"><label>Millas de hoy</label><input type="number" step="0.1" min="0" id="gas-miles" placeholder="ej. 124" /></div>
+          <div class="field"><label>MPG de la van</label><input type="number" step="0.1" min="1" id="gas-mpg" placeholder="17" /></div>
+          <div class="field"><label>Precio por galón</label><input type="number" step="0.01" min="0" id="gas-price" placeholder="3.50" /></div>
+        </div>
+        <div class="preview" id="gas-result"></div>
+      </div>
+
+      <div style="margin-top:14px; text-align:center;">
         <button class="btn-outline" id="finish-route-btn" type="button">Ruta terminada — Generar PDF del día</button>
         <div class="report-hint" style="margin:10px 0 0;">Arma un resumen de esta fecha (paradas, montos, partes usadas) para guardar como PDF en iPhone, Android o computadora.</div>
       </div>
@@ -723,6 +766,12 @@
     </button>
   </div>
   <div class="nav-item">
+    <button class="nav-btn" data-screen="gestion">
+      <span class="nav-icon">🧭</span>
+      <span class="nav-label">Ruta</span>
+    </button>
+  </div>
+  <div class="nav-item">
     <button class="nav-btn" data-screen="finanzas">
       <span class="nav-icon">📊</span>
       <span class="nav-label">Finanzas</span>
@@ -826,7 +875,7 @@
     };
   }
 
-  const state = { entries: [], rate: 90, priceList: [], parts: [], partUsage: [] };
+  const state = { entries: [], rate: 90, priceList: [], parts: [], partUsage: [], storeAddresses: {} };
   let editingId = null;
 
   // ---------- utilidades de fecha ----------
@@ -1017,6 +1066,11 @@
       state.partUsage = pu ? JSON.parse(pu.value) : [];
     }catch(err){ state.partUsage = []; }
 
+    try{
+      const sa = await window.storage.get('wl:storeaddresses', false);
+      state.storeAddresses = sa ? JSON.parse(sa.value) : {};
+    }catch(err){ state.storeAddresses = {}; }
+
     // reinicio único: esta versión de la app llega con el historial vacío y solo
     // los precios ya confirmados contigo. Se aplica una sola vez por dispositivo.
     let resetVersion = 0;
@@ -1058,6 +1112,7 @@
   async function persistPriceList(){ try{ await window.storage.set('wl:pricelist', JSON.stringify(state.priceList), false); }catch(err){} }
   async function persistParts(){ try{ await window.storage.set('wl:parts', JSON.stringify(state.parts), false); }catch(err){} }
   async function persistPartUsage(){ try{ await window.storage.set('wl:partusage', JSON.stringify(state.partUsage), false); }catch(err){} }
+  async function persistStoreAddresses(){ try{ await window.storage.set('wl:storeaddresses', JSON.stringify(state.storeAddresses), false); }catch(err){} }
 
   // ---------- categorías conocidas (autocompletado) ----------
   function categories(){
@@ -1604,6 +1659,7 @@
   // ---------- arrastrar y soltar para reordenar (estilo mover apps en iPhone) ----------
   function attachDragHandlers(wrap, dateIso){
     let dragEl = null, startY = 0, stopsSnapshot = [], targetIndex = -1, draggedOriginalIndex = -1, cardUnit = 0;
+    let fixedTop = 0, fixedLeft = 0, fixedWidth = 0;
 
     function beginDrag(clientY, handle){
       dragEl = handle.closest('.route-stop');
@@ -1612,15 +1668,40 @@
       startY = clientY;
       draggedOriginalIndex = stopsSnapshot.indexOf(dragEl);
       targetIndex = draggedOriginalIndex;
-      const rect = dragEl.getBoundingClientRect();
-      const style = window.getComputedStyle(dragEl);
-      cardUnit = rect.height + parseFloat(style.marginBottom || 14);
+
+      // capturar la posición ANTES de encoger nada, y "despegarla" del flujo del
+      // documento con posición fija — así no importa si las tarjetas de arriba
+      // cambian de tamaño, esta se queda pegada al dedo sin saltar de lugar
+      const rectBefore = dragEl.getBoundingClientRect();
+      fixedTop = rectBefore.top;
+      fixedLeft = rectBefore.left;
+      fixedWidth = rectBefore.width;
 
       dragEl.classList.add('dragging');
       dragEl.style.transition = 'none';
+      dragEl.style.position = 'fixed';
+      dragEl.style.left = fixedLeft + 'px';
+      dragEl.style.top = fixedTop + 'px';
+      dragEl.style.width = fixedWidth + 'px';
+      dragEl.style.zIndex = '999';
+      dragEl.style.margin = '0';
+
+      // encoger TODAS las demás tarjetas durante el arrastre para poder moverse
+      // de un punto a otro de la ruta sin tener que ir empujando de a una
       stopsSnapshot.forEach(el=>{
-        if(el !== dragEl) el.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.8, 0.4, 1)';
+        if(el !== dragEl){
+          el.classList.add('compact-mode');
+          el.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.8, 0.4, 1)';
+        }
       });
+
+      // medir la altura ya encogida (forzando un reflow) para que el cálculo de
+      // desplazamiento coincida con el tamaño real que se ve en pantalla
+      void wrap.offsetHeight;
+      const otherEl = stopsSnapshot.find(el2=> el2 !== dragEl);
+      const rect = otherEl ? otherEl.getBoundingClientRect() : { height: 46 };
+      const style = otherEl ? window.getComputedStyle(otherEl) : { marginBottom: '10' };
+      cardUnit = rect.height + parseFloat(style.marginBottom || 10);
     }
 
     function applyShifts(){
@@ -1639,7 +1720,9 @@
     function moveDrag(clientY){
       if(!dragEl) return;
       const delta = clientY - startY;
-      dragEl.style.transform = `translateY(${delta}px) scale(0.4)`;
+      dragEl.style.top = (fixedTop + delta) + 'px';
+      dragEl.style.transform = 'scale(0.4)';
+      dragEl.style.transformOrigin = 'left top';
 
       const shiftUnits = Math.round(delta / cardUnit);
       targetIndex = Math.max(0, Math.min(stopsSnapshot.length - 1, draggedOriginalIndex + shiftUnits));
@@ -1653,16 +1736,25 @@
       const finalTarget = targetIndex;
       const snapshot = stopsSnapshot;
 
-      finishedEl.style.transition = 'transform 0.2s cubic-bezier(0.2, 0.8, 0.4, 1)';
-      finishedEl.style.transform = '';
       finishedEl.classList.remove('dragging');
+      finishedEl.style.position = '';
+      finishedEl.style.left = '';
+      finishedEl.style.top = '';
+      finishedEl.style.width = '';
+      finishedEl.style.zIndex = '';
+      finishedEl.style.margin = '';
+      finishedEl.style.transform = '';
+      finishedEl.style.transformOrigin = '';
+      finishedEl.style.transition = '';
 
       dragEl = null;
-      setTimeout(()=>{
-        snapshot.forEach(el=>{ el.style.transition = ''; el.style.transform = ''; });
-        reorderStop(id, finalTarget + 1, dateIso);
-        render();
-      }, 140);
+      snapshot.forEach(el=>{
+        el.style.transition = '';
+        el.style.transform = '';
+        el.classList.remove('compact-mode');
+      });
+      reorderStop(id, finalTarget + 1, dateIso);
+      render();
     }
 
     wrap.querySelectorAll('.drag-handle').forEach(handle=>{
@@ -1710,14 +1802,14 @@
     stops.forEach((e, i)=>{
       const decided = e.status !== 'pending';
       const el = document.createElement('div');
-      el.className = 'route-stop' + (decided ? ' decided' : '');
+      el.className = 'route-stop' + (decided ? ' decided' : '') + (e.isStoreStop ? ' store-stop' : '');
       el.dataset.id = e.id;
 
       const timeRange = (e.timeStart && e.timeEnd) ? `${e.timeStart} – ${e.timeEnd}` : '';
       const phoneDigits = (e.phone || '').replace(/[^\d+]/g, '');
 
       const metaBullets = [
-        e.address ? `<li>📍 ${escapeHtml(e.address)}</li>` : '',
+        e.address ? `<li>📍 <button type="button" class="tel-link addr-toggle" data-addr="${escapeHtml(e.address)}" style="background:none;border:none;padding:0;text-decoration:underline;text-decoration-color:rgba(232,185,35,0.4);cursor:pointer;font:inherit;">${escapeHtml(e.address)}</button></li>` : (e.isStoreStop ? `<li>📍 <input type="text" class="store-addr-input" data-id="${e.id}" placeholder="Escribe la dirección de esta tienda…" value="" /></li>` : ''),
         e.phone ? `<li>📞 <a class="tel-link" href="tel:${phoneDigits}">${escapeHtml(e.phone)}</a></li>` : '',
         timeRange ? `<li>🕐 ${escapeHtml(timeRange)}</li>` : ''
       ].filter(Boolean).join('');
@@ -1766,30 +1858,31 @@
         <div class="route-header-row ${decided ? 'route-decided' : ''}">
           <span class="drag-handle" title="Mantén presionado para reordenar">⠿</span>
           <input type="number" min="1" class="route-order" data-id="${e.id}" value="${e.order || (i+1)}" />
-          <div class="route-customer">${escapeHtml(e.customerName || 'Cliente sin nombre')}${e.isAdditional ? ' <span class="note-tag">Adicional</span>' : ''}${e.isCompensation ? ' <span class="note-tag">Compensación</span>' : ''}</div>
+          <div class="route-customer">${escapeHtml(e.customerName || 'Cliente sin nombre')}${e.isAdditional ? ' <span class="note-tag">Adicional</span>' : ''}${e.isCompensation ? ' <span class="note-tag">Compensación</span>' : ''}${e.isStoreStop ? ' <span class="note-tag store-tag">🏬 Tienda</span>' : ''}</div>
           <div class="route-amount">${fmt(e.net)}</div>
+          <button class="btn-mini route-expand-toggle" data-id="${e.id}" title="Ver más">▾</button>
           <button class="route-del" data-id="${e.id}" title="Eliminar">✕</button>
         </div>
-        <div class="${decided ? 'route-decided' : ''}">
-          <div class="route-category">${escapeHtml(e.category)}</div>
-          ${(e.po || e.store) ? `<div class="route-po-store">
-            ${e.po ? `<span class="po-badge">PO ${escapeHtml(e.po)}</span>` : ''}
-            ${e.store ? `<span class="store-badge">${escapeHtml(formatStoreName(e.store))}</span>` : ''}
-          </div>` : ''}
+        <div class="route-expanded" id="expand-${e.id}">
+          <div class="route-compact-line ${decided ? 'route-decided' : ''}">
+            <span class="route-category">${escapeHtml(e.category)}</span>
+            ${e.store ? `<span class="store-badge sm">${escapeHtml(formatStoreName(e.store))}</span>` : ''}
+          </div>
+          <div class="route-actions">${quickButtons}</div>
+          ${e.po ? `<div class="route-po-store"><span class="po-badge">PO ${escapeHtml(e.po)}</span></div>` : ''}
           ${metaBullets ? `<ul class="route-meta-list">${metaBullets}</ul>` : ''}
-        </div>
-        ${e.scopeNotes ? `<div class="route-notes">${escapeHtml(e.scopeNotes)}</div>` : ''}
-        ${partsLine}
-        ${additionalLine}
-        ${compensationLine}
-        ${variantSelector}
-        <div class="route-actions">${quickButtons}
-          ${e.phone ? `<button class="btn-mini onway-toggle" data-id="${e.id}">On the way</button>` : ''}
-          ${e.phone ? `<button class="btn-mini delay-toggle" data-id="${e.id}">Delay</button>` : ''}
-          <button class="btn-mini route-extra-toggle" data-id="${e.id}">+ Trabajo adicional</button>
-          <button class="btn-mini route-comp-toggle" data-id="${e.id}">+ Compensación</button>
-          <button class="btn-mini route-part-toggle" data-id="${e.id}">+ Usar parte</button>
-        </div>
+          ${e.scopeNotes ? `<div class="route-notes">${escapeHtml(e.scopeNotes)}</div>` : ''}
+          ${partsLine}
+          ${additionalLine}
+          ${compensationLine}
+          ${variantSelector}
+          <div class="route-actions" style="margin-top:8px;">
+            ${e.phone ? `<button class="btn-mini onway-toggle" data-id="${e.id}">On the way</button>` : ''}
+            ${e.phone ? `<button class="btn-mini delay-toggle" data-id="${e.id}">Delay</button>` : ''}
+            <button class="btn-mini route-extra-toggle" data-id="${e.id}">+ Trabajo adicional</button>
+            <button class="btn-mini route-comp-toggle" data-id="${e.id}">+ Compensación</button>
+            <button class="btn-mini route-part-toggle" data-id="${e.id}">+ Usar parte</button>
+          </div>
         <div class="route-extra-row">
           <div class="route-extra-form" id="extra-form-${e.id}">
             <div class="field"><label>Categoría</label><input type="text" class="extra-cat" placeholder="ej. Faucet" /></div>
@@ -1820,8 +1913,17 @@
             <button class="btn-mini delay-send" data-id="${e.id}" data-phone="${phoneDigits}">Send message</button>
           </div>` : ''}
         </div>
+        </div>
       `;
       wrap.appendChild(el);
+    });
+
+    wrap.querySelectorAll('.route-expand-toggle').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const panel = document.getElementById('expand-' + btn.dataset.id);
+        const isOpen = panel.classList.toggle('open');
+        btn.textContent = isOpen ? '▴' : '▾';
+      });
     });
 
     wrap.querySelectorAll('.route-order').forEach(inp=>{
@@ -1886,6 +1988,41 @@
     });
 
     attachDragHandlers(wrap, dateIso);
+
+    wrap.querySelectorAll('.store-addr-input').forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        const entry = state.entries.find(e2=> e2.id === inp.dataset.id);
+        if(!entry) return;
+        entry.address = inp.value.trim();
+        persistEntries();
+        if(entry.store && entry.address){
+          state.storeAddresses[entry.store] = entry.address;
+          persistStoreAddresses();
+        }
+        render();
+        statusLine.textContent = 'dirección de la tienda guardada — se recordará la próxima vez ✓';
+      });
+    });
+
+    wrap.querySelectorAll('.addr-toggle').forEach(btn=>{
+      btn.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        document.querySelectorAll('.map-choice-menu').forEach(m=> m.remove());
+        const addr = btn.dataset.addr;
+        const menu = document.createElement('div');
+        menu.className = 'map-choice-menu';
+        menu.innerHTML = `
+          <a href="https://maps.apple.com/?daddr=${encodeURIComponent(addr)}" target="_blank" rel="noopener">🍎 Apple Maps</a>
+          <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}" target="_blank" rel="noopener">🌐 Google Maps</a>
+        `;
+        btn.closest('ul.route-meta-list').insertAdjacentElement('afterend', menu);
+        setTimeout(()=>{
+          document.addEventListener('click', function closeMenu(ev2){
+            if(!menu.contains(ev2.target)){ menu.remove(); document.removeEventListener('click', closeMenu); }
+          });
+        }, 10);
+      });
+    });
 
     wrap.querySelectorAll('.extra-cat').forEach(inp=>{
       const form = inp.closest('.route-extra-form');
@@ -2526,6 +2663,36 @@
         scopeNotes
       });
     }
+
+    // detectar paradas de tienda: una por cada tienda distinta que aparezca ese día,
+    // para poder ir a recoger piezas — se pueden mover en la ruta igual que los clientes.
+    const storeGroups = {};
+    jobs.forEach(j=>{
+      if(!j.store) return;
+      const key = j.date + '||' + j.store;
+      if(!storeGroups[key]) storeGroups[key] = { date: j.date, store: j.store };
+    });
+    Object.values(storeGroups).forEach(g=>{
+      const storeName = formatStoreName(g.store);
+      const knownAddress = state.storeAddresses[g.store] || '';
+      jobs.push({
+        category: storeName,
+        date: g.date,
+        po: null,
+        amount: 0,
+        status: 'pending',
+        note: null,
+        customerName: storeName,
+        address: knownAddress,
+        phone: '',
+        store: g.store,
+        timeStart: null,
+        timeEnd: null,
+        scopeNotes: '',
+        isStoreStop: true
+      });
+    });
+
     return jobs;
   }
 
@@ -2655,8 +2822,9 @@
 
         if(!cat || !date) return;
 
+        const isStoreStop = !!jobData.isStoreStop;
         const hasAmount = amount !== null && !isNaN(amount) && amount > 0;
-        const finalStatus = hasAmount ? status : 'missing_price';
+        const finalStatus = isStoreStop ? (status || 'pending') : (hasAmount ? status : 'missing_price');
 
         const entry = {
           id: makeId('e'),
@@ -2669,6 +2837,7 @@
           note: note || null,
           order: nextOrderFor(date),
           isAdditional: false,
+          isStoreStop: isStoreStop,
           customerName: jobData.customerName || '',
           address: jobData.address || '',
           phone: jobData.phone || '',
@@ -2882,6 +3051,78 @@
   }
 
   document.getElementById('finish-route-btn').addEventListener('click', generateRouteReport);
+
+  document.getElementById('navigate-route-btn').addEventListener('click', ()=>{
+    const dateIso = document.getElementById('route-date').value || todayISO();
+    const stops = state.entries
+      .filter(e=> e.type==='income' && e.date===dateIso && e.status !== 'missing_price' && e.status !== 'cancelled')
+      .sort((a,b)=> (a.order ?? 9999) - (b.order ?? 9999))
+      .filter(e=> e.address && e.address.trim());
+
+    if(stops.length === 0){
+      statusLine.textContent = 'no hay paradas con dirección todavía para esta fecha';
+      return;
+    }
+
+    // Google Maps solo admite hasta 3 paradas intermedias cuando el enlace se abre desde el celular;
+    // si hay más, se usan las primeras 3 + el destino final para que el enlace funcione bien.
+    let usedStops = stops;
+    let trimmedNote = '';
+    if(stops.length > 4){
+      usedStops = stops.slice(0, 3).concat(stops[stops.length - 1]);
+      trimmedNote = ` (Google Maps solo admite 3 paradas intermedias desde el celular — se usaron las primeras 3 más la última; abre Maps y agrega el resto a mano con "Agregar parada")`;
+    }
+
+    const addresses = usedStops.map(e=> e.address.trim());
+    const destination = addresses[addresses.length - 1];
+    const waypoints = addresses.slice(0, -1);
+
+    let url = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(destination);
+    if(waypoints.length > 0){
+      url += '&waypoints=' + waypoints.map(a=> encodeURIComponent(a)).join('|');
+    }
+    window.open(url, '_blank');
+    statusLine.textContent = `ruta con ${usedStops.length} parada(s) enviada a Google Maps ✓${trimmedNote}`;
+  });
+
+  // ---------- calculadora de gasolina (Ram ProMaster 2500) ----------
+  const gasMilesInput = document.getElementById('gas-miles');
+  const gasMpgInput = document.getElementById('gas-mpg');
+  const gasPriceInput = document.getElementById('gas-price');
+  const gasResult = document.getElementById('gas-result');
+
+  async function loadGasSettings(){
+    try{
+      const mpg = await window.storage.get('wl:van_mpg');
+      gasMpgInput.value = mpg.value;
+    }catch(err){ gasMpgInput.value = '17'; }
+    try{
+      const price = await window.storage.get('wl:gas_price');
+      gasPriceInput.value = price.value;
+    }catch(err){ gasPriceInput.value = '3.50'; }
+    updateGasEstimate();
+  }
+
+  function updateGasEstimate(){
+    const miles = parseFloat(gasMilesInput.value);
+    const mpg = parseFloat(gasMpgInput.value) || 17;
+    const price = parseFloat(gasPriceInput.value) || 0;
+    if(!miles || miles <= 0){ gasResult.innerHTML = ''; return; }
+    const gallons = miles / mpg;
+    const cost = gallons * price;
+    gasResult.innerHTML = `Estimado: <strong>${fmt(cost)}</strong> en gasolina (${gallons.toFixed(1)} galones a ${fmt(price)}/gal)`;
+  }
+
+  gasMilesInput.addEventListener('input', updateGasEstimate);
+  gasMpgInput.addEventListener('change', ()=>{
+    window.storage.set('wl:van_mpg', gasMpgInput.value, false).catch(()=>{});
+    updateGasEstimate();
+  });
+  gasPriceInput.addEventListener('change', ()=>{
+    window.storage.set('wl:gas_price', gasPriceInput.value, false).catch(()=>{});
+    updateGasEstimate();
+  });
+  loadGasSettings();
 
   // ---------- copia de seguridad ----------
   function buildBackupJson(type){
