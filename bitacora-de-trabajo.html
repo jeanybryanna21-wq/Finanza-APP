@@ -9,11 +9,11 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="apple-touch-icon.png">
 <title>Miruta — Mega</title>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Jost:wght@300;400;500;600&family=Pinyon+Script&display=swap" rel="stylesheet">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#141414">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="format-detection" content="telephone=no">
+
 <style>
   :root{
     --white:rgba(40,38,34,0.22);
@@ -376,15 +376,15 @@
   }
   .drag-handle:active{ cursor: grabbing; color: var(--gold-deep); }
 
-  .route-header-row{ display:flex; align-items:center; gap:8px; flex-wrap:nowrap; margin-bottom:0; }
+  .route-header-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:0; }
   .route-order{
     width: 40px; text-align:center; font-family: 'Jost', sans-serif; font-size:18px; font-weight:700;
     border: 1px solid var(--hairline); background: rgba(20,19,17,0.35); color: var(--gold-deep); padding: 5px 2px; flex: 0 0 auto;
     text-shadow: 0 1px 3px rgba(0,0,0,0.5);
   }
   .route-customer{
-    font-family: 'Jost', sans-serif; font-size:16px; font-weight:700; color:var(--ink);
-    flex: 1 1 auto; min-width: 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    display: block; font-family: 'Jost', sans-serif; font-size:16px; font-weight:700; color:var(--ink);
+    flex: 1 1 90px; min-width: 90px; max-width: 100%; overflow-wrap: break-word;
     text-shadow: 0 1px 4px rgba(0,0,0,0.55);
   }
   .route-amount{
@@ -483,11 +483,258 @@
     .route-stop{ padding: 20px 22px; }
   }
 </style>
+
+<style id="rc47-ios-glass">
+/* ==========================================================================
+   RC47 — iOS GLASS REDESIGN (visual only; existing app logic preserved)
+   ========================================================================== */
+:root{
+  --glass: rgba(255,255,255,.18);
+  --glass-strong: rgba(255,255,255,.27);
+  --glass-soft: rgba(255,255,255,.11);
+  --glass-border: rgba(255,255,255,.42);
+  --glass-shadow: 0 18px 48px rgba(0,0,0,.24), 0 2px 8px rgba(0,0,0,.14);
+  --glass-shadow-soft: 0 10px 26px rgba(0,0,0,.18);
+  --ink: #fff;
+  --ink-soft: rgba(255,255,255,.74);
+  --hairline: rgba(255,255,255,.24);
+  --gold: #f5c84b;
+  --gold-deep: #ffd45f;
+  --gold-pale: rgba(245,200,75,.16);
+  --wine: #ff7b6f;
+  --slate: #cbd3de;
+  --white: var(--glass);
+  --ivory: #111;
+}
+html,body{min-height:100%;background:#111;}
+body{overflow-x:hidden;}
+#bg-photo-layer::after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(180deg,rgba(0,0,0,.10) 0%,rgba(0,0,0,.03) 42%,rgba(0,0,0,.22) 100%);
+}
+#bg-photo-layer img{transform:scale(1.03);filter:saturate(.94) contrast(1.03);}
+.app{
+  width:min(100%,760px)!important;max-width:760px!important;margin:0 auto!important;
+  transform:none!important;padding:calc(24px + env(safe-area-inset-top)) 14px calc(112px + env(safe-area-inset-bottom))!important;
+}
+.header{margin:0 0 18px;padding:0;align-items:flex-start;}
+.header-titles{
+  padding:0;background:transparent;border:0;box-shadow:none;backdrop-filter:none;-webkit-backdrop-filter:none;text-align:left;
+}
+.header h1{font-family:'Jost',sans-serif;font-size:34px;font-weight:800;letter-spacing:-1.2px;color:#fff;text-shadow:0 3px 18px rgba(0,0,0,.45);}
+.header .rule{display:none}.header .sub{margin-top:3px;font-size:12px;letter-spacing:.8px;color:rgba(255,255,255,.78);text-shadow:0 2px 8px rgba(0,0,0,.45)}
+
+/* Universal floating glass surfaces */
+.form-card,.section-card,.stat,.count-chip,.tabs,.ticket,.route-stop,.empty,.status,#print-report.open,.report-hint,.rate-empty,.import-row-block{
+  background:linear-gradient(135deg,var(--glass-strong),var(--glass-soft))!important;
+  border:1px solid var(--glass-border)!important;
+  box-shadow:var(--glass-shadow-soft)!important;
+  backdrop-filter:blur(24px) saturate(150%)!important;
+  -webkit-backdrop-filter:blur(24px) saturate(150%)!important;
+}
+.form-card,.section-card,#print-report.open{border-radius:26px!important;overflow:hidden;margin-bottom:14px!important;}
+.form-card{padding:18px!important}.section-card{margin-bottom:12px!important}
+.section-toggle{padding:15px 17px!important;font-size:15px!important;font-weight:750!important;letter-spacing:-.15px}
+.section-toggle .chev{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.13);font-size:13px}
+.section-body{padding:0 17px 17px!important}.section-hint,.route-hint,.report-hint{font-size:13px!important;line-height:1.45!important;color:var(--ink-soft)!important}
+
+/* Today: long, low notification cards */
+#route-list{display:flex;flex-direction:column;gap:10px;}
+.route-stop{
+  position:relative;border-radius:24px!important;border-left:1px solid var(--glass-border)!important;
+  padding:11px 12px!important;margin:0!important;min-height:72px;overflow:visible!important;
+  transition:transform .28s cubic-bezier(.2,.8,.2,1),box-shadow .28s ease,background .28s ease;
+}
+.route-stop:active{transform:scale(.985)}
+.route-stop.store-stop{border-left:1px solid rgba(122,195,255,.58)!important}
+.route-stop.decided{opacity:.78;background:linear-gradient(135deg,rgba(255,255,255,.18),rgba(255,255,255,.08))!important}
+.route-header-row{display:grid!important;grid-template-columns:24px 30px minmax(0,1fr) auto 30px 24px;align-items:center!important;gap:7px!important;margin:0!important}
+.drag-handle{font-size:15px!important;padding:0!important;color:rgba(255,255,255,.48)!important}
+.route-order{width:30px!important;height:30px!important;border-radius:10px!important;padding:0!important;font-size:13px!important;background:rgba(255,255,255,.12)!important;border:1px solid rgba(255,255,255,.25)!important;color:var(--gold-deep)!important}
+.route-customer-wrap{min-width:0;display:flex;flex-direction:column;gap:3px}
+.route-customer{font-size:15px!important;line-height:1.15!important;font-weight:800!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 8px rgba(0,0,0,.35)!important}
+.route-preview-line{display:flex;align-items:center;gap:6px;min-width:0;color:rgba(255,255,255,.70);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.route-preview-line span{min-width:0;overflow:hidden;text-overflow:ellipsis}.route-preview-line span+span::before{content:'•';margin-right:6px;color:rgba(255,255,255,.42)}
+.route-amount{font-size:15px!important;font-weight:850!important;color:var(--gold-deep)!important}
+.route-expand-toggle,.route-del{width:28px!important;height:28px!important;padding:0!important;border-radius:50%!important;display:grid!important;place-items:center!important;background:rgba(255,255,255,.12)!important;border:1px solid rgba(255,255,255,.18)!important;color:#fff!important;font-size:12px!important}
+.route-del{background:transparent!important;border:0!important;color:rgba(255,255,255,.48)!important}
+.route-expanded{margin:11px 3px 1px!important;padding:12px!important;border-top:1px solid rgba(255,255,255,.18);animation:glassOpen .30s cubic-bezier(.2,.8,.2,1)}
+@keyframes glassOpen{from{opacity:0;transform:translateY(-5px) scale(.985)}to{opacity:1;transform:none}}
+.route-category{font-size:14px!important}.route-meta-list{gap:7px 12px!important}.route-meta-list li,.route-notes{font-size:12.5px!important;white-space:normal!important}
+.route-actions{gap:6px!important}.status-btn,.btn-mini{border-radius:999px!important;padding:7px 10px!important;font-size:10.5px!important;background:rgba(255,255,255,.10)!important;border:1px solid rgba(255,255,255,.25)!important;color:#fff!important}
+.status-btn.active.pending{background:rgba(203,211,222,.30)!important}.status-btn.active.completed,.status-btn.active.paid{background:rgba(245,200,75,.28)!important;color:#fff!important}.status-btn.active.cancelled{background:rgba(255,123,111,.28)!important}
+.po-badge,.store-badge,.note-tag,.route-flag-line{border-radius:999px!important;font-size:10.5px!important;padding:4px 8px!important}
+.route-extra-form{border-radius:18px!important;background:rgba(10,10,10,.18)!important}
+
+/* Finance widgets */
+.tabs{position:sticky;top:8px;z-index:5;border-radius:999px!important;padding:5px!important;gap:3px!important;margin-bottom:12px!important}
+.tabs button{flex:1;padding:9px 8px!important;margin:0!important;border:0!important;border-radius:999px!important;font-size:11px!important;letter-spacing:.5px!important}
+.tabs button.active{background:rgba(255,255,255,.18)!important;color:#fff!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.22)}
+.summary-caption{text-align:left!important;font-size:13px!important;margin:5px 4px 9px!important;color:var(--ink-soft)!important}
+.count-row{grid-template-columns:repeat(3,1fr)!important;gap:8px!important;margin-bottom:8px!important}.count-chip{border-radius:18px!important;padding:10px 5px!important}.count-chip .n{font-size:20px!important}.count-chip .l{font-size:9px!important;letter-spacing:.45px!important}
+.summary{grid-template-columns:repeat(2,1fr)!important;gap:8px!important}.stat{border-top:1px solid var(--glass-border)!important;border-radius:20px!important;padding:13px 10px!important;text-align:left!important}.stat .label{font-size:9.5px!important;margin-bottom:5px!important}.stat .value{font-size:20px!important}
+
+/* Lists in Prices, Parts, Reports */
+.price-row,.missing-row,.ticket,.import-row-block{border:0!important;border-bottom:1px solid rgba(255,255,255,.16)!important;border-radius:0!important;padding:11px 2px!important;box-shadow:none!important;background:transparent!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+.price-row:last-child,.missing-row:last-child,.ticket:last-child{border-bottom:0!important}
+.price-row .p-name,.missing-row .m-cat{font-size:14px!important;font-weight:700!important}.price-row .p-aliases{font-size:11px!important}.price-row .p-price,.missing-row .m-amount{font-size:14px!important}
+.week-head{border-bottom:1px solid rgba(255,255,255,.25)!important}.week-head .week-name,.day-head .day-name{font-size:14px!important}.ticket .desc{font-size:14px!important}.ticket .amounts{font-size:13px!important}
+
+/* Inputs */
+input[type=date],input[type=text],input[type=number],select,textarea#import-text,#import-text-paste,#export-text-fallback{
+  color:#fff!important;background:rgba(255,255,255,.09)!important;border:1px solid rgba(255,255,255,.22)!important;border-radius:14px!important;padding:10px 11px!important;font-size:14px!important;
+}
+input::placeholder,textarea::placeholder{color:rgba(255,255,255,.48)!important}select option{color:#111;background:#fff}.field label{font-size:10px!important;color:rgba(255,255,255,.68)!important}
+.type-toggle{border-radius:15px!important;border-color:rgba(255,255,255,.22)!important;background:rgba(255,255,255,.07)}.type-toggle button{padding:10px!important;background:transparent!important}.type-toggle button.active.income{background:rgba(245,200,75,.25)!important;color:#fff!important}.type-toggle button.active.expense{background:rgba(255,123,111,.25)!important;color:#fff!important}
+.submit-btn,.btn-outline{border-radius:999px!important;background:rgba(255,255,255,.13)!important;border:1px solid rgba(255,255,255,.35)!important;color:#fff!important;box-shadow:0 8px 20px rgba(0,0,0,.15)}
+.submit-btn{padding:13px!important}.btn-outline{padding:10px 15px!important;font-size:11px!important}
+
+/* Floating bottom dock */
+.bottom-nav{
+  left:10px!important;right:10px!important;bottom:calc(8px + env(safe-area-inset-bottom))!important;
+  width:auto!important;max-width:740px;margin:0 auto;padding:5px 4px!important;border-radius:25px!important;
+  background:linear-gradient(135deg,rgba(255,255,255,.24),rgba(255,255,255,.10))!important;
+  border:1px solid rgba(255,255,255,.36)!important;box-shadow:0 18px 44px rgba(0,0,0,.34)!important;
+  backdrop-filter:blur(28px) saturate(160%)!important;-webkit-backdrop-filter:blur(28px) saturate(160%)!important;
+  overflow-x:auto;scrollbar-width:none;
+}
+.bottom-nav::-webkit-scrollbar{display:none}.bottom-nav .nav-item{min-width:49px!important}.bottom-nav button{padding:6px 2px!important;gap:2px!important;border-radius:18px!important;transition:.2s ease}.bottom-nav button.active{background:rgba(255,255,255,.15)!important}.bottom-nav button .nav-icon{font-size:16px!important}.bottom-nav button .nav-label{font-size:8.5px!important;font-weight:650!important}.bottom-nav .nav-badge{top:0!important;right:10%!important}
+.status{border-radius:999px!important;font-size:9px!important;padding:6px 10px!important;margin:16px auto 0!important;width:max-content;max-width:100%}
+
+@media(max-width:420px){
+  .app{padding-left:10px!important;padding-right:10px!important}.route-header-row{grid-template-columns:20px 28px minmax(0,1fr) auto 28px 20px;gap:5px!important}.route-preview-line{font-size:10.5px}.route-amount{font-size:13px!important}.count-row{gap:6px!important}.summary{gap:6px!important}.bottom-nav .nav-item{min-width:47px!important}
+}
+</style>
+
+<!-- Protección adicional: garantiza que el nombre del cliente nunca se colapse a ancho cero
+     en Safari, sin importar el diseño de arriba (bug ya resuelto antes, no se debe repetir). -->
+<style id="miruta-name-safety">
+  .route-customer-wrap{ min-width: 70px !important; }
+  .route-customer{ min-width: 60px !important; }
+</style>
+
+
+<style id="rc48-premium-system">
+/* RC48 Premium System — visual/derived UI only */
+:root{--ok:#72e6a0;--warn:#ffd45f;--danger:#ff7b6f;--info:#8fd3ff}
+body{overscroll-behavior-y:none}
+#bg-photo-layer img{transform:scale(1.10);transition:transform .15s linear,filter .3s ease;will-change:transform}
+#bg-photo-layer::before{content:"";position:absolute;inset:-8%;background:radial-gradient(circle at 50% 20%,rgba(255,255,255,.06),transparent 42%);pointer-events:none;z-index:1}
+.premium-hero{margin:0 0 12px;position:relative;z-index:2}
+.greeting-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:10px;padding:0 3px}
+.greeting-title{font-size:27px;font-weight:850;letter-spacing:-.8px;text-shadow:0 3px 18px rgba(0,0,0,.42)}
+.greeting-sub{font-size:12px;color:rgba(255,255,255,.74);margin-top:2px}
+.hero-date{font-size:11px;font-weight:700;padding:7px 10px;border-radius:999px;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.24);backdrop-filter:blur(18px)}
+.live-activity{display:grid;grid-template-columns:42px minmax(0,1fr) auto;align-items:center;gap:11px;padding:11px 13px;border-radius:24px;background:linear-gradient(135deg,rgba(18,18,18,.72),rgba(55,55,55,.44));border:1px solid rgba(255,255,255,.22);box-shadow:0 16px 38px rgba(0,0,0,.28);backdrop-filter:blur(28px) saturate(150%);margin-bottom:9px}
+.live-icon{width:42px;height:42px;border-radius:15px;display:grid;place-items:center;background:rgba(245,200,75,.18);border:1px solid rgba(245,200,75,.38);font-size:20px}
+.live-kicker{font-size:9px;text-transform:uppercase;letter-spacing:1.2px;color:rgba(255,255,255,.58)}
+.live-title{font-size:14px;font-weight:800;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.live-meta{font-size:11px;color:rgba(255,255,255,.68);margin-top:2px}
+.live-count{text-align:right}.live-count b{display:block;font-size:19px;color:var(--gold-deep)}.live-count span{font-size:9px;color:rgba(255,255,255,.58);text-transform:uppercase}
+.today-dashboard{display:grid;grid-template-columns:1.18fr .82fr;gap:9px;margin-bottom:11px}
+.dashboard-card,.mini-map-card{border-radius:24px;background:linear-gradient(135deg,rgba(255,255,255,.24),rgba(255,255,255,.10));border:1px solid rgba(255,255,255,.36);box-shadow:0 12px 30px rgba(0,0,0,.20);backdrop-filter:blur(24px) saturate(150%);padding:13px}
+.dash-label,.map-label{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:rgba(255,255,255,.60)}
+.dash-total{font-size:26px;font-weight:900;letter-spacing:-1px;margin-top:2px}.dash-money{font-size:12px;color:var(--gold-deep);font-weight:750;margin-left:5px}
+.progress-track{height:7px;border-radius:999px;background:rgba(255,255,255,.13);overflow:hidden;margin:10px 0 8px}.progress-fill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,var(--gold),#fff1a7);transition:width .55s cubic-bezier(.2,.8,.2,1)}
+.status-mini-row{display:flex;gap:7px;flex-wrap:wrap;font-size:9.5px;color:rgba(255,255,255,.72)}.status-mini-row b{color:#fff}
+.mini-map-card{position:relative;overflow:hidden;min-height:112px;cursor:pointer}
+.map-road{position:absolute;inset:28px -15px -20px 12px;border:2px solid rgba(255,255,255,.16);border-radius:48% 52% 45% 55%;transform:rotate(-9deg)}
+.map-road::after{content:"";position:absolute;inset:14px 22px 8px -35px;border:1px dashed rgba(255,255,255,.18);border-radius:55%;transform:rotate(18deg)}
+.map-dot{position:absolute;width:11px;height:11px;border-radius:50%;background:var(--gold);border:2px solid #fff;box-shadow:0 3px 10px rgba(0,0,0,.35)}.map-dot:nth-of-type(1){left:27%;top:47%}.map-dot:nth-of-type(2){left:55%;top:34%}.map-dot:nth-of-type(3){left:68%;top:66%}.map-dot:nth-of-type(4){left:37%;top:76%}.map-dot.current{width:14px;height:14px;background:var(--info);animation:pulseDot 1.8s infinite}
+@keyframes pulseDot{0%,100%{box-shadow:0 0 0 0 rgba(143,211,255,.4)}50%{box-shadow:0 0 0 8px rgba(143,211,255,0)}}
+.map-caption{position:absolute;left:13px;bottom:10px;font-size:10px;color:rgba(255,255,255,.72)}
+.route-section-title{display:flex;justify-content:space-between;align-items:center;padding:3px 3px 8px}.route-section-title b{font-size:18px;letter-spacing:-.4px}.route-section-title span{font-size:10px;color:rgba(255,255,255,.65)}
+/* Timeline */
+#route-list{gap:8px!important;position:relative;padding-left:15px}
+#route-list::before{content:"";position:absolute;left:5px;top:10px;bottom:10px;width:2px;background:linear-gradient(var(--gold),rgba(255,255,255,.12));border-radius:2px}
+.route-stop{margin-left:0!important}.route-stop::before{content:"";position:absolute;left:-16px;top:26px;width:9px;height:9px;border-radius:50%;background:var(--gold);border:2px solid rgba(255,255,255,.95);box-shadow:0 0 0 4px rgba(245,200,75,.16)}
+.route-stop.decided::before{background:var(--ok);box-shadow:0 0 0 4px rgba(114,230,160,.14)}
+.route-stop.status-flash{animation:statusFlash .5s ease}
+@keyframes statusFlash{0%{transform:scale(.985);filter:brightness(1)}45%{transform:scale(1.012);filter:brightness(1.35)}100%{transform:none;filter:none}}
+/* No emoji-like chrome in nav; use CSS glyphs */
+.bottom-nav .nav-icon{font-size:0!important;width:20px;height:20px;position:relative;display:block}
+.bottom-nav button[data-screen="hoy"] .nav-icon::before{content:"⌂";font-size:20px}
+.bottom-nav button[data-screen="gestion"] .nav-icon::before{content:"◇";font-size:20px}
+.bottom-nav button[data-screen="finanzas"] .nav-icon::before{content:"▥";font-size:19px}
+.bottom-nav button[data-screen="precios"] .nav-icon::before{content:"$";font-size:18px;font-weight:800}
+.bottom-nav button[data-screen="partes"] .nav-icon::before{content:"⌁";font-size:22px}
+.bottom-nav button[data-screen="reportes"] .nav-icon::before{content:"▤";font-size:18px}
+.bottom-nav button[data-screen="ajustes"] .nav-icon::before{content:"⚙";font-size:17px}
+/* compact sticky header on scroll */
+.header{position:sticky;top:calc(env(safe-area-inset-top) + 4px);z-index:9;transition:.25s ease;pointer-events:none}.header h1,.header .sub{transition:.25s ease}.app.scrolled .header{width:max-content;padding:7px 12px!important;border-radius:999px;background:rgba(25,25,25,.48);border:1px solid rgba(255,255,255,.20);backdrop-filter:blur(24px);box-shadow:0 8px 24px rgba(0,0,0,.22)}.app.scrolled .header h1{font-size:18px!important;letter-spacing:-.4px}.app.scrolled .header .sub{display:none}
+/* touch and accessibility polish */
+button,.route-stop,.mini-map-card{-webkit-tap-highlight-color:transparent}.route-expand-toggle{transition:transform .25s ease}.route-expand-toggle[aria-expanded="true"]{transform:rotate(180deg)}
+@media(max-width:390px){.today-dashboard{grid-template-columns:1fr}.mini-map-card{min-height:95px}.greeting-title{font-size:24px}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+
+<style id="rc49-background-everywhere">
+  html, body { min-height: 100%; background: #111 !important; }
+  #bg-photo-layer { position: fixed !important; inset: 0 !important; z-index: 0 !important; display: block !important; visibility: visible !important; opacity: 1 !important; pointer-events: none !important; }
+  #bg-photo-layer img { width: 100% !important; height: 100% !important; object-fit: cover !important; object-position: center center !important; display: block !important; opacity: 1 !important; }
+  .app, .screen { position: relative; }
+  .app { z-index: 2 !important; background: transparent !important; }
+  .screen { background: transparent !important; }
+  .bottom-nav { z-index: 20 !important; }
+</style>
+
+<style id="rc51-exact-reference">
+/* RC51: exact visual reconstruction of the approved dashboard reference. Business logic untouched. */
+.header{display:none!important}.app{max-width:760px!important;padding-top:calc(22px + env(safe-area-inset-top))!important}
+.exact-home{margin-bottom:8px!important}.exact-topbar{display:flex;justify-content:space-between;align-items:flex-start;padding:0 4px 12px}.exact-greeting{display:flex;flex-direction:column;text-shadow:0 3px 16px rgba(0,0,0,.55)}.exact-greeting small{font-size:17px;font-weight:750}.exact-greeting strong{font-size:45px;line-height:.98;color:var(--gold-deep);letter-spacing:-1.8px}.exact-greeting span{font-size:13px;margin-top:9px;color:#fff;font-weight:550}.exact-tools{display:flex;gap:9px;padding-top:8px}.exact-tools button{position:relative;width:45px;height:45px;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:rgba(25,25,25,.42);color:#fff;font-size:25px;backdrop-filter:blur(20px);box-shadow:0 9px 24px rgba(0,0,0,.22)}.exact-tools i{position:absolute;right:-2px;top:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:10px;background:var(--gold);color:#171717;font:800 11px/18px Jost}
+.exact-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-bottom:12px}.exact-stats article{min-height:139px;padding:13px 11px 10px;border-radius:20px;background:linear-gradient(145deg,rgba(30,36,39,.72),rgba(52,57,59,.48));border:1px solid rgba(255,255,255,.28);box-shadow:0 12px 28px rgba(0,0,0,.24);backdrop-filter:blur(24px) saturate(140%);display:flex;flex-direction:column}.stat-icon{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;border:1px solid currentColor;font:750 14px Jost;margin-bottom:12px}.stat-icon.gold,.gold-text{color:var(--gold-deep)!important}.stat-icon.green,.green-text{color:#72e68e!important}.stat-icon.blue,.blue-text{color:#75baff!important}.exact-stats small{font-size:11px;color:rgba(255,255,255,.82)}.exact-stats b{font-size:23px;line-height:1.15;margin-top:3px;white-space:nowrap}.exact-stats em{font-style:normal;font-size:10px;color:rgba(255,255,255,.65);margin-top:5px}.tiny-track{height:5px;border-radius:5px;background:rgba(255,255,255,.16);overflow:hidden;margin-top:auto}.tiny-track i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--gold),#fff0a6);border-radius:5px}.tiny-track i.green-fill{background:#72e68e}.tiny-track i.blue-fill{background:#75baff}
+.next-client-card{display:grid!important;grid-template-columns:1fr 1px 1.05fr 50px!important;gap:14px!important;align-items:center!important;padding:14px 16px!important;border-radius:24px!important;background:linear-gradient(135deg,rgba(16,20,22,.77),rgba(72,73,71,.48))!important;border:1px solid rgba(255,255,255,.28)!important;box-shadow:0 15px 35px rgba(0,0,0,.28)!important;backdrop-filter:blur(25px) saturate(140%)!important;margin-bottom:12px!important}.next-left,.next-address{display:flex;flex-direction:column;min-width:0}.route-live-pill{align-self:flex-start;padding:5px 9px;border:1px solid var(--gold);border-radius:8px;font-size:9px;color:var(--gold);font-weight:800;margin-bottom:8px}.route-live-pill i{display:inline-block;width:7px;height:7px;border-radius:50%;background:#74e894;margin-left:4px;box-shadow:0 0 8px #74e894}.next-client-card small{font-size:10px;color:rgba(255,255,255,.7)}.next-client-card b{font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.next-client-card em{font-style:normal;font-size:13px;color:rgba(255,255,255,.72);margin-top:2px}.next-divider{height:58px;background:rgba(255,255,255,.22)}.next-address b{font-size:13px;line-height:1.35}.gps-button{width:49px;height:49px;border-radius:50%;border:1px solid var(--gold);background:rgba(255,255,255,.08);color:var(--gold);font-size:24px;display:grid;place-items:center;transform:rotate(-38deg)}
+.route-map-card{display:grid;grid-template-columns:1.18fr .82fr;gap:14px;padding:12px!important;min-height:130px!important;border-radius:24px!important;background:linear-gradient(135deg,rgba(28,28,28,.76),rgba(70,68,64,.54))!important;border:1px solid rgba(255,255,255,.25)!important;margin-bottom:14px!important}.fake-map{position:relative;min-height:106px;border-radius:15px;overflow:hidden;background:radial-gradient(circle at 74% 30%,rgba(52,101,126,.45),transparent 24%),linear-gradient(135deg,#1a2225,#2b2926);border:1px solid rgba(255,255,255,.12)}.fake-map .road{position:absolute;border:3px solid var(--gold);border-color:var(--gold) transparent var(--gold) transparent;border-radius:50%;opacity:.9}.fake-map .r1{inset:17px 13px 17px 20px;transform:rotate(-12deg)}.fake-map .r2{inset:35px -10px 4px 55px;transform:rotate(18deg)}.fake-map i{position:relative;display:inline-grid;place-items:center;width:17px;height:17px;border-radius:50%;background:var(--gold);color:#191919;font:800 9px Jost;margin:12px 1px 0 14px;z-index:2}.fake-map i.current{background:#4c9cff;color:white;box-shadow:0 0 16px #4c9cff}.route-map-copy{display:flex;flex-direction:column;justify-content:center}.route-map-copy b{font-size:16px}.route-map-copy span,.route-map-copy small{font-size:11px;color:rgba(255,255,255,.65)}.route-map-copy button{margin-top:10px;border:1px solid var(--gold);border-radius:9px;background:transparent;color:var(--gold);padding:9px 5px;font:750 10px Jost}
+.route-section-title{padding:3px 3px 9px!important}.route-section-title b{font-size:20px!important}.route-section-title span{font-size:11px!important;color:var(--gold)!important}.route-section-title i{font-style:normal}
+#route-list{padding-left:68px!important;gap:8px!important}#route-list::before{left:52px!important;top:12px!important;bottom:14px!important;background:linear-gradient(var(--gold),rgba(245,200,75,.18))!important}.route-stop{min-height:95px!important;border-radius:19px!important;background:linear-gradient(135deg,rgba(31,31,31,.78),rgba(61,60,57,.52))!important;padding:13px 11px!important}.route-stop::before{left:-20px!important;top:40px!important;width:8px!important;height:8px!important}.timeline-time{position:absolute;left:-67px;top:12px;width:42px;text-align:right;color:var(--gold-deep);font-size:13px;font-weight:800;line-height:1.05}.timeline-time small{display:block;font-size:10px}.route-header-row{grid-template-columns:30px minmax(0,1fr) auto 28px!important}.drag-handle{display:none!important}.route-order{width:32px!important;height:42px!important;border-radius:10px!important}.route-customer{font-size:16px!important}.route-preview-line{font-size:11px!important;flex-wrap:wrap!important;white-space:normal!important}.route-amount{font-size:15px!important;align-self:end}.route-del{display:none!important}.route-expand-toggle{grid-column:4;grid-row:1;width:26px!important;height:42px!important;background:transparent!important;border:0!important;font-size:18px!important}.route-status-badge{display:inline-flex;align-items:center;justify-content:center;padding:4px 8px;border:1px solid #6ab9ff;border-radius:7px;font-size:9px;color:#8bcbff;white-space:nowrap;margin-bottom:5px}.route-status-badge.completed,.route-status-badge.paid{border-color:#78dc8b;color:#8ee69c}.route-status-badge.cancelled{border-color:#ff8379;color:#ff9a92}.route-status-badge.delay{border-color:#bbb;color:#ddd}
+#screen-hoy>div[style*="margin-top:22px"]{display:none!important}
+@media(max-width:560px){.exact-stats{grid-template-columns:repeat(2,1fr)}.exact-stats article{min-height:120px}.next-client-card{grid-template-columns:1fr 1px 1fr 44px!important;gap:9px!important;padding:12px!important}.gps-button{width:42px;height:42px}.route-map-card{grid-template-columns:1.08fr .92fr}.exact-greeting strong{font-size:40px}}
+@media(max-width:390px){.exact-stats{gap:6px}.route-map-card{grid-template-columns:1fr}.route-map-copy button{margin-top:7px}.next-address b{font-size:11.5px}}
+</style>
+
+
+<style id="rc52-performance-responsive">
+:root{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+html{height:100%;text-size-adjust:100%;-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{min-height:100%;overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;touch-action:manipulation}
+button{min-height:44px}
+#bg-photo-layer{contain:strict;background:#111}
+#bg-photo-layer img{content-visibility:auto;transform:translateZ(0);will-change:transform}
+.route-stop,.dashboard-card,.mini-map-card,.section-card,.form-card,.stat,.count-chip{contain:layout paint style}
+.screen:not(.active){content-visibility:hidden}
+.screen.active{content-visibility:visible}
+@media (min-width:768px){
+  .app{max-width:1100px!important;padding-left:24px!important;padding-right:24px!important}
+  .today-stats{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+  .today-dashboard{grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr)!important}
+  #route-list{gap:12px!important}
+  .route-stop{padding:14px 16px!important}
+}
+@media (min-width:1200px){
+  .app{max-width:1280px!important}
+  #screen-hoy{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(420px,.9fr);gap:18px;align-items:start}
+  #screen-hoy .today-hero,#screen-hoy .today-stats,#screen-hoy .today-dashboard{grid-column:1/-1}
+  #screen-hoy #route-list{grid-column:1/2}
+  #screen-hoy .today-map-card{grid-column:2/3;position:sticky;top:24px}
+}
+@media (max-width:520px){
+  .app{padding-left:10px!important;padding-right:10px!important}
+  .today-stats{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
+  .today-dashboard{grid-template-columns:1fr!important}
+  .dashboard-card,.mini-map-card{border-radius:20px!important}
+  .route-header-row{grid-template-columns:20px 28px minmax(0,1fr) auto 28px 20px!important}
+  .bottom-nav{left:7px!important;right:7px!important}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+@media (prefers-contrast:more){:root{--glass-border:rgba(255,255,255,.7);--ink-soft:rgba(255,255,255,.9)}}
+</style>
 </head>
 <body>
 
 <div id="bg-photo-layer">
-  <img src="fondo-app.jpg" alt="" onerror="this.remove()" />
+  <img src="fondo-app.jpg" alt="Fondo de la van" decoding="async" fetchpriority="high" />
 </div>
 
 <div class="app">
@@ -499,9 +746,43 @@
     </div>
   </div>
 
+
+  <section class="premium-hero exact-home" id="premium-hero">
+    <div class="exact-topbar">
+      <div class="exact-greeting"><small id="premium-greeting-prefix">Buenos días,</small><strong>Jean</strong><span id="premium-date">HOY</span></div>
+      <div class="exact-tools"><button type="button" aria-label="Buscar">⌕</button><button type="button" aria-label="Alertas">♧<i id="alert-count">0</i></button></div>
+    </div>
+
+    <div class="exact-stats">
+      <article><span class="stat-icon gold">▣</span><small>Trabajos hoy</small><b id="dash-jobs">0</b><em id="dash-pending-text">0 pendientes</em></article>
+      <article><span class="stat-icon gold">$</span><small>Ganancias hoy</small><b class="gold-text" id="dash-money">$0.00</b><em id="daily-goal-label">Meta: $1,200</em><div class="tiny-track"><i id="money-progress-fill"></i></div></article>
+      <article><span class="stat-icon green">✓</span><small>Completados</small><b class="green-text" id="live-progress">0/0</b><em id="dash-percent">0%</em><div class="tiny-track"><i class="green-fill" id="dash-progress-fill"></i></div></article>
+      <article><span class="stat-icon blue">◷</span><small>Horas trabajadas</small><b class="blue-text" id="hours-worked">0h 00m</b><em>Meta: 8h</em><div class="tiny-track"><i class="blue-fill" id="hours-progress-fill"></i></div></article>
+    </div>
+
+    <div class="next-client-card" id="live-activity">
+      <div class="next-left"><span class="route-live-pill">EN RUTA <i></i></span><small>Siguiente cliente</small><b id="live-next-title">Ruta preparada</b><em id="next-time-range">—</em></div>
+      <div class="next-divider"></div>
+      <div class="next-address"><small id="next-distance">📍 Ruta lista</small><b id="next-address-line1">Agrega trabajos</b><b id="next-address-line2">desde Gestión de ruta</b></div>
+      <button class="gps-button" id="gps-next-btn" type="button" aria-label="Abrir GPS">➤</button>
+    </div>
+
+    <div class="route-map-card" id="mini-map-card" role="button" tabindex="0" aria-label="Abrir ruta en Google Maps">
+      <div class="fake-map"><span class="road r1"></span><span class="road r2"></span><i>1</i><i>2</i><i>3</i><i>4</i><i>5</i><i class="current">●</i></div>
+      <div class="route-map-copy"><b>Tu ruta de hoy</b><span id="map-caption">Sin paradas cargadas</span><small>Optimizada</small><button type="button">VER RUTA COMPLETA</button></div>
+    </div>
+
+    <div class="route-section-title"><b>Trabajos de hoy</b><span>Ver todos (<i id="route-section-count">0</i>) ›</span></div>
+  </section>
+
   <div class="screen active" id="screen-hoy">
 
   <div id="route-list"></div>
+
+  <div style="margin-top:22px; border-top:1px solid var(--hairline); padding-top:18px; text-align:center;">
+    <button class="btn-outline" id="navigate-route-btn" type="button">🗺️ Completar ruta — Abrir en Google Maps</button>
+    <div class="report-hint" style="margin:10px 0 0;">Arma el viaje completo del día con todas las paradas en el orden en que las tienes puestas (incluyendo tiendas), y lo abre en Google Maps.</div>
+  </div>
 
   </div>
 
@@ -523,11 +804,6 @@
       <textarea id="import-text" placeholder="Pega el correo completo o el tiquete de un cliente aquí…"></textarea>
       <button class="btn-outline" id="detect-btn" type="button">Detectar trabajos</button>
       <div id="import-preview"></div>
-
-      <div style="margin-top:22px; border-top:1px solid var(--hairline); padding-top:18px; text-align:center;">
-        <button class="btn-outline" id="navigate-route-btn" type="button">🗺️ Completar ruta — Abrir en Google Maps</button>
-        <div class="report-hint" style="margin:10px 0 0;">Arma el viaje completo del día con todas las paradas en el orden en que las tienes puestas (incluyendo tiendas), y lo abre en Google Maps.</div>
-      </div>
 
       <div style="margin-top:18px; border-top:1px solid var(--hairline); padding-top:16px;">
         <div class="section-hint">Después de abrir la ruta en Maps, copia las millas totales que te muestra y ponlas aquí para estimar el gasto de gasolina de tu Ram ProMaster 2500.</div>
@@ -807,73 +1083,97 @@
 
 <script>
 (function(){
-  // Sincronización real entre dispositivos usando Firebase Realtime Database.
-  // Si Firebase no carga (sin internet, o bloqueado), se usa localStorage como respaldo local.
+  // RC52: almacenamiento local-first. La app inicia y guarda al instante sin internet.
+  // Firebase se conecta en segundo plano cuando existe conexión y nunca bloquea la interfaz.
   let firebaseSyncActive = false;
   let fbDb = null;
-  try{
-    if(typeof firebase !== 'undefined'){
-      firebase.initializeApp({
-        apiKey: "AIzaSyCAfz2nDbEtcALLE2QpmI4kb0aOVQAIY1M",
-        authDomain: "finanzas-app-5a1db.firebaseapp.com",
-        databaseURL: "https://finanzas-app-5a1db-default-rtdb.firebaseio.com",
-        projectId: "finanzas-app-5a1db",
-        storageBucket: "finanzas-app-5a1db.firebasestorage.app",
-        messagingSenderId: "835814720344",
-        appId: "1:835814720344:web:ea7f494babd01788cf9b2d"
-      });
-      fbDb = firebase.database();
-      firebaseSyncActive = true;
-    }
-  }catch(err){ firebaseSyncActive = false; }
+  const cloudQueue = new Map();
 
-  if(firebaseSyncActive){
-    window.storage = {
-      get: async (key) => {
-        const snap = await fbDb.ref('bitacora/' + key).once('value');
-        if(!snap.exists()) throw new Error('not found');
-        return { key, value: snap.val(), shared: false };
-      },
-      set: async (key, value) => {
-        await fbDb.ref('bitacora/' + key).set(value);
-        return { key, value, shared: false };
-      },
-      delete: async (key) => {
-        await fbDb.ref('bitacora/' + key).remove();
-        return { key, deleted: true, shared: false };
-      },
-      list: async (prefix) => {
-        const snap = await fbDb.ref('bitacora').once('value');
-        const all = snap.val() || {};
-        const keys = Object.keys(all).filter(k => !prefix || k.indexOf(prefix) === 0);
-        return { keys, prefix, shared: false };
-      }
-    };
-  } else if(!window.storage){
-    window.storage = {
-      get: async (key) => {
-        const v = localStorage.getItem(key);
-        if(v === null) throw new Error('not found');
-        return { key, value: v, shared: false };
-      },
-      set: async (key, value) => {
-        localStorage.setItem(key, value);
-        return { key, value, shared: false };
-      },
-      delete: async (key) => {
-        localStorage.removeItem(key);
-        return { key, deleted: true, shared: false };
-      },
-      list: async (prefix) => {
-        const keys = [];
-        for(let i=0; i<localStorage.length; i++){
-          const k = localStorage.key(i);
-          if(!prefix || (k && k.indexOf(prefix) === 0)) keys.push(k);
-        }
-        return { keys, prefix, shared: false };
-      }
-    };
+  function localGet(key){
+    const value = localStorage.getItem(key);
+    if(value === null) throw new Error('not found');
+    return value;
   }
+  function localKeys(prefix){
+    const keys = [];
+    for(let i=0; i<localStorage.length; i++){
+      const key = localStorage.key(i);
+      if(key && (!prefix || key.startsWith(prefix))) keys.push(key);
+    }
+    return keys;
+  }
+  async function flushCloudQueue(){
+    if(!firebaseSyncActive || !fbDb || !navigator.onLine) return;
+    for(const [key, job] of Array.from(cloudQueue.entries())){
+      try{
+        const ref = fbDb.ref('bitacora/' + key);
+        if(job.type === 'delete') await ref.remove();
+        else await ref.set(job.value);
+        cloudQueue.delete(key);
+      }catch(_err){ break; }
+    }
+  }
+
+  window.storage = {
+    get: async (key) => {
+      try{ return { key, value: localGet(key), shared:false, source:'local' }; }
+      catch(_localErr){
+        if(firebaseSyncActive && fbDb && navigator.onLine){
+          const snap = await fbDb.ref('bitacora/' + key).once('value');
+          if(snap.exists()){
+            const value = snap.val();
+            localStorage.setItem(key, value);
+            return { key, value, shared:false, source:'cloud' };
+          }
+        }
+        throw new Error('not found');
+      }
+    },
+    set: async (key, value) => {
+      localStorage.setItem(key, value);
+      cloudQueue.set(key, {type:'set', value});
+      flushCloudQueue();
+      return { key, value, shared:false, source:'local' };
+    },
+    delete: async (key) => {
+      localStorage.removeItem(key);
+      cloudQueue.set(key, {type:'delete'});
+      flushCloudQueue();
+      return { key, deleted:true, shared:false, source:'local' };
+    },
+    list: async (prefix) => ({ keys: localKeys(prefix), prefix, shared:false, source:'local' })
+  };
+
+  function loadScript(src){
+    return new Promise((resolve,reject)=>{
+      const s=document.createElement('script');
+      s.src=src; s.async=true; s.onload=resolve; s.onerror=reject;
+      document.head.appendChild(s);
+    });
+  }
+  async function enableCloudSync(){
+    if(!navigator.onLine || firebaseSyncActive) return;
+    try{
+      await loadScript('https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js');
+      await loadScript('https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js');
+      if(!firebase.apps.length){
+        firebase.initializeApp({
+          apiKey:'AIzaSyCAfz2nDbEtcALLE2QpmI4kb0aOVQAIY1M',
+          authDomain:'finanzas-app-5a1db.firebaseapp.com',
+          databaseURL:'https://finanzas-app-5a1db-default-rtdb.firebaseio.com',
+          projectId:'finanzas-app-5a1db',
+          storageBucket:'finanzas-app-5a1db.firebasestorage.app',
+          messagingSenderId:'835814720344',
+          appId:'1:835814720344:web:ea7f494babd01788cf9b2d'
+        });
+      }
+      fbDb=firebase.database();
+      firebaseSyncActive=true;
+      flushCloudQueue();
+    }catch(_err){ firebaseSyncActive=false; }
+  }
+  window.addEventListener('online', enableCloudSync, {passive:true});
+  setTimeout(enableCloudSync, 1200);
 
   const state = { entries: [], rate: 90, priceList: [], parts: [], partUsage: [], storeAddresses: {} };
   let editingId = null;
@@ -1855,10 +2155,17 @@
         : '';
 
       el.innerHTML = `
-        <div class="route-header-row ${decided ? 'route-decided' : ''}">
+        <div class="route-header-row ${decided ? 'route-decided' : ''}" data-id="${e.id}">
           <span class="drag-handle" title="Mantén presionado para reordenar">⠿</span>
           <input type="number" min="1" class="route-order" data-id="${e.id}" value="${e.order || (i+1)}" />
-          <div class="route-customer">${escapeHtml(e.customerName || 'Cliente sin nombre')}${e.isAdditional ? ' <span class="note-tag">Adicional</span>' : ''}${e.isCompensation ? ' <span class="note-tag">Compensación</span>' : ''}${e.isStoreStop ? ' <span class="note-tag store-tag">🏬 Tienda</span>' : ''}</div>
+          <div class="route-customer-wrap">
+            <div class="route-customer">${escapeHtml(e.customerName || 'Cliente sin nombre')}${e.isAdditional ? ' <span class="note-tag">Adicional</span>' : ''}${e.isCompensation ? ' <span class="note-tag">Compensación</span>' : ''}${e.isStoreStop ? ' <span class="note-tag store-tag">🏬 Tienda</span>' : ''}</div>
+            <div class="route-preview-line">
+              <span>${escapeHtml(e.category || 'Trabajo')}</span>
+              ${e.store ? `<span>${escapeHtml(formatStoreName(e.store))}</span>` : ''}
+              ${timeRange ? `<span>${escapeHtml(timeRange)}</span>` : ''}
+            </div>
+          </div>
           <div class="route-amount">${fmt(e.net)}</div>
           <button class="btn-mini route-expand-toggle" data-id="${e.id}" title="Ver más">▾</button>
           <button class="route-del" data-id="${e.id}" title="Eliminar">✕</button>
@@ -1918,15 +2225,32 @@
       wrap.appendChild(el);
     });
 
+    function toggleExpand(id){
+      const panel = document.getElementById('expand-' + id);
+      if(!panel) return;
+      const isOpen = panel.classList.toggle('open');
+      const btn = wrap.querySelector(`.route-expand-toggle[data-id="${id}"]`);
+      if(btn) btn.textContent = isOpen ? '▴' : '▾';
+    }
+
+    wrap.querySelectorAll('.route-header-row').forEach(row=>{
+      row.style.cursor = 'pointer';
+      row.addEventListener('click', ()=> toggleExpand(row.dataset.id));
+    });
+
     wrap.querySelectorAll('.route-expand-toggle').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const panel = document.getElementById('expand-' + btn.dataset.id);
-        const isOpen = panel.classList.toggle('open');
-        btn.textContent = isOpen ? '▴' : '▾';
+      btn.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
+        toggleExpand(btn.dataset.id);
       });
     });
 
+    wrap.querySelectorAll('.drag-handle').forEach(handle=>{
+      handle.addEventListener('click', (ev)=> ev.stopPropagation());
+    });
+
     wrap.querySelectorAll('.route-order').forEach(inp=>{
+      inp.addEventListener('click', (ev)=> ev.stopPropagation());
       inp.addEventListener('change', ()=>{
         reorderStop(inp.dataset.id, inp.value, dateIso);
         render();
@@ -2009,11 +2333,12 @@
         ev.stopPropagation();
         document.querySelectorAll('.map-choice-menu').forEach(m=> m.remove());
         const addr = btn.dataset.addr;
+        const encodedAddr = encodeURIComponent(addr).replace(/%2C/g, ',').replace(/%20/g, '+');
         const menu = document.createElement('div');
         menu.className = 'map-choice-menu';
         menu.innerHTML = `
-          <a href="https://maps.apple.com/?daddr=${encodeURIComponent(addr)}" target="_blank" rel="noopener">🍎 Apple Maps</a>
-          <a href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}" target="_blank" rel="noopener">🌐 Google Maps</a>
+          <a href="https://maps.apple.com/?daddr=${encodedAddr}" target="_blank" rel="noopener">🍎 Apple Maps</a>
+          <a href="https://www.google.com/maps/dir/?api=1&destination=${encodedAddr}" target="_blank" rel="noopener">🌐 Google Maps</a>
         `;
         btn.closest('ul.route-meta-list').insertAdjacentElement('afterend', menu);
         setTimeout(()=>{
@@ -2072,7 +2397,8 @@
     });
 
     wrap.querySelectorAll('.route-del').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
+      btn.addEventListener('click', (ev)=>{
+        ev.stopPropagation();
         state.entries = state.entries.filter(e=> e.id !== btn.dataset.id);
         persistEntries();
         render();
@@ -2380,6 +2706,7 @@
     renderPartsList();
     renderPartsUsageList();
     renderRoute();
+    updatePremiumDashboard();
 
     const container = document.getElementById('entries-container');
     container.innerHTML = '';
@@ -2920,6 +3247,43 @@
   .footer-note{ margin-top: 30px; font-size: 14px; color:#999; text-align:center; }
   @media print{ .footer-note{ display:none; } }
 </style>
+
+<style id="rc52-performance-responsive">
+:root{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+html{height:100%;text-size-adjust:100%;-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{min-height:100%;overscroll-behavior-y:none;-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;touch-action:manipulation}
+button{min-height:44px}
+#bg-photo-layer{contain:strict;background:#111}
+#bg-photo-layer img{content-visibility:auto;transform:translateZ(0);will-change:transform}
+.route-stop,.dashboard-card,.mini-map-card,.section-card,.form-card,.stat,.count-chip{contain:layout paint style}
+.screen:not(.active){content-visibility:hidden}
+.screen.active{content-visibility:visible}
+@media (min-width:768px){
+  .app{max-width:1100px!important;padding-left:24px!important;padding-right:24px!important}
+  .today-stats{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+  .today-dashboard{grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr)!important}
+  #route-list{gap:12px!important}
+  .route-stop{padding:14px 16px!important}
+}
+@media (min-width:1200px){
+  .app{max-width:1280px!important}
+  #screen-hoy{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(420px,.9fr);gap:18px;align-items:start}
+  #screen-hoy .today-hero,#screen-hoy .today-stats,#screen-hoy .today-dashboard{grid-column:1/-1}
+  #screen-hoy #route-list{grid-column:1/2}
+  #screen-hoy .today-map-card{grid-column:2/3;position:sticky;top:24px}
+}
+@media (max-width:520px){
+  .app{padding-left:10px!important;padding-right:10px!important}
+  .today-stats{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
+  .today-dashboard{grid-template-columns:1fr!important}
+  .dashboard-card,.mini-map-card{border-radius:20px!important}
+  .route-header-row{grid-template-columns:20px 28px minmax(0,1fr) auto 28px 20px!important}
+  .bottom-nav{left:7px!important;right:7px!important}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+@media (prefers-contrast:more){:root{--glass-border:rgba(255,255,255,.7);--ink-soft:rgba(255,255,255,.9)}}
+</style>
 </head>
 <body>
   ${bodyHtml}
@@ -3077,9 +3441,16 @@
     const destination = addresses[addresses.length - 1];
     const waypoints = addresses.slice(0, -1);
 
-    let url = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(destination);
+    // Google Maps espera un formato más simple del que da encodeURIComponent normal:
+    // las comas se dejan tal cual y los espacios van con "+", en vez de %2C y %20 —
+    // así evitamos que Maps no reconozca la dirección y muestre el texto sin descifrar.
+    function encodeMapsAddress(addr){
+      return encodeURIComponent(addr).replace(/%2C/g, ',').replace(/%20/g, '+');
+    }
+
+    let url = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeMapsAddress(destination);
     if(waypoints.length > 0){
-      url += '&waypoints=' + waypoints.map(a=> encodeURIComponent(a)).join('|');
+      url += '&waypoints=' + waypoints.map(a=> encodeMapsAddress(a)).join('|');
     }
     window.open(url, '_blank');
     statusLine.textContent = `ruta con ${usedStops.length} parada(s) enviada a Google Maps ✓${trimmedNote}`;
@@ -3281,6 +3652,64 @@
     }
   });
 
+
+
+  // ---------- RC48 premium derived interface (does not change business logic) ----------
+  function premiumHaptic(pattern){ try{ if(navigator.vibrate) navigator.vibrate(pattern || 10); }catch(_e){} }
+  function getTodayRouteEntries(){
+    const iso=todayISO();
+    return state.entries.filter(e=>e.type==='income'&&e.date===iso&&e.status!=='missing_price').sort((a,b)=>(a.order??9999)-(b.order??9999));
+  }
+  function updatePremiumDashboard(){
+    const jobs=getTodayRouteEntries();
+    const completed=jobs.filter(e=>e.status==='completed'||e.status==='paid').length;
+    const pending=jobs.filter(e=>e.status==='pending').length;
+    const cancelled=jobs.filter(e=>e.status==='cancelled').length;
+    const total=jobs.reduce((sum,e)=>sum+(Number(e.net)||0),0);
+    const active=jobs.find(e=>e.status==='pending') || jobs[0];
+    const pct=jobs.length?Math.round(completed/jobs.length*100):0;
+    const hour=new Date().getHours();
+    const greeting=hour<12?'Buenos días':hour<19?'Buenas tardes':'Buenas noches';
+    const put=(id,val)=>{const n=document.getElementById(id);if(n)n.textContent=val};
+    put('premium-greeting',`${greeting}, Jean`);
+    put('premium-subtitle',jobs.length?`${jobs.length} trabajos programados para hoy`:'No tienes trabajos cargados para hoy');
+    put('premium-date',new Intl.DateTimeFormat('es-US',{weekday:'short',day:'numeric',month:'short'}).format(new Date()).toUpperCase());
+    put('dash-jobs',jobs.length); put('dash-money',fmt(total)); put('dash-completed',completed); put('dash-pending',pending); put('dash-cancelled',cancelled);
+    put('live-progress',`${completed}/${jobs.length}`); put('route-section-count',jobs.length);
+    put('dash-pending-text',`${pending} ${pending===1?'pendiente':'pendientes'}`); put('dash-percent',`${pct}%`); put('alert-count',pending+cancelled);
+    put('map-caption',jobs.length?`${jobs.length} paradas • Ruta optimizada`:'Sin paradas cargadas');
+    const fill=document.getElementById('dash-progress-fill'); if(fill) fill.style.width=pct+'%';
+    const moneyPct=Math.min(100,Math.round(total/1200*100)); const moneyFill=document.getElementById('money-progress-fill'); if(moneyFill) moneyFill.style.width=moneyPct+'%';
+    let workedMinutes=0; jobs.filter(e=>e.status==='completed'||e.status==='paid').forEach(e=>{ const a=(e.timeStart||'').match(/(\d{1,2}):(\d{2})/), b=(e.timeEnd||'').match(/(\d{1,2}):(\d{2})/); if(a&&b){let d=(+b[1]*60+ +b[2])-(+a[1]*60+ +a[2]);if(d>0&&d<600)workedMinutes+=d;} else workedMinutes+=60; });
+    put('hours-worked',`${Math.floor(workedMinutes/60)}h ${String(workedMinutes%60).padStart(2,'0')}m`); const hp=document.getElementById('hours-progress-fill'); if(hp) hp.style.width=Math.min(100,workedMinutes/480*100)+'%';
+    if(active){
+      put('live-next-title',active.customerName||'Siguiente cliente');
+      put('next-time-range',[active.timeStart,active.timeEnd].filter(Boolean).join(' – ') || 'Horario por confirmar');
+      const addr=(active.address||'').split(',').map(x=>x.trim()); put('next-address-line1',addr[0]||'Dirección disponible'); put('next-address-line2',addr.slice(1,3).join(', ')||active.category||'Trabajo');
+      put('next-distance',active.address?'📍 Abrir navegación':'📍 Ruta preparada');
+    } else { put('live-next-title','Ruta preparada'); put('next-time-range','—'); put('next-address-line1','Agrega trabajos'); put('next-address-line2','desde Gestión de ruta'); put('next-distance','📍 Sin destino'); }
+    jobs.forEach((job,idx)=>{ const card=document.querySelector(`.route-stop[data-id="${job.id}"]`); if(!card)return; let t=card.querySelector('.timeline-time'); if(!t){t=document.createElement('div');t.className='timeline-time';card.appendChild(t);} const raw=job.timeStart||''; const parts=raw.split(/\s+/); t.innerHTML=(parts[0]||`${idx+1}`).replace(/^0/,'')+(parts[1]?`<small>${parts[1]}</small>`:''); let badge=card.querySelector('.route-status-badge'); if(!badge){badge=document.createElement('span');badge.className='route-status-badge';const amount=card.querySelector('.route-amount');amount?.parentNode?.insertBefore(badge,amount);} const labels={pending:'PENDIENTE',completed:'COMPLETADO',paid:'PAGADO',cancelled:'CANCELADO'};badge.textContent=labels[job.status]||String(job.status||'PENDIENTE').toUpperCase();badge.className='route-status-badge '+(job.status||'pending'); });
+    document.querySelectorAll('.route-expand-toggle').forEach(btn=>{
+      const panel=document.getElementById('expand-'+btn.dataset.id); btn.setAttribute('aria-expanded',panel&&panel.classList.contains('open')?'true':'false');
+    });
+  }
+  const premiumMap=document.getElementById('mini-map-card');
+  if(premiumMap){
+    const openMap=()=>{premiumHaptic(12);document.getElementById('navigate-route-btn')?.click()};
+    premiumMap.addEventListener('click',openMap); premiumMap.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openMap()}});
+  }
+  document.getElementById('gps-next-btn')?.addEventListener('click',()=>{ premiumHaptic(12); const active=getTodayRouteEntries().find(e=>e.status==='pending')||getTodayRouteEntries()[0]; if(active?.address){ window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(active.address),'_blank'); } else document.getElementById('navigate-route-btn')?.click(); });
+  document.addEventListener('click',e=>{
+    const status=e.target.closest('.status-btn');
+    if(status){ premiumHaptic([10,35,12]); const card=status.closest('.route-stop'); if(card){card.classList.remove('status-flash');void card.offsetWidth;card.classList.add('status-flash');} setTimeout(updatePremiumDashboard,80); }
+    if(e.target.closest('.route-expand-toggle')){premiumHaptic(8);setTimeout(updatePremiumDashboard,40)}
+    if(e.target.closest('.submit-btn,.btn-outline,.btn-mini')) premiumHaptic(7);
+  },true);
+  window.addEventListener('scroll',()=>{
+    const y=window.scrollY||0; document.querySelector('.app')?.classList.toggle('scrolled',y>72);
+    const bg=document.querySelector('#bg-photo-layer img'); if(bg) bg.style.transform=`scale(1.10) translateY(${Math.min(y*.035,16)}px)`;
+  },{passive:true});
+
   function processIncomingEmailsQueue(rawEmailsObj){
     if(!rawEmailsObj || !firebaseSyncActive) return;
     const keys = Object.keys(rawEmailsObj);
@@ -3316,5 +3745,17 @@
   }
 })();
 </script>
-</body>
+
+<script>
+(function(){
+  document.documentElement.classList.toggle('offline', !navigator.onLine);
+  addEventListener('online',()=>document.documentElement.classList.remove('offline'),{passive:true});
+  addEventListener('offline',()=>document.documentElement.classList.add('offline'),{passive:true});
+  if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+    addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}),{once:true});
+  }
+})();
+</script>
+
 </html>
+</body>
