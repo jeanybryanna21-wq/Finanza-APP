@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Miruta">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="apple-touch-icon.png">
-<title>Miruta — Mega</title>
+<title>Miruta — Mega RC56</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#141414">
 <meta name="mobile-web-app-capable" content="yes">
@@ -486,7 +486,7 @@
 
 <style id="rc47-ios-glass">
 /* ==========================================================================
-   RC47 — iOS GLASS REDESIGN (visual only; existing app logic preserved)
+   RC55 — iOS GLASS + MIRUTA NAV (visual only; existing app logic preserved)
    ========================================================================== */
 :root{
   --glass: rgba(255,255,255,.18);
@@ -730,11 +730,52 @@ button{min-height:44px}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 @media (prefers-contrast:more){:root{--glass-border:rgba(255,255,255,.7);--ink-soft:rgba(255,255,255,.9)}}
 </style>
+<link rel="stylesheet" href="assets/leaflet/leaflet.css">
+
+<style id="rc55-miruta-nav">
+/* RC55 — navegación integrada + orden iPhone */
+.route-map-card{cursor:default!important;grid-template-columns:1.35fr .65fr!important;min-height:180px!important}
+#miruta-map{min-height:156px;border-radius:17px;overflow:hidden;border:1px solid rgba(255,255,255,.18);background:#20272a;z-index:1}
+#miruta-map .leaflet-control-attribution{font-size:7px;background:rgba(10,10,10,.54);color:#ddd}
+#miruta-map .leaflet-control-attribution a{color:#f5c84b}
+.route-map-copy button#miruta-go-btn{background:var(--gold)!important;color:#171717!important;font-weight:900!important;letter-spacing:.8px!important}
+.route-map-copy button#miruta-route-reload{margin-top:6px!important;border-color:rgba(255,255,255,.32)!important;color:#fff!important}
+.drag-handle{display:grid!important;width:28px!important;height:42px!important;place-items:center!important;cursor:grab!important;touch-action:none!important;color:rgba(255,255,255,.72)!important;font-size:17px!important;user-select:none!important;-webkit-user-select:none!important}
+.route-header-row{grid-template-columns:28px 32px minmax(0,1fr) auto 28px!important}
+.route-expand-toggle{grid-column:5!important}
+.route-stop.sortable-chosen{z-index:9999!important;box-shadow:0 28px 70px rgba(0,0,0,.52),0 0 0 2px rgba(245,200,75,.48)!important;transform:scale(1.035) rotate(-.7deg)!important}
+.route-stop.sortable-drag{opacity:.98!important}
+.route-stop.sortable-ghost{opacity:.20!important;transform:scale(.96)!important}
+#route-list.is-sorting .route-stop:not(.sortable-chosen){animation:mirutaWiggle .18s ease-in-out infinite alternate}
+@keyframes mirutaWiggle{from{transform:rotate(-.28deg)}to{transform:rotate(.28deg)}}
+
+.route-date-override{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:10px 0 16px;padding:11px 12px;border-radius:16px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.2)}
+.route-date-override label{display:flex;align-items:center;gap:8px;font-size:12px;color:#fff;font-weight:650;letter-spacing:0;text-transform:none}
+.route-date-override input{width:18px;height:18px;accent-color:var(--gold)}
+.route-date-override button{margin-left:auto}
+
+.miruta-nav-panel{position:fixed;inset:0;z-index:10000;background:#101415;color:#fff;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);font-family:'Jost',sans-serif}
+.miruta-nav-panel[hidden]{display:none!important}
+.miruta-nav-top{padding:12px 14px 10px;background:linear-gradient(180deg,rgba(15,18,19,.98),rgba(15,18,19,.90));border-bottom:1px solid rgba(255,255,255,.12);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;z-index:4}
+.miruta-nav-instruction{min-width:0}.miruta-nav-instruction small{display:block;color:var(--gold);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.7px}.miruta-nav-instruction b{display:block;font-size:23px;line-height:1.12;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.miruta-nav-instruction span{display:block;color:rgba(255,255,255,.7);font-size:12px;margin-top:3px}
+.miruta-nav-distance{min-width:72px;text-align:center;border-radius:16px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);padding:9px 8px}.miruta-nav-distance b{display:block;color:var(--gold);font-size:21px}.miruta-nav-distance small{font-size:9px;color:rgba(255,255,255,.7)}
+#miruta-nav-map{flex:1;min-height:0;background:#20272a;z-index:1}
+.miruta-nav-bottom{padding:10px 12px 12px;background:linear-gradient(180deg,rgba(15,18,19,.90),rgba(15,18,19,.99));border-top:1px solid rgba(255,255,255,.12);z-index:4}
+.miruta-nav-client{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;margin-bottom:9px}.miruta-nav-client small{display:block;color:rgba(255,255,255,.62);font-size:10px}.miruta-nav-client b{display:block;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.miruta-nav-progress{color:var(--gold);font-size:13px;font-weight:800}
+.miruta-nav-actions{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:8px}.miruta-nav-actions button{border:1px solid rgba(255,255,255,.26);background:rgba(255,255,255,.1);color:#fff;border-radius:999px;padding:12px 8px;font:750 11px 'Jost',sans-serif}.miruta-nav-actions button.primary{background:var(--gold);color:#151515;border-color:var(--gold)}
+.miruta-arrival-toast{position:absolute;left:50%;top:22%;transform:translate(-50%,-50%) scale(.94);z-index:10005;min-width:min(88vw,420px);padding:16px 18px;border-radius:22px;background:rgba(17,20,21,.92);border:1px solid rgba(245,200,75,.55);box-shadow:0 24px 70px rgba(0,0,0,.5);backdrop-filter:blur(24px);text-align:center;opacity:0;pointer-events:none;transition:.25s ease}.miruta-arrival-toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}.miruta-arrival-toast b{display:block;color:var(--gold);font-size:20px}.miruta-arrival-toast span{font-size:12px;color:rgba(255,255,255,.72)}
+.miruta-van-marker{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#367cff;border:3px solid #fff;box-shadow:0 4px 14px rgba(0,0,0,.45);font-size:17px;transform-origin:center}
+.miruta-stop-marker{width:29px;height:29px;border-radius:50% 50% 50% 12%;transform:rotate(-45deg);display:grid;place-items:center;background:var(--gold);border:2px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,.4);color:#171717;font-weight:900;font-size:11px}.miruta-stop-marker span{transform:rotate(45deg)}
+.miruta-stop-marker.store{background:#7ec8ff}
+@media(max-width:560px){.route-map-card{grid-template-columns:1fr!important}.route-map-copy{padding:2px 4px}.miruta-nav-instruction b{font-size:20px}.miruta-nav-actions{grid-template-columns:1fr 1fr 1.15fr}.route-header-row{grid-template-columns:26px 30px minmax(0,1fr) auto 26px!important}}
+@media(min-width:900px){.miruta-nav-panel{left:50%;right:auto;width:min(100%,900px);transform:translateX(-50%);box-shadow:0 0 80px rgba(0,0,0,.7)}#miruta-nav-map{min-height:560px}}
+</style>
+
 </head>
 <body>
 
 <div id="bg-photo-layer">
-  <img src="fondo-app.jpg" alt="Fondo de la van" decoding="async" fetchpriority="high" />
+  <img src="fondo-app.png" alt="Fondo de la van" decoding="async" fetchpriority="high" />
 </div>
 
 <div class="app">
@@ -767,21 +808,34 @@ button{min-height:44px}
       <button class="gps-button" id="gps-next-btn" type="button" aria-label="Abrir GPS">➤</button>
     </div>
 
-    <div class="route-map-card" id="mini-map-card" role="button" tabindex="0" aria-label="Abrir ruta en Google Maps">
-      <div class="fake-map"><span class="road r1"></span><span class="road r2"></span><i>1</i><i>2</i><i>3</i><i>4</i><i>5</i><i class="current">●</i></div>
-      <div class="route-map-copy"><b>Tu ruta de hoy</b><span id="map-caption">Sin paradas cargadas</span><small>Optimizada</small><button type="button">VER RUTA COMPLETA</button></div>
+    <div class="route-map-card" id="mini-map-card" aria-label="Mapa de la ruta de hoy">
+      <div id="miruta-map" aria-label="Mapa integrado de Miruta"></div>
+      <div class="route-map-copy"><b>Tu ruta de hoy</b><span id="map-caption">Sin paradas cargadas</span><small id="miruta-map-status">GPS interno</small><button id="miruta-go-btn" type="button">▶ GO — INICIAR RUTA</button><button id="miruta-route-reload" type="button">RECALCULAR</button></div>
     </div>
 
     <div class="route-section-title"><b>Trabajos de hoy</b><span>Ver todos (<i id="route-section-count">0</i>) ›</span></div>
   </section>
+
+  <div class="miruta-nav-panel" id="miruta-nav-panel" hidden>
+    <div class="miruta-nav-top">
+      <div class="miruta-nav-instruction"><small id="nav-step-label">NAVEGANDO</small><b id="nav-step-text">Preparando ruta…</b><span id="nav-step-street">Calculando instrucciones</span></div>
+      <div class="miruta-nav-distance"><b id="nav-step-distance">—</b><small>PRÓXIMO GIRO</small></div>
+    </div>
+    <div id="miruta-nav-map"></div>
+    <div class="miruta-nav-bottom">
+      <div class="miruta-nav-client"><div><small id="nav-client-label">SIGUIENTE PARADA</small><b id="nav-client-name">—</b></div><span class="miruta-nav-progress" id="nav-route-progress">0/0</span></div>
+      <div class="miruta-nav-actions"><button id="nav-center-btn" type="button">◎ CENTRAR</button><button id="nav-next-btn" type="button">SALTAR</button><button class="primary" id="nav-end-btn" type="button">TERMINAR RUTA</button></div>
+    </div>
+    <div class="miruta-arrival-toast" id="miruta-arrival-toast"><b>Has llegado</b><span id="arrival-client-name">Preparando siguiente parada…</span></div>
+  </div>
 
   <div class="screen active" id="screen-hoy">
 
   <div id="route-list"></div>
 
   <div style="margin-top:22px; border-top:1px solid var(--hairline); padding-top:18px; text-align:center;">
-    <button class="btn-outline" id="navigate-route-btn" type="button">🗺️ Completar ruta — Abrir en Google Maps</button>
-    <div class="report-hint" style="margin:10px 0 0;">Arma el viaje completo del día con todas las paradas en el orden en que las tienes puestas (incluyendo tiendas), y lo abre en Google Maps.</div>
+    <button class="btn-outline" id="navigate-route-btn" type="button">▶ Iniciar ruta completa en Miruta</button>
+    <div class="report-hint" style="margin:10px 0 0;">Usa el orden exacto de tus viñetas, incluidas las tiendas Lowe's, y navega parada por parada dentro de Miruta.</div>
   </div>
 
   </div>
@@ -798,6 +852,10 @@ button{min-height:44px}
         <label>Ver / agregar a la ruta de:</label>
         <input type="date" id="route-date" />
         <span class="route-hint">Puedes subir la ruta de cualquier día, no solo hoy. Pega el correo completo o solo el tiquete de un cliente a la vez — se va sumando a la lista.</span>
+      </div>
+      <div class="route-date-override">
+        <label><input type="checkbox" id="force-route-date"> Usar todos los tickets detectados como la ruta del día seleccionado</label>
+        <button class="btn-mini" id="force-route-today" type="button">Poner fecha de hoy</button>
       </div>
 
       <div class="section-hint">Pega aquí el correo completo, o el tiquete de un solo cliente. Detecta cada trabajo, evita duplicados (por fecha + categoría + PO), busca el precio en tu inventario, y marca como cancelado o pendiente/reprogramado según el contenido.</div>
@@ -1081,6 +1139,8 @@ button{min-height:44px}
   </div>
 </div>
 
+<script src="assets/leaflet/leaflet.js"></script>
+<script src="assets/sortable.min.js"></script>
 <script>
 (function(){
   // RC52: almacenamiento local-first. La app inicia y guarda al instante sin internet.
@@ -1836,6 +1896,14 @@ button{min-height:44px}
     rest = rest.replace(/,\s*/g, ' ').trim();
     return storeNum ? `${rest} Store ${storeNum}` : rest;
   }
+  function storeMemoryKey(raw){
+    const text = String(raw || '').trim();
+    const idTag = text.match(/\[Store ID:\s*0*(\d+)\]/i);
+    const prefix = text.match(/^0*(\d+)\s*-/);
+    const anyStore = text.match(/(?:store|lowe'?s?\s*#?)\s*0*(\d+)/i);
+    const num = (idTag && idTag[1]) || (prefix && prefix[1]) || (anyStore && anyStore[1]);
+    return num ? 'store:' + String(parseInt(num,10)) : 'name:' + text.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  }
   function distinctServiceNames(){
     const set = new Set();
     state.priceList.forEach(p=>{
@@ -1958,128 +2026,36 @@ button{min-height:44px}
 
   // ---------- arrastrar y soltar para reordenar (estilo mover apps en iPhone) ----------
   function attachDragHandlers(wrap, dateIso){
-    let dragEl = null, startY = 0, stopsSnapshot = [], targetIndex = -1, draggedOriginalIndex = -1, cardUnit = 0;
-    let fixedTop = 0, fixedLeft = 0, fixedWidth = 0;
-
-    function beginDrag(clientY, handle){
-      dragEl = handle.closest('.route-stop');
-      if(!dragEl) return;
-      stopsSnapshot = Array.from(wrap.querySelectorAll('.route-stop'));
-      startY = clientY;
-      draggedOriginalIndex = stopsSnapshot.indexOf(dragEl);
-      targetIndex = draggedOriginalIndex;
-
-      // capturar la posición ANTES de encoger nada, y "despegarla" del flujo del
-      // documento con posición fija — así no importa si las tarjetas de arriba
-      // cambian de tamaño, esta se queda pegada al dedo sin saltar de lugar
-      const rectBefore = dragEl.getBoundingClientRect();
-      fixedTop = rectBefore.top;
-      fixedLeft = rectBefore.left;
-      fixedWidth = rectBefore.width;
-
-      dragEl.classList.add('dragging');
-      dragEl.style.transition = 'none';
-      dragEl.style.position = 'fixed';
-      dragEl.style.left = fixedLeft + 'px';
-      dragEl.style.top = fixedTop + 'px';
-      dragEl.style.width = fixedWidth + 'px';
-      dragEl.style.zIndex = '999';
-      dragEl.style.margin = '0';
-
-      // encoger TODAS las demás tarjetas durante el arrastre para poder moverse
-      // de un punto a otro de la ruta sin tener que ir empujando de a una
-      stopsSnapshot.forEach(el=>{
-        if(el !== dragEl){
-          el.classList.add('compact-mode');
-          el.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.8, 0.4, 1)';
-        }
-      });
-
-      // medir la altura ya encogida (forzando un reflow) para que el cálculo de
-      // desplazamiento coincida con el tamaño real que se ve en pantalla
-      void wrap.offsetHeight;
-      const otherEl = stopsSnapshot.find(el2=> el2 !== dragEl);
-      const rect = otherEl ? otherEl.getBoundingClientRect() : { height: 46 };
-      const style = otherEl ? window.getComputedStyle(otherEl) : { marginBottom: '10' };
-      cardUnit = rect.height + parseFloat(style.marginBottom || 10);
-    }
-
-    function applyShifts(){
-      stopsSnapshot.forEach((el, i)=>{
-        if(el === dragEl) return;
-        let shift = 0;
-        if(targetIndex < draggedOriginalIndex && i >= targetIndex && i < draggedOriginalIndex){
-          shift = cardUnit;
-        } else if(targetIndex > draggedOriginalIndex && i > draggedOriginalIndex && i <= targetIndex){
-          shift = -cardUnit;
-        }
-        el.style.transform = shift ? `translateY(${shift}px)` : '';
-      });
-    }
-
-    function moveDrag(clientY){
-      if(!dragEl) return;
-      const delta = clientY - startY;
-      dragEl.style.top = (fixedTop + delta) + 'px';
-      dragEl.style.transform = 'scale(0.4)';
-      dragEl.style.transformOrigin = 'left top';
-
-      const shiftUnits = Math.round(delta / cardUnit);
-      targetIndex = Math.max(0, Math.min(stopsSnapshot.length - 1, draggedOriginalIndex + shiftUnits));
-      applyShifts();
-    }
-
-    function endDrag(){
-      if(!dragEl) return;
-      const finishedEl = dragEl;
-      const id = finishedEl.dataset.id;
-      const finalTarget = targetIndex;
-      const snapshot = stopsSnapshot;
-
-      finishedEl.classList.remove('dragging');
-      finishedEl.style.position = '';
-      finishedEl.style.left = '';
-      finishedEl.style.top = '';
-      finishedEl.style.width = '';
-      finishedEl.style.zIndex = '';
-      finishedEl.style.margin = '';
-      finishedEl.style.transform = '';
-      finishedEl.style.transformOrigin = '';
-      finishedEl.style.transition = '';
-
-      dragEl = null;
-      snapshot.forEach(el=>{
-        el.style.transition = '';
-        el.style.transform = '';
-        el.classList.remove('compact-mode');
-      });
-      reorderStop(id, finalTarget + 1, dateIso);
-      render();
-    }
-
-    wrap.querySelectorAll('.drag-handle').forEach(handle=>{
-      handle.addEventListener('touchstart', (e)=>{
-        e.preventDefault();
-        beginDrag(e.touches[0].clientY, handle);
-      }, {passive:false});
-      handle.addEventListener('touchmove', (e)=>{
-        e.preventDefault();
-        moveDrag(e.touches[0].clientY);
-      }, {passive:false});
-      handle.addEventListener('touchend', endDrag);
-      handle.addEventListener('touchcancel', endDrag);
-
-      handle.addEventListener('mousedown', (e)=>{
-        beginDrag(e.clientY, handle);
-        const onMouseMove = (ev)=> moveDrag(ev.clientY);
-        const onMouseUp = ()=>{
-          endDrag();
-          document.removeEventListener('mousemove', onMouseMove);
-          document.removeEventListener('mouseup', onMouseUp);
-        };
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-      });
+    if(!wrap || typeof Sortable === 'undefined') return;
+    if(wrap._mirutaSortable){ try{ wrap._mirutaSortable.destroy(); }catch(_e){} }
+    wrap._mirutaSortable = Sortable.create(wrap, {
+      animation: 280,
+      easing: 'cubic-bezier(.2,.8,.2,1)',
+      handle: '.drag-handle',
+      draggable: '.route-stop',
+      chosenClass: 'sortable-chosen',
+      dragClass: 'sortable-drag',
+      ghostClass: 'sortable-ghost',
+      forceFallback: true,
+      fallbackOnBody: true,
+      fallbackTolerance: 3,
+      scroll: true,
+      scrollSensitivity: 85,
+      scrollSpeed: 16,
+      bubbleScroll: true,
+      onChoose(){ wrap.classList.add('is-sorting'); premiumHaptic?.(12); },
+      onUnchoose(){ wrap.classList.remove('is-sorting'); },
+      onEnd(){
+        wrap.classList.remove('is-sorting');
+        const ids = Array.from(wrap.querySelectorAll('.route-stop')).map(el=>el.dataset.id);
+        ids.forEach((id, index)=>{
+          const entry = state.entries.find(e=>e.id===id && e.date===dateIso);
+          if(entry) entry.order = index + 1;
+        });
+        persistEntries();
+        render();
+        setTimeout(()=>{ try{ window.MirutaNav?.refreshRoute(); }catch(_e){} }, 80);
+      }
     });
   }
 
@@ -2320,7 +2296,7 @@ button{min-height:44px}
         entry.address = inp.value.trim();
         persistEntries();
         if(entry.store && entry.address){
-          state.storeAddresses[entry.store] = entry.address;
+          state.storeAddresses[storeMemoryKey(entry.store)] = entry.address; state.storeAddresses[entry.store] = entry.address;
           persistStoreAddresses();
         }
         render();
@@ -2332,20 +2308,13 @@ button{min-height:44px}
       btn.addEventListener('click', (ev)=>{
         ev.stopPropagation();
         document.querySelectorAll('.map-choice-menu').forEach(m=> m.remove());
-        const addr = btn.dataset.addr;
-        const encodedAddr = encodeURIComponent(addr).replace(/%2C/g, ',').replace(/%20/g, '+');
-        const menu = document.createElement('div');
-        menu.className = 'map-choice-menu';
-        menu.innerHTML = `
-          <a href="https://maps.apple.com/?daddr=${encodedAddr}" target="_blank" rel="noopener">🍎 Apple Maps</a>
-          <a href="https://www.google.com/maps/dir/?api=1&destination=${encodedAddr}" target="_blank" rel="noopener">🌐 Google Maps</a>
-        `;
-        btn.closest('ul.route-meta-list').insertAdjacentElement('afterend', menu);
-        setTimeout(()=>{
-          document.addEventListener('click', function closeMenu(ev2){
-            if(!menu.contains(ev2.target)){ menu.remove(); document.removeEventListener('click', closeMenu); }
-          });
-        }, 10);
+        const entry = state.entries.find(e2=> e2.id === btn.dataset.id);
+        if(entry && window.MirutaNav){
+          window.MirutaNav.startAtEntry(entry.id);
+          statusLine.textContent = 'abriendo navegación interna de Miruta ✓';
+        } else if(window.MirutaNav){
+          window.MirutaNav.start();
+        }
       });
     });
 
@@ -2928,6 +2897,8 @@ button{min-height:44px}
         }
       }
       if(!dateIso) dateIso = fallbackDate;
+      const forceSelectedDate = document.getElementById('force-route-date')?.checked;
+      if(forceSelectedDate && referenceDate) dateIso = referenceDate;
 
       let scopeText = '';
       for(let j=i+1; j<scanLimit; j++){
@@ -2996,12 +2967,12 @@ button{min-height:44px}
     const storeGroups = {};
     jobs.forEach(j=>{
       if(!j.store) return;
-      const key = j.date + '||' + j.store;
+      const key = j.date + '||' + storeMemoryKey(j.store);
       if(!storeGroups[key]) storeGroups[key] = { date: j.date, store: j.store };
     });
     Object.values(storeGroups).forEach(g=>{
       const storeName = formatStoreName(g.store);
-      const knownAddress = state.storeAddresses[g.store] || '';
+      const knownAddress = state.storeAddresses[storeMemoryKey(g.store)] || state.storeAddresses[g.store] || '';
       jobs.push({
         category: storeName,
         date: g.date,
@@ -3417,43 +3388,7 @@ button{min-height:44px}
   document.getElementById('finish-route-btn').addEventListener('click', generateRouteReport);
 
   document.getElementById('navigate-route-btn').addEventListener('click', ()=>{
-    const dateIso = document.getElementById('route-date').value || todayISO();
-    const stops = state.entries
-      .filter(e=> e.type==='income' && e.date===dateIso && e.status !== 'missing_price' && e.status !== 'cancelled')
-      .sort((a,b)=> (a.order ?? 9999) - (b.order ?? 9999))
-      .filter(e=> e.address && e.address.trim());
-
-    if(stops.length === 0){
-      statusLine.textContent = 'no hay paradas con dirección todavía para esta fecha';
-      return;
-    }
-
-    // Google Maps solo admite hasta 3 paradas intermedias cuando el enlace se abre desde el celular;
-    // si hay más, se usan las primeras 3 + el destino final para que el enlace funcione bien.
-    let usedStops = stops;
-    let trimmedNote = '';
-    if(stops.length > 4){
-      usedStops = stops.slice(0, 3).concat(stops[stops.length - 1]);
-      trimmedNote = ` (Google Maps solo admite 3 paradas intermedias desde el celular — se usaron las primeras 3 más la última; abre Maps y agrega el resto a mano con "Agregar parada")`;
-    }
-
-    const addresses = usedStops.map(e=> e.address.trim());
-    const destination = addresses[addresses.length - 1];
-    const waypoints = addresses.slice(0, -1);
-
-    // Google Maps espera un formato más simple del que da encodeURIComponent normal:
-    // las comas se dejan tal cual y los espacios van con "+", en vez de %2C y %20 —
-    // así evitamos que Maps no reconozca la dirección y muestre el texto sin descifrar.
-    function encodeMapsAddress(addr){
-      return encodeURIComponent(addr).replace(/%2C/g, ',').replace(/%20/g, '+');
-    }
-
-    let url = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeMapsAddress(destination);
-    if(waypoints.length > 0){
-      url += '&waypoints=' + waypoints.map(a=> encodeMapsAddress(a)).join('|');
-    }
-    window.open(url, '_blank');
-    statusLine.textContent = `ruta con ${usedStops.length} parada(s) enviada a Google Maps ✓${trimmedNote}`;
+    if(window.MirutaNav) window.MirutaNav.start();
   });
 
   // ---------- calculadora de gasolina (Ram ProMaster 2500) ----------
@@ -3686,7 +3621,7 @@ button{min-height:44px}
       put('live-next-title',active.customerName||'Siguiente cliente');
       put('next-time-range',[active.timeStart,active.timeEnd].filter(Boolean).join(' – ') || 'Horario por confirmar');
       const addr=(active.address||'').split(',').map(x=>x.trim()); put('next-address-line1',addr[0]||'Dirección disponible'); put('next-address-line2',addr.slice(1,3).join(', ')||active.category||'Trabajo');
-      put('next-distance',active.address?'📍 Abrir navegación':'📍 Ruta preparada');
+      put('next-distance',active.address?'📍 GPS interno de Miruta':'📍 Ruta preparada');
     } else { put('live-next-title','Ruta preparada'); put('next-time-range','—'); put('next-address-line1','Agrega trabajos'); put('next-address-line2','desde Gestión de ruta'); put('next-distance','📍 Sin destino'); }
     jobs.forEach((job,idx)=>{ const card=document.querySelector(`.route-stop[data-id="${job.id}"]`); if(!card)return; let t=card.querySelector('.timeline-time'); if(!t){t=document.createElement('div');t.className='timeline-time';card.appendChild(t);} const raw=job.timeStart||''; const parts=raw.split(/\s+/); t.innerHTML=(parts[0]||`${idx+1}`).replace(/^0/,'')+(parts[1]?`<small>${parts[1]}</small>`:''); let badge=card.querySelector('.route-status-badge'); if(!badge){badge=document.createElement('span');badge.className='route-status-badge';const amount=card.querySelector('.route-amount');amount?.parentNode?.insertBefore(badge,amount);} const labels={pending:'PENDIENTE',completed:'COMPLETADO',paid:'PAGADO',cancelled:'CANCELADO'};badge.textContent=labels[job.status]||String(job.status||'PENDIENTE').toUpperCase();badge.className='route-status-badge '+(job.status||'pending'); });
     document.querySelectorAll('.route-expand-toggle').forEach(btn=>{
@@ -3694,11 +3629,7 @@ button{min-height:44px}
     });
   }
   const premiumMap=document.getElementById('mini-map-card');
-  if(premiumMap){
-    const openMap=()=>{premiumHaptic(12);document.getElementById('navigate-route-btn')?.click()};
-    premiumMap.addEventListener('click',openMap); premiumMap.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openMap()}});
-  }
-  document.getElementById('gps-next-btn')?.addEventListener('click',()=>{ premiumHaptic(12); const active=getTodayRouteEntries().find(e=>e.status==='pending')||getTodayRouteEntries()[0]; if(active?.address){ window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(active.address),'_blank'); } else document.getElementById('navigate-route-btn')?.click(); });
+  document.getElementById('gps-next-btn')?.addEventListener('click',()=>{ premiumHaptic(12); window.MirutaNav?.start(); });
   document.addEventListener('click',e=>{
     const status=e.target.closest('.status-btn');
     if(status){ premiumHaptic([10,35,12]); const card=status.closest('.route-stop'); if(card){card.classList.remove('status-flash');void card.offsetWidth;card.classList.add('status-flash');} setTimeout(updatePremiumDashboard,80); }
@@ -3709,6 +3640,197 @@ button{min-height:44px}
     const y=window.scrollY||0; document.querySelector('.app')?.classList.toggle('scrolled',y>72);
     const bg=document.querySelector('#bg-photo-layer img'); if(bg) bg.style.transform=`scale(1.10) translateY(${Math.min(y*.035,16)}px)`;
   },{passive:true});
+
+
+  // ---------- RC55: motor de GPS integrado, parada por parada ----------
+  const MirutaNav = (()=>{
+    const memKey = 'miruta:geocode-cache:v2';
+    let geocodeCache = {};
+    try{ geocodeCache = JSON.parse(localStorage.getItem(memKey) || '{}') || {}; }catch(_e){}
+    let miniMap = null, fullMap = null, miniRoute = null, fullRoute = null, miniMarkers = [], fullMarkers = [];
+    let userMarkerMini = null, userMarkerFull = null, watchId = null, active = false, currentIndex = 0, routeStops = [], currentPos = null;
+    let lastRouteAt = 0, lastRoutePos = null, rerouteBusy = false, currentSteps = [], arrivalTimer = null, arrivalStopId = null;
+
+    const $ = id=>document.getElementById(id);
+    const metersToMiles = m=>m/1609.344;
+    const fmtDistance = m=> m < 1609 ? `${Math.max(50,Math.round(m/10)*10)} ft` : `${metersToMiles(m).toFixed(metersToMiles(m)<10?1:0)} mi`;
+    const haversine=(a,b)=>{ if(!a||!b)return Infinity; const R=6371000, p1=a.lat*Math.PI/180,p2=b.lat*Math.PI/180,dp=(b.lat-a.lat)*Math.PI/180,dl=(b.lng-a.lng)*Math.PI/180; const h=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2; return 2*R*Math.atan2(Math.sqrt(h),Math.sqrt(1-h)); };
+
+    function initMaps(){
+      if(typeof L==='undefined') return false;
+      if(!miniMap && $('miruta-map')){
+        miniMap=L.map('miruta-map',{zoomControl:false,attributionControl:true,dragging:true,tap:true}).setView([37.2709,-79.9414],10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(miniMap);
+      }
+      if(!fullMap && $('miruta-nav-map')){
+        fullMap=L.map('miruta-nav-map',{zoomControl:false,attributionControl:true}).setView([37.2709,-79.9414],13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(fullMap);
+      }
+      return true;
+    }
+    function stopIcon(n,isStore=false){ return L.divIcon({className:'',html:`<div class="miruta-stop-marker${isStore?' store':''}"><span>${n}</span></div>`,iconSize:[29,29],iconAnchor:[15,27]}); }
+    function vanIcon(heading=0){ return L.divIcon({className:'',html:`<div class="miruta-van-marker" style="transform:rotate(${Number(heading)||0}deg)">➤</div>`,iconSize:[34,34],iconAnchor:[17,17]}); }
+    function clearMarkers(arr,map){ arr.forEach(m=>{try{map.removeLayer(m)}catch(_e){}}); arr.length=0; }
+    function todayNavigableStops(){
+      const date = $('route-date')?.value || todayISO();
+      return state.entries.filter(e=>e.type==='income'&&e.date===date&&e.status!=='missing_price'&&e.status!=='cancelled'&&e.address&&e.address.trim()).sort((a,b)=>(a.order??9999)-(b.order??9999));
+    }
+    async function geocodeEntry(entry){
+      if(Number.isFinite(Number(entry.lat)) && Number.isFinite(Number(entry.lng))) return {lat:Number(entry.lat),lng:Number(entry.lng)};
+      const q=entry.address.trim(); const key=q.toLowerCase();
+      if(geocodeCache[key]) return geocodeCache[key];
+      const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&addressdetails=1&q='+encodeURIComponent(q);
+      const r=await fetch(url,{headers:{'Accept-Language':'en-US,en;q=0.9'}}); if(!r.ok) throw new Error('geocode '+r.status);
+      const data=await r.json(); if(!data[0]) throw new Error('address not found: '+q);
+      const coord={lat:Number(data[0].lat),lng:Number(data[0].lon)}; geocodeCache[key]=coord; localStorage.setItem(memKey,JSON.stringify(geocodeCache));
+      entry.lat=coord.lat; entry.lng=coord.lng; persistEntries();
+      await new Promise(res=>setTimeout(res,1050));
+      return coord;
+    }
+    async function prepareStops(){
+      routeStops=todayNavigableStops();
+      $('miruta-map-status').textContent = routeStops.length ? 'Localizando direcciones…' : 'Sin direcciones';
+      for(const stop of routeStops){
+        try{ stop._coord=await geocodeEntry(stop); }
+        catch(err){ stop._coord=null; console.warn('Miruta geocode:',stop.address,err); }
+      }
+      routeStops=routeStops.filter(s=>s._coord);
+      return routeStops;
+    }
+    function drawMarkers(map,arr,includeUser=true){
+      if(!map)return; clearMarkers(arr,map);
+      routeStops.forEach((s,i)=>{ const m=L.marker([s._coord.lat,s._coord.lng],{icon:stopIcon(i+1,!!s.isStoreStop)}).addTo(map).bindPopup(`<b>${escapeHtml(s.customerName||s.category||'Parada')}</b><br>${escapeHtml(s.address||'')}`); arr.push(m); });
+      if(routeStops.length){ const group=L.featureGroup(arr); try{map.fitBounds(group.getBounds().pad(.18),{animate:false,maxZoom:14})}catch(_e){} }
+    }
+    async function osrmRoute(coords, steps=true){
+      if(coords.length<2) return null;
+      const points=coords.map(c=>`${c.lng},${c.lat}`).join(';');
+      const url=`https://router.project-osrm.org/route/v1/driving/${points}?overview=full&geometries=geojson&steps=${steps?'true':'false'}&continue_straight=false`;
+      const r=await fetch(url); if(!r.ok) throw new Error('route '+r.status); const d=await r.json(); if(d.code!=='Ok'||!d.routes?.[0]) throw new Error(d.code||'no route'); return d.routes[0];
+    }
+    function drawRoute(map,oldLayer,route){
+      if(!map)return null; if(oldLayer){try{map.removeLayer(oldLayer)}catch(_e){}}
+      if(!route?.geometry?.coordinates)return null;
+      return L.geoJSON(route.geometry,{style:{color:'#f5c84b',weight:6,opacity:.92,lineCap:'round',lineJoin:'round'}}).addTo(map);
+    }
+    function maneuverText(step){
+      if(!step)return 'Continúa por la ruta';
+      const type=step.maneuver?.type||'', mod=step.maneuver?.modifier||'', road=step.name||'';
+      const turns={left:'Gira a la izquierda',right:'Gira a la derecha','slight left':'Mantente ligeramente a la izquierda','slight right':'Mantente ligeramente a la derecha','sharp left':'Gira fuerte a la izquierda','sharp right':'Gira fuerte a la derecha',straight:'Continúa recto',uturn:'Da la vuelta'};
+      let text=turns[mod]||'Continúa';
+      if(type==='depart') text='Sal y continúa'; if(type==='arrive') text='Llegaste a tu destino'; if(type==='roundabout'||type==='rotary') text='Entra en la rotonda'; if(type==='merge') text='Incorpórate'; if(type==='fork') text=turns[mod]||'Toma la bifurcación';
+      return road ? `${text} en ${road}` : text;
+    }
+    function updateInstruction(){
+      const step=currentSteps[0]; $('nav-step-text').textContent=maneuverText(step); $('nav-step-street').textContent=step?.name||'Sigue la línea dorada'; $('nav-step-distance').textContent=step?fmtDistance(step.distance):'—';
+      const stop=routeStops[currentIndex]; $('nav-client-name').textContent=stop?.customerName||stop?.category||'Ruta completada'; $('nav-route-progress').textContent=routeStops.length?`${Math.min(currentIndex+1,routeStops.length)}/${routeStops.length}`:'0/0'; $('nav-client-label').textContent=stop?.isStoreStop?'SIGUIENTE PARADA · LOWE\'S':'SIGUIENTE CLIENTE';
+    }
+    async function refreshMini(){
+      if(!initMaps())return;
+      try{
+        await prepareStops(); drawMarkers(miniMap,miniMarkers,false);
+        if(routeStops.length>=2){ const route=await osrmRoute(routeStops.map(s=>s._coord),false); miniRoute=drawRoute(miniMap,miniRoute,route); $('map-caption').textContent=`${routeStops.length} paradas • ${metersToMiles(route.distance).toFixed(1)} mi`; $('miruta-map-status').textContent=`${Math.round(route.duration/60)} min estimados`; }
+        else if(routeStops.length===1){ $('map-caption').textContent='1 parada preparada'; $('miruta-map-status').textContent='GPS interno'; }
+      }catch(err){ console.warn(err); $('miruta-map-status').textContent='No se pudo calcular ahora'; }
+      setTimeout(()=>miniMap?.invalidateSize(),50);
+    }
+    async function reroute(force=false){
+      if(!active||!currentPos||rerouteBusy||currentIndex>=routeStops.length)return;
+      const now=Date.now(), moved=lastRoutePos?haversine(currentPos,lastRoutePos):Infinity;
+      if(!force && now-lastRouteAt<12000 && moved<55)return;
+      rerouteBusy=true;
+      try{
+        const remaining=[currentPos,...routeStops.slice(currentIndex).map(s=>s._coord)];
+        const route=await osrmRoute(remaining,true); fullRoute=drawRoute(fullMap,fullRoute,route); currentSteps=route.legs?.[0]?.steps||[]; lastRouteAt=now; lastRoutePos={...currentPos}; updateInstruction();
+        const current=routeStops[currentIndex]; const dist=haversine(currentPos,current._coord); $('next-distance').textContent=`📍 ${fmtDistance(dist)} al siguiente`;
+      }catch(err){ console.warn('Miruta reroute',err); $('nav-step-text').textContent='Sin conexión de ruta'; $('nav-step-street').textContent='Miruta seguirá intentando automáticamente'; }
+      finally{rerouteBusy=false}
+    }
+    function updateUser(pos){
+      currentPos={lat:pos.coords.latitude,lng:pos.coords.longitude}; const heading=Number.isFinite(pos.coords.heading)?pos.coords.heading:0;
+      if(miniMap){ if(!userMarkerMini)userMarkerMini=L.marker([currentPos.lat,currentPos.lng],{icon:vanIcon(heading)}).addTo(miniMap); else{userMarkerMini.setLatLng([currentPos.lat,currentPos.lng]);userMarkerMini.setIcon(vanIcon(heading));} }
+      if(fullMap){ if(!userMarkerFull)userMarkerFull=L.marker([currentPos.lat,currentPos.lng],{icon:vanIcon(heading),zIndexOffset:1000}).addTo(fullMap); else{userMarkerFull.setLatLng([currentPos.lat,currentPos.lng]);userMarkerFull.setIcon(vanIcon(heading));} }
+      if(active){ checkArrival(); reroute(false); }
+    }
+    function showArrival(stop){
+      const toast=$('miruta-arrival-toast'); $('arrival-client-name').textContent=`${stop.customerName||stop.category||'Parada'} · pasando a la siguiente en 6 s`; toast.classList.add('show'); premiumHaptic([30,60,30]); setTimeout(()=>toast.classList.remove('show'),5200);
+    }
+    function checkArrival(){
+      const stop=routeStops[currentIndex]; if(!stop||!currentPos)return; const d=haversine(currentPos,stop._coord);
+      if(d<=90 && arrivalStopId!==stop.id){
+        arrivalStopId=stop.id; showArrival(stop); clearTimeout(arrivalTimer); arrivalTimer=setTimeout(()=>advance(),6000);
+      } else if(d>150 && arrivalStopId===stop.id){ arrivalStopId=null; clearTimeout(arrivalTimer); }
+    }
+    async function advance(){
+      clearTimeout(arrivalTimer); arrivalStopId=null; currentIndex++;
+      if(currentIndex>=routeStops.length){ finish(true); return; }
+      updateInstruction(); await reroute(true);
+    }
+    let wakeLockRef = null;
+    async function requestWakeLock(){
+      try{
+        if('wakeLock' in navigator){
+          wakeLockRef = await navigator.wakeLock.request('screen');
+          wakeLockRef.addEventListener('release', ()=>{ wakeLockRef = null; });
+        }
+      }catch(err){ /* el teléfono no lo soporta o lo negó — no rompe la navegación */ }
+    }
+    async function releaseWakeLock(){
+      try{ await wakeLockRef?.release(); }catch(err){}
+      wakeLockRef = null;
+    }
+    // Safari suelta el Wake Lock solo si cambias de app un momento — lo volvemos a pedir
+    // apenas Miruta vuelve a estar visible, mientras la navegación siga activa.
+    document.addEventListener('visibilitychange', ()=>{
+      if(document.visibilityState === 'visible' && active && !wakeLockRef) requestWakeLock();
+    });
+
+    async function start(){
+      if(!initMaps()){ alert('El mapa todavía no cargó. Recarga Miruta con conexión una vez.'); return; }
+      $('miruta-nav-panel').hidden=false; document.body.style.overflow='hidden'; setTimeout(()=>fullMap?.invalidateSize(),80);
+      $('nav-step-text').textContent='Preparando ruta…'; $('nav-step-street').textContent='Localizando todas las paradas en tu orden';
+      await prepareStops();
+      if(!routeStops.length){ $('miruta-nav-panel').hidden=true; document.body.style.overflow=''; statusLine.textContent='no hay paradas con dirección para navegar'; return; }
+      drawMarkers(fullMap,fullMarkers); currentIndex=0; active=true;
+      requestWakeLock();
+      if(!navigator.geolocation){ $('nav-step-text').textContent='GPS no disponible'; return; }
+      if(watchId!==null)navigator.geolocation.clearWatch(watchId);
+      watchId=navigator.geolocation.watchPosition(updateUser,err=>{ $('nav-step-text').textContent='Permite la ubicación'; $('nav-step-street').textContent=err.message||'Miruta necesita tu GPS para navegar'; },{enableHighAccuracy:true,maximumAge:2000,timeout:15000});
+      navigator.geolocation.getCurrentPosition(pos=>{updateUser(pos);fullMap.setView([pos.coords.latitude,pos.coords.longitude],16);reroute(true)},()=>{}, {enableHighAccuracy:true,maximumAge:1000,timeout:10000});
+      updateInstruction();
+    }
+    async function startAtEntry(entryId){
+      if(!initMaps()){ alert('El mapa todavía no cargó. Recarga Miruta con conexión una vez.'); return; }
+      await prepareStops();
+      const idx=routeStops.findIndex(s=>s.id===entryId);
+      currentIndex=idx>=0?idx:0;
+      $('miruta-nav-panel').hidden=false; document.body.style.overflow='hidden'; setTimeout(()=>fullMap?.invalidateSize(),80);
+      drawMarkers(fullMap,fullMarkers); active=true;
+      requestWakeLock();
+      $('nav-step-text').textContent='Preparando navegación interna…'; $('nav-step-street').textContent='Miruta está localizando tu posición';
+      if(!navigator.geolocation){ $('nav-step-text').textContent='GPS no disponible'; return; }
+      if(watchId!==null)navigator.geolocation.clearWatch(watchId);
+      watchId=navigator.geolocation.watchPosition(updateUser,err=>{ $('nav-step-text').textContent='Permite la ubicación'; $('nav-step-street').textContent=err.message||'Miruta necesita tu GPS para navegar'; },{enableHighAccuracy:true,maximumAge:2000,timeout:15000});
+      navigator.geolocation.getCurrentPosition(pos=>{updateUser(pos);fullMap.setView([pos.coords.latitude,pos.coords.longitude],16);reroute(true)},()=>{}, {enableHighAccuracy:true,maximumAge:1000,timeout:10000});
+      updateInstruction();
+    }
+    function center(){ if(fullMap&&currentPos)fullMap.setView([currentPos.lat,currentPos.lng],17,{animate:true}); }
+    function finish(completed=false){
+      active=false; clearTimeout(arrivalTimer); if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;} $('miruta-nav-panel').hidden=true; document.body.style.overflow='';
+      releaseWakeLock();
+      if(completed){ statusLine.textContent='ruta completa ✓ llegaste a la última parada'; premiumHaptic([30,50,30,50,60]); } else statusLine.textContent='navegación detenida';
+      refreshMini();
+    }
+    $('miruta-go-btn')?.addEventListener('click',start); $('miruta-route-reload')?.addEventListener('click',refreshMini); $('nav-center-btn')?.addEventListener('click',center); $('nav-next-btn')?.addEventListener('click',advance); $('nav-end-btn')?.addEventListener('click',()=>finish(false));
+    window.addEventListener('online',()=>{ refreshMini(); if(active)reroute(true); });
+    setTimeout(refreshMini,700);
+    return {start,startAtEntry,finish,refreshRoute:refreshMini,reroute};
+  })();
+  window.MirutaNav = MirutaNav;
+
+  document.getElementById('force-route-today')?.addEventListener('click',()=>{
+    const d=document.getElementById('route-date'); d.value=todayISO(); document.getElementById('force-route-date').checked=true; d.dispatchEvent(new Event('change')); statusLine.textContent='fecha de hoy seleccionada ✓ los próximos tickets importados usarán esta fecha';
+  });
 
   function processIncomingEmailsQueue(rawEmailsObj){
     if(!rawEmailsObj || !firebaseSyncActive) return;
