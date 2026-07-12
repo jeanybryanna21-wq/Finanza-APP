@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC73">
+  <meta name="instara-ai-version" content="RC74">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -5717,13 +5717,41 @@ async function command(raw){
   if(sm){const code=sm[1]||sm[2],date=routeDate(),already=(state.entries||[]).some(e=>e.date===date&&e.isStoreStop&&storeNum(e)===code);if(!already){state.entries.push(makeStoreStop(date,code));persistEntries();render()}await window.MirutaRouteBrain?.analyze?.({autoApply:true,force:true});window.MirutaNav?.refreshRoute?.();return reply(already?`Jean, Lowe's ${code} ya estaba en la ruta. Recalculé para verificar su posición.`:`De acuerdo, Jean. Faltaba Lowe's ${code}. Lo agregué y recalculé la ruta respetando la recogida antes de los clientes asociados.`)}
   if(/proximo cliente|siguiente cliente|que sigue|quien sigue|cuantas paradas|cuantas tengo hoy|paradas hoy/.test(q)){const jobs=pendingJobs();if(/paradas/.test(q))return reply(`Tienes ${jobs.length} paradas pendientes hoy.`);const e=jobs[0];return reply(e?`El siguiente cliente es ${e.customerName||'el próximo ticket'}. ${e.category||'Trabajo'}. ${e.haulAway?'Tiene haul away.':'No detecto haul away.'}`:'No tienes clientes pendientes en la ruta activa.');}
   if(/recalcula|organiza.*ruta|optimiza.*ruta/.test(q)){await reply('Déjame pensar y recalcular la ruta, Jean.',{mood:'thinking'});const a=await window.MirutaRouteBrain?.analyze?.({autoApply:true,force:true});window.MirutaNav?.refreshRoute?.();return reply(a?'Listo. Reorganicé la parte pendiente de la jornada y mantuve intacto lo ya completado.':'No pude completar el cálculo. Revisa las direcciones o la conexión.');}
-  if(/ayuda|no entiendo|explica/.test(q)){return reply('Estoy aquí, Jean. Puedes decirme: actualiza Mega, recalcula la ruta, cuántas paradas tengo hoy, cuál es el próximo cliente, o agrega Lowe's 419 a la ruta.');}
+  if(/ayuda|no entiendo|explica/.test(q)){return reply("Estoy aquí, Jean. Puedes decirme: actualiza Mega, recalcula la ruta, cuántas paradas tengo hoy, cuál es el próximo cliente, o agrega Lowe's 419 a la ruta.");}
   if(/hola|instara|estas ahi/.test(q)){return reply('Sí, Jean. Estoy aquí. ¿Qué necesitas?',{mood:'happy'});}
-  return reply('Jean, entendí tu mensaje, pero todavía no tengo una acción segura para ejecutarlo automáticamente. Dime el cambio de ruta, el Lowe's, el cliente o el problema y lo analizo contigo.',{mood:'thinking'});
+  return reply("Jean, entendí tu mensaje, pero todavía no tengo una acción segura para ejecutarlo automáticamente. Dime el cambio de ruta, el Lowe's, el cliente o el problema y lo analizo contigo.",{mood:'thinking'});
 }
 function openChat(){const p=$('instara-chat');if(!p)return;p.hidden=false;setTimeout(()=>$('instara-chat-input')?.focus(),80);setMood('happy');if(!$('instara-chat-log')?.children.length)addMsg('ai','Hola Jean. Estoy aquí. Puedes hablarme o escribirme directamente.');}
 function installCopilot(){if($('instara-copilot'))return;
-  document.body.insertAdjacentHTML('beforeend',`<div id="instara-copilot"><div id="instara-bubble"></div><button id="instara-avatar" type="button" aria-label="Hablar con INSTARA AI" data-mood="idle"><span class="instara-halo"></span><span class="instara-shoulders"></span><span class="instara-hair"></span><span class="instara-head"></span><span class="instara-headset-band"></span><span class="instara-ear left"></span><span class="instara-ear right"></span><span class="instara-mic-arm"><span class="instara-mic-tip"></span></span><span class="instara-eye left"></span><span class="instara-eye right"></span><span class="instara-mouth"></span><span class="instara-blush left"></span><span class="instara-blush right"></span><span class="instara-ai-badge">AI</span></button></div><div id="instara-chat" hidden><section class="instara-chat-card"><header class="instara-chat-head"><div><b>INSTARA AI</b><br><span>Copiloto del instalador</span></div><button class="instara-chat-close" type="button" aria-label="Cerrar">×</button></header><div id="instara-chat-log"></div><div class="instara-voice-state" id="instara-voice-state">Pulsa el micrófono para hablar. En iPhone/Safari la escucha continua manos libres no es estable; el chat por voz sigue funcionando por pulsación.</div><footer class="instara-chat-compose"><input id="instara-chat-input" type="text" placeholder="Dile algo a INSTARA…"><button id="instara-chat-mic" type="button" aria-label="Hablar">🎙</button><button id="instara-chat-send" type="button" aria-label="Enviar">➤</button></footer></section></div>`);
+  document.body.insertAdjacentHTML('beforeend',`<div id="instara-copilot"><div id="instara-bubble"></div><button id="instara-avatar" type="button" aria-label="Hablar con INSTARA AI" data-mood="idle"><svg class="instara-person" viewBox="0 0 120 120" aria-hidden="true">
+  <defs>
+    <linearGradient id="instaraBg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#193849"/><stop offset="1" stop-color="#081016"/></linearGradient>
+    <linearGradient id="instaraSkin" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#f4d7c5"/><stop offset="1" stop-color="#dcae94"/></linearGradient>
+    <linearGradient id="instaraHair" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#4a382f"/><stop offset=".48" stop-color="#221b18"/><stop offset="1" stop-color="#0d0d0f"/></linearGradient>
+    <linearGradient id="instaraSuit" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#d9d7cf"/><stop offset=".35" stop-color="#8a7969"/><stop offset="1" stop-color="#3b3f49"/></linearGradient>
+    <filter id="instaraSoft"><feGaussianBlur stdDeviation=".65"/></filter>
+  </defs>
+  <circle cx="60" cy="60" r="58" fill="url(#instaraBg)"/>
+  <ellipse cx="60" cy="112" rx="43" ry="27" fill="url(#instaraSuit)"/>
+  <path d="M25 109c4-25 15-36 35-36s31 11 35 36" fill="#d8d9d4"/>
+  <path d="M45 80l15 19 15-19 6 30H39z" fill="#ffffff" opacity=".96"/>
+  <path d="M22 73c1-32 9-52 38-55 30 3 38 23 38 55-4 12-11 20-20 25l-36 0c-10-5-17-13-20-25z" fill="url(#instaraHair)"/>
+  <path d="M39 43c3-12 10-18 21-18s19 6 22 18v25c0 15-9 26-22 26S38 83 38 68z" fill="url(#instaraSkin)"/>
+  <path d="M39 48c3-18 12-25 26-24 8 1 14 5 19 12-8-1-16-5-22-11-5 9-13 16-23 20z" fill="url(#instaraHair)"/>
+  <path class="instara-brow left" d="M46 53q6-4 11 0" fill="none" stroke="#45342f" stroke-width="2" stroke-linecap="round"/>
+  <path class="instara-brow right" d="M64 53q6-4 11 0" fill="none" stroke="#45342f" stroke-width="2" stroke-linecap="round"/>
+  <ellipse class="instara-eye-svg left" cx="52" cy="59" rx="2.5" ry="3" fill="#263947"/>
+  <ellipse class="instara-eye-svg right" cx="69" cy="59" rx="2.5" ry="3" fill="#263947"/>
+  <path d="M60 61l-2 8h5" fill="none" stroke="#bd8c77" stroke-width="1.3" stroke-linecap="round"/>
+  <path class="instara-mouth-svg" d="M53 75q7 6 14 0" fill="none" stroke="#995761" stroke-width="2.2" stroke-linecap="round"/>
+  <ellipse cx="48" cy="69" rx="5" ry="2.3" fill="#d28a8f" opacity=".22" filter="url(#instaraSoft)"/>
+  <ellipse cx="72" cy="69" rx="5" ry="2.3" fill="#d28a8f" opacity=".22" filter="url(#instaraSoft)"/>
+  <path d="M31 58c0-25 10-39 29-39s29 14 29 39" fill="none" stroke="#7ec7ff" stroke-width="4" stroke-linecap="round"/>
+  <rect x="25" y="54" width="10" height="18" rx="5" fill="#62aef4" stroke="#d8efff" stroke-width="2"/>
+  <rect x="85" y="54" width="10" height="18" rx="5" fill="#62aef4" stroke="#d8efff" stroke-width="2"/>
+  <path d="M90 68q-8 7-18 8" fill="none" stroke="#7ec7ff" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="71" cy="76" r="3" fill="#7ec7ff"/>
+</svg><span class="instara-ai-badge">AI</span></button></div><div id="instara-chat" hidden><section class="instara-chat-card"><header class="instara-chat-head"><div><b>INSTARA AI</b><br><span>Copiloto del instalador</span></div><button class="instara-chat-close" type="button" aria-label="Cerrar">×</button></header><div id="instara-chat-log"></div><div class="instara-voice-state" id="instara-voice-state">Pulsa el micrófono para hablar. En iPhone/Safari la escucha continua manos libres no es estable; el chat por voz sigue funcionando por pulsación.</div><footer class="instara-chat-compose"><input id="instara-chat-input" type="text" placeholder="Dile algo a INSTARA…"><button id="instara-chat-mic" type="button" aria-label="Hablar">🎙</button><button id="instara-chat-send" type="button" aria-label="Enviar">➤</button></footer></section></div>`);
   $('instara-avatar').onclick=()=>{openChat();reply('Sí, Jean. ¿Qué necesitas?',{voice:true,mood:'happy'})};
   document.querySelector('.instara-chat-close').onclick=()=>$('instara-chat').hidden=true;
   $('instara-chat').addEventListener('click',e=>{if(e.target===$('instara-chat'))$('instara-chat').hidden=true});
@@ -6011,4 +6039,110 @@ input::placeholder,textarea::placeholder{color:rgba(126,199,255,.9)!important}
 @media(max-width:640px){.app{padding-left:10px!important;padding-right:10px!important}.bottom-nav .nav-item{flex-basis:84px!important;min-width:84px!important}}
 </style>
 
+
+
+<style id="instara-rc74-visual-law">
+:root{
+  --rc74-white:#ffffff;
+  --rc74-blue:#7ec7ff;
+  --rc74-gold:#ffd05a;
+  --rc74-green:#78e08f;
+  --rc74-red:#ff6767;
+  --ink:#ffffff;
+  --ink-soft:#7ec7ff;
+  --slate:#7ec7ff;
+  --rc68-ink:#ffffff;
+  --rc68-ink-soft:#7ec7ff;
+  --instara-ink:#ffffff;
+  --instara-soft:#7ec7ff;
+}
+/* RC74 COLOR LAW — no unreadable dark blue text. */
+.app *{color:var(--rc74-white)!important;text-shadow:none!important}
+.app h1,.app h2,.app h3,.app h4,.app h5,.app h6,
+.header h1,.route-customer,.route-category,.week-name,.day-name,
+.ticket .desc .cat,.schedule-ticket .copy b,.calendar-ticket-name,
+.next-client-card b,.route-map-copy b,.schedule-day-title b,
+.miruta-nav-client b,.miruta-nav-instruction b,.section-toggle span:first-child,
+.instara-network-hero h2,.instara-network-stat b{color:var(--rc74-gold)!important}
+.route-preview-line,.route-preview-line span,.route-meta-list li,.route-meta-list a,
+.route-notes,.route-flag-line,.ledger-po,.ledger-client,.schedule-ticket .copy span,
+.schedule-ticket .po,.calendar-ticket-service,.calendar-ticket-po,.calendar-ticket-time,
+.next-client-card small,.next-client-card em,.route-map-copy span,.route-map-copy small,
+.miruta-nav-instruction span,.miruta-nav-instruction small,.miruta-nav-client small,
+.field label,.section-hint,.schedule-statusline,.schedule-weekdays span,
+.instara-network-kicker,.instara-network-stat small,.summary-caption,.stat .label,
+.count-chip .l,.tabs button:not(.active),.route-date-row label{color:var(--rc74-blue)!important}
+.route-amount,.route-order,.stat .value,.count-chip .n,.calendar-route-count,
+.schedule-selected-count,.schedule-ticket .time,.ticket .amounts,.ticket .gross,
+.day-totals b,.week-totals b,.miruta-nav-distance b,.miruta-nav-speed b,.miruta-nav-eta b,
+.price-row .p-price,.missing-row .m-amount{color:var(--rc74-gold)!important}
+.money-positive,.ticket.income .net,.ticket .net.money-positive,.stat.net .value,.stat.expected .value,
+.count-chip.completed .n,.status-btn.active.completed,.status-btn.active.paid{color:var(--rc74-green)!important}
+.money-negative,.ticket.expense .net,.is-cancelled .net,.stat.expense .value,
+.count-chip.cancelled .n,.status-btn.active.cancelled,.ticket .del,.route-del{color:var(--rc74-red)!important}
+input::placeholder,textarea::placeholder{color:var(--rc74-blue)!important;opacity:.9!important}
+/* Never allow the legacy navy text to survive in buttons. */
+button,.btn-outline,.btn-mini,.submit-btn,.status-btn,.type-toggle button,
+.bottom-nav button,.route-expand-toggle,.instara-chat-close,#instara-chat-mic,#instara-chat-send{color:var(--rc74-white)!important;text-shadow:none!important}
+.bottom-nav button.active,.bottom-nav button.active .nav-icon,.bottom-nav button.active .nav-label{color:var(--rc74-gold)!important}
+.status-btn.active.pending{color:var(--rc74-gold)!important}
+/* CARD BOUNDS LAW — everything remains inside its card. */
+.route-stop,.ticket,.week-head,.day-head,.form-card,.section-card,.calendar-ticket,.schedule-ticket{overflow:hidden!important;max-width:100%!important}
+.ticket-top{grid-template-columns:minmax(0,1fr) minmax(58px,82px) minmax(118px,145px)!important;gap:7px!important;width:100%!important;max-width:100%!important}
+.ticket .desc,.ticket .amounts,.ledger-po{min-width:0!important;max-width:100%!important}
+.ticket .amounts{display:grid!important;grid-template-columns:minmax(42px,1fr) minmax(52px,1fr) 28px!important;gap:4px!important;align-items:center!important;width:100%!important}
+.ticket .gross,.ticket .net,.ledger-po{white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+.ticket .del{position:static!important;transform:none!important;margin:0!important;padding:0!important;width:28px!important;height:28px!important;min-width:28px!important;max-width:28px!important;display:grid!important;place-items:center!important;border:0!important;background:transparent!important;font-size:20px!important;line-height:1!important}
+.route-header-row{grid-template-columns:42px minmax(0,1fr) minmax(72px,auto) 42px!important;width:100%!important;max-width:100%!important}
+.route-header-row>*{min-width:0!important;max-width:100%!important}
+.route-customer,.route-preview-line,.route-category,.route-meta-list li,.route-notes{overflow-wrap:anywhere!important;word-break:normal!important}
+.route-amount{white-space:nowrap!important}
+/* BUTTON FIT LAW — only button text may shrink when necessary. */
+.route-actions{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important;width:100%!important}
+.route-actions .status-btn{width:100%!important;min-width:0!important;padding:10px 4px!important;font-size:clamp(10px,2.75vw,14px)!important;letter-spacing:.01em!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important}
+.status-row-quick{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;width:100%!important;overflow:visible!important}
+.status-row-quick .status-btn{width:100%!important;min-width:0!important;padding:11px 5px!important;font-size:clamp(11px,3vw,15px)!important;letter-spacing:.01em!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important}
+.money-extra-row,.journal-add-row{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(116px,42%)!important;gap:10px!important;align-items:stretch!important;width:100%!important}
+.money-extra-row>* ,.journal-add-row>*{min-width:0!important;max-width:100%!important}
+.money-extra-row .btn-mini,.journal-add-row .btn-mini{width:100%!important;padding:9px 5px!important;font-size:clamp(10px,2.8vw,14px)!important;letter-spacing:.01em!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important}
+.po-badge,.store-badge,.note-tag,.route-status-badge,.calendar-ticket-status,.schedule-ticket .pill{max-width:100%!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+/* INSTARA — frontal professional secretary, always visible. */
+#instara-copilot{right:12px!important;bottom:calc(18px + env(safe-area-inset-bottom))!important;z-index:11800!important;max-width:calc(100vw - 24px)!important}
+#instara-avatar{width:92px!important;height:92px!important;flex:0 0 92px!important;border-radius:50%!important;border:2px solid rgba(255,208,90,.95)!important;background:#081016!important;overflow:hidden!important;padding:0!important;position:relative!important;box-shadow:0 16px 40px rgba(0,0,0,.58),0 0 0 3px rgba(255,208,90,.12)!important}
+#instara-avatar::before,#instara-avatar::after{display:none!important;content:none!important}
+#instara-avatar .instara-person{display:block!important;width:100%!important;height:100%!important}
+#instara-avatar .instara-eye,#instara-avatar .instara-mouth,#instara-avatar .instara-blush,
+#instara-avatar .instara-halo,#instara-avatar .instara-shoulders,#instara-avatar .instara-hair,
+#instara-avatar .instara-head,#instara-avatar .instara-headset-band,#instara-avatar .instara-ear,
+#instara-avatar .instara-mic-arm{display:none!important}
+#instara-avatar[data-mood="happy"] .instara-mouth-svg{d:path("M52 74 Q60 83 68 74")}
+#instara-avatar[data-mood="thinking"] .instara-brow.right{transform:translateY(-2px);transform-origin:69px 53px}
+#instara-avatar[data-mood="listening"]{animation:rc74Listen 1.1s ease-in-out infinite!important;box-shadow:0 0 0 4px rgba(126,199,255,.28),0 16px 40px rgba(0,0,0,.58)!important}
+#instara-avatar[data-mood="talking"] .instara-mouth-svg{animation:rc74Talk .24s ease-in-out infinite alternate;transform-origin:60px 76px}
+#instara-avatar .instara-eye-svg{animation:rc74Blink 7s infinite;transform-origin:center}
+#instara-avatar .instara-ai-badge{right:2px!important;bottom:2px!important;color:#111!important;background:var(--rc74-gold)!important}
+@keyframes rc74Blink{0%,46%,48%,100%{transform:scaleY(1)}47%{transform:scaleY(.08)}}
+@keyframes rc74Talk{from{transform:scaleY(.75)}to{transform:scaleY(1.5)}}
+@keyframes rc74Listen{50%{transform:translateY(-2px) scale(1.025)}}
+#instara-bubble{color:var(--rc74-white)!important;border-color:rgba(255,208,90,.35)!important}
+#instara-chat *{text-shadow:none!important}
+#instara-chat .instara-chat-head b{color:var(--rc74-gold)!important}
+#instara-chat .instara-chat-head span,#instara-chat .instara-voice-state{color:var(--rc74-blue)!important}
+#instara-chat .instara-msg{color:var(--rc74-white)!important}
+#instara-chat .instara-msg.ai{border-color:rgba(255,208,90,.32)!important}
+#instara-chat-input{color:var(--rc74-white)!important}
+@media(max-width:640px){
+  .ticket-top{grid-template-columns:minmax(0,1fr) 72px minmax(116px,130px)!important;gap:5px!important}
+  .ticket .amounts{grid-template-columns:minmax(38px,1fr) minmax(48px,1fr) 26px!important;gap:3px!important}
+  .ticket .del{width:26px!important;height:26px!important;min-width:26px!important;max-width:26px!important;font-size:18px!important}
+  #instara-avatar{width:82px!important;height:82px!important;flex-basis:82px!important}
+  .bottom-nav .nav-item{flex-basis:84px!important;min-width:84px!important}
+}
+@media(max-width:390px){
+  .ticket-top{grid-template-columns:minmax(0,1fr) 64px minmax(108px,122px)!important}
+  .status-row-quick .status-btn{font-size:clamp(10px,3vw,13px)!important}
+  .route-actions .status-btn{font-size:clamp(9px,2.7vw,12px)!important}
+  .money-extra-row,.journal-add-row{grid-template-columns:minmax(0,1fr) 112px!important}
+}
+</style>
 </body>
