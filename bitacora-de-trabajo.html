@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC75">
+  <meta name="instara-ai-version" content="RC76">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2734,12 +2734,12 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
           ${additionalLine}
           ${compensationLine}
           ${variantSelector}
-          <div class="route-actions" style="margin-top:8px;">
-            ${e.phone ? `<button class="btn-mini onway-toggle" data-id="${e.id}">On the way</button>` : ''}
-            ${e.phone ? `<button class="btn-mini delay-toggle" data-id="${e.id}">Delay</button>` : ''}
-            <button class="btn-mini route-extra-toggle" data-id="${e.id}">+ Trabajo adicional</button>
-            <button class="btn-mini route-comp-toggle" data-id="${e.id}">+ Compensación</button>
-            <button class="btn-mini route-part-toggle" data-id="${e.id}">+ Usar parte</button>
+          <div class="route-actions route-tools-actions" style="margin-top:8px;">
+            ${e.phone ? `<button class="btn-mini onway-toggle" data-id="${e.id}">ON THE WAY</button>` : ''}
+            ${e.phone ? `<button class="btn-mini delay-toggle" data-id="${e.id}">DELAY</button>` : ''}
+            <button class="btn-mini route-extra-toggle" data-id="${e.id}">+ TRABAJO</button>
+            <button class="btn-mini route-comp-toggle" data-id="${e.id}">+ PAGO ADIC.</button>
+            <button class="btn-mini route-part-toggle" data-id="${e.id}">+ PARTE</button>
           </div>
         <div class="route-extra-row">
           <div class="route-extra-form" id="extra-form-${e.id}">
@@ -4309,7 +4309,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     put('dash-pending-text',`${pending} ${pending===1?'pendiente':'pendientes'}`); put('dash-percent',`${pct}%`); put('alert-count',pending+cancelled);
     put('map-caption',jobs.length?`${jobs.length} paradas • Ruta optimizada`:'Sin paradas cargadas');
     const fill=document.getElementById('dash-progress-fill'); if(fill) fill.style.width=pct+'%';
-    const moneyPct=Math.min(100,Math.round(total/1200*100)); const moneyFill=document.getElementById('money-progress-fill'); if(moneyFill) moneyFill.style.width=moneyPct+'%';
+    const fg=window.InstaraFinancialGoals?.get?.()||{weekly:1990,monthly:7800,workdays:6}; const dailyGoal=Math.max(1,Number(fg.weekly||1990)/Math.max(1,Number(fg.workdays||6))); const moneyPct=Math.min(100,Math.round(total/dailyGoal*100)); const moneyFill=document.getElementById('money-progress-fill'); if(moneyFill) moneyFill.style.width=moneyPct+'%'; const goalLabel=document.getElementById('daily-goal-label'); if(goalLabel) goalLabel.textContent=`Meta hoy: ${fmt(dailyGoal)}`;
     let workedMinutes=0; jobs.filter(e=>e.status==='completed'||e.status==='paid').forEach(e=>{ const a=(e.timeStart||'').match(/(\d{1,2}):(\d{2})/), b=(e.timeEnd||'').match(/(\d{1,2}):(\d{2})/); if(a&&b){let d=(+b[1]*60+ +b[2])-(+a[1]*60+ +a[2]);if(d>0&&d<600)workedMinutes+=d;} else workedMinutes+=60; });
     put('hours-worked',`${Math.floor(workedMinutes/60)}h ${String(workedMinutes%60).padStart(2,'0')}m`); const hp=document.getElementById('hours-progress-fill'); if(hp) hp.style.width=Math.min(100,workedMinutes/480*100)+'%';
     if(active){
@@ -6145,4 +6145,170 @@ button,.btn-outline,.btn-mini,.submit-btn,.status-btn,.type-toggle button,
   #instara-avatar{width:86px!important;height:86px!important;flex-basis:86px!important}
 }
 </style>
+
+
+<!-- ================================================================
+     INSTARA AI RC76 — FINANCIAL GOALS + ACTION BUTTON FIT + LIVE PORTRAIT
+     ================================================================ -->
+<style id="instara-rc76-goals-actions-motion">
+:root{
+  --rc76-gold:#ffd05a;
+  --rc76-white:#ffffff;
+  --rc76-info:#7ec7ff;
+  --rc76-green:#78e08f;
+  --rc76-red:#ff6767;
+  --rc76-panel:rgba(5,10,14,.88);
+}
+/* Operational action buttons: compact, readable and contained. */
+.route-tools-actions{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:9px!important;
+  width:100%!important;
+  margin-top:10px!important;
+}
+.route-tools-actions .btn-mini{
+  width:100%!important;
+  min-width:0!important;
+  min-height:48px!important;
+  padding:9px 8px!important;
+  font-size:clamp(11px,3vw,15px)!important;
+  font-weight:900!important;
+  letter-spacing:.015em!important;
+  line-height:1.1!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:clip!important;
+  border:1px solid rgba(255,255,255,.42)!important;
+  background:rgba(5,10,14,.9)!important;
+  color:var(--rc76-white)!important;
+  border-radius:17px!important;
+}
+.route-tools-actions .onway-toggle{border-color:var(--rc76-gold)!important;color:var(--rc76-gold)!important}
+.route-tools-actions .delay-toggle{border-color:rgba(255,255,255,.52)!important;color:var(--rc76-white)!important}
+.route-tools-actions .route-comp-toggle{border-color:var(--rc76-gold)!important;color:var(--rc76-gold)!important}
+.route-tools-actions .route-part-toggle{grid-column:1 / -1!important}
+.route-tools-actions .btn-mini:active{transform:scale(.975)!important;background:rgba(255,255,255,.12)!important}
+
+/* Financial goals. */
+.rc76-goals-settings,.rc76-goals-panel{
+  margin:0 0 16px!important;
+  padding:18px!important;
+  border-radius:24px!important;
+  background:var(--rc76-panel)!important;
+  border:1px solid rgba(255,208,90,.34)!important;
+  backdrop-filter:blur(18px)!important;
+  -webkit-backdrop-filter:blur(18px)!important;
+  overflow:hidden!important;
+}
+.rc76-goals-kicker{color:var(--rc76-info)!important;font-weight:900!important;letter-spacing:.08em!important;font-size:14px!important}
+.rc76-goals-settings h3,.rc76-goals-panel h3{color:var(--rc76-gold)!important;margin:5px 0 12px!important;font-size:26px!important}
+.rc76-goals-settings p,.rc76-goals-panel p{color:var(--rc76-white)!important;line-height:1.45!important;margin:0 0 13px!important}
+.rc76-goal-fields{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:10px!important}
+.rc76-goal-field{min-width:0!important}
+.rc76-goal-field label{display:block!important;color:var(--rc76-info)!important;font-weight:850!important;font-size:14px!important;margin:0 0 6px!important}
+.rc76-goal-field input{width:100%!important;min-height:50px!important;border:1px solid rgba(255,255,255,.38)!important;border-radius:15px!important;padding:10px 12px!important;background:rgba(255,255,255,.08)!important;color:var(--rc76-white)!important;font-size:20px!important;text-shadow:none!important}
+.rc76-goal-save{margin-top:12px!important;width:100%!important;min-height:50px!important;border:1px solid var(--rc76-gold)!important;border-radius:16px!important;background:rgba(5,10,14,.9)!important;color:var(--rc76-gold)!important;font-size:14px!important;font-weight:900!important;letter-spacing:.04em!important}
+.rc76-goal-auto{margin-top:10px!important;color:var(--rc76-info)!important;font-size:15px!important}
+.rc76-goal-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+.rc76-goal-card{padding:15px!important;border-radius:18px!important;background:rgba(255,255,255,.07)!important;border:1px solid rgba(255,255,255,.18)!important;min-width:0!important;overflow:hidden!important}
+.rc76-goal-card small{display:block!important;color:var(--rc76-info)!important;font-weight:850!important;font-size:14px!important}
+.rc76-goal-card b{display:block!important;color:var(--rc76-gold)!important;font-size:25px!important;margin:5px 0!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+.rc76-goal-card em{font-style:normal!important;color:var(--rc76-white)!important;font-weight:800!important;font-size:15px!important}
+.rc76-goal-track{height:9px!important;border-radius:999px!important;background:rgba(255,255,255,.14)!important;overflow:hidden!important;margin-top:10px!important}
+.rc76-goal-track i{display:block!important;height:100%!important;width:0;border-radius:inherit!important;background:var(--rc76-gold)!important;transition:width .3s ease!important}
+.rc76-goal-good{color:var(--rc76-green)!important}
+.rc76-goal-close{color:var(--rc76-gold)!important}
+.rc76-goal-low{color:var(--rc76-red)!important}
+#daily-goal-label.rc76-goal-good{color:var(--rc76-green)!important}
+#daily-goal-label.rc76-goal-close{color:var(--rc76-gold)!important}
+#daily-goal-label.rc76-goal-low{color:var(--rc76-red)!important}
+
+/* A single portrait cannot truly change facial anatomy, but it can feel alive through subtle motion. */
+#instara-avatar{animation:rc76AvatarFloat 4.6s ease-in-out infinite!important}
+#instara-avatar .instara-person-photo{animation:rc76PortraitBreath 5.2s ease-in-out infinite!important;will-change:transform,filter!important}
+#instara-avatar[data-mood="talking"]{animation:rc76AvatarTalk 1s ease-in-out infinite!important}
+#instara-avatar[data-mood="talking"] .instara-person-photo{animation:rc76PortraitTalk .42s ease-in-out infinite alternate!important}
+#instara-avatar[data-mood="listening"]{animation:rc76AvatarListen 1.15s ease-in-out infinite!important}
+#instara-avatar[data-mood="listening"] .instara-person-photo{animation:rc76PortraitListen 1.15s ease-in-out infinite alternate!important}
+#instara-avatar[data-mood="thinking"] .instara-person-photo{animation:rc76PortraitThink 2.2s ease-in-out infinite alternate!important}
+@keyframes rc76AvatarFloat{0%,100%{transform:translateY(0) rotate(0deg)}50%{transform:translateY(-3px) rotate(.35deg)}}
+@keyframes rc76PortraitBreath{0%,100%{transform:scale(1.08) translateY(0)}50%{transform:scale(1.095) translateY(-1px)}}
+@keyframes rc76AvatarTalk{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
+@keyframes rc76PortraitTalk{from{transform:scale(1.09) translateY(0)}to{transform:scale(1.115) translateY(-2px)}}
+@keyframes rc76AvatarListen{0%,100%{box-shadow:0 16px 40px rgba(0,0,0,.58),0 0 0 3px rgba(126,199,255,.16)}50%{box-shadow:0 16px 40px rgba(0,0,0,.58),0 0 0 7px rgba(126,199,255,.30)}}
+@keyframes rc76PortraitListen{from{transform:scale(1.10)}to{transform:scale(1.125) translateY(-1px)}}
+@keyframes rc76PortraitThink{from{transform:scale(1.08) translateX(0);filter:saturate(.88) brightness(.96)}to{transform:scale(1.09) translateX(-1px);filter:saturate(.82) brightness(.93)}}
+
+@media(max-width:560px){
+  .rc76-goal-fields{grid-template-columns:1fr!important}
+  .rc76-goal-grid{grid-template-columns:1fr 1fr!important}
+  .route-tools-actions .btn-mini{font-size:clamp(10px,3.2vw,13px)!important;min-height:46px!important;padding:8px 5px!important}
+}
+@media(max-width:390px){
+  .route-tools-actions{gap:7px!important}
+  .route-tools-actions .btn-mini{font-size:10px!important}
+  .rc76-goal-grid{grid-template-columns:1fr!important}
+}
+</style>
+<script id="instara-rc76-financial-goals">
+(function(){
+'use strict';
+const KEY='instara-financial-goals-v1';
+const DEFAULTS={weekly:1990,monthly:7800,workdays:6};
+const $=id=>document.getElementById(id);
+const money=n=>'$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+function get(){try{return {...DEFAULTS,...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch(_e){return {...DEFAULTS}}}
+function save(v){localStorage.setItem(KEY,JSON.stringify(v));return v}
+function iso(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function mondayOf(d){const x=new Date(d.getFullYear(),d.getMonth(),d.getDate());x.setDate(x.getDate()-((x.getDay()+6)%7));return x}
+function periodExpected(start,end){
+  try{return (state.entries||[]).filter(e=>e.type==='income'&&!e.isFinanceOnly?true:true).filter(e=>e.type==='income'&&e.date>=start&&e.date<=end&&!['cancelled','missing_price'].includes(e.status)).reduce((sum,e)=>sum+Number(e.net||0),0)}catch(_e){return 0}
+}
+function dayExpected(date){try{return (state.entries||[]).filter(e=>e.type==='income'&&e.date===date&&!['cancelled','missing_price'].includes(e.status)).reduce((sum,e)=>sum+Number(e.net||0),0)}catch(_e){return 0}}
+function status(value,goal,pace=1){
+  const ratio=goal>0?value/goal:1;
+  const needed=Math.max(.01,pace);
+  if(ratio>=needed)return {text:'EN RITMO',cls:'rc76-goal-good'};
+  if(ratio>=needed*.85)return {text:'CERCA',cls:'rc76-goal-close'};
+  return {text:'BAJO',cls:'rc76-goal-low'};
+}
+function setClass(el,cls){if(!el)return;el.classList.remove('rc76-goal-good','rc76-goal-close','rc76-goal-low');el.classList.add(cls)}
+function injectSettings(){
+  const host=$('screen-ajustes');if(!host||$('rc76-goals-settings'))return;
+  const g=get(),sec=document.createElement('section');sec.id='rc76-goals-settings';sec.className='rc76-goals-settings';
+  sec.innerHTML=`<div class="rc76-goals-kicker">INSTARA AI · FINANCIAL TARGETS</div><h3>Metas financieras</h3><p>INSTARA compara el neto previsto de tus trabajos contra estas metas y te indica si vas bajo, cerca o en ritmo.</p><div class="rc76-goal-fields"><div class="rc76-goal-field"><label>Meta semanal $</label><input id="rc76-weekly-goal" type="number" min="0" step="10" value="${Number(g.weekly||0)}"></div><div class="rc76-goal-field"><label>Meta mensual $</label><input id="rc76-monthly-goal" type="number" min="0" step="10" value="${Number(g.monthly||0)}"></div><div class="rc76-goal-field"><label>Días de trabajo / semana</label><input id="rc76-workdays" type="number" min="1" max="7" step="1" value="${Number(g.workdays||6)}"></div></div><button class="rc76-goal-save" id="rc76-save-goals" type="button">GUARDAR METAS</button><div class="rc76-goal-auto" id="rc76-daily-auto"></div>`;
+  host.insertBefore(sec,host.firstChild);
+  $('rc76-save-goals').onclick=()=>{const next={weekly:Math.max(0,Number($('rc76-weekly-goal').value)||0),monthly:Math.max(0,Number($('rc76-monthly-goal').value)||0),workdays:Math.max(1,Math.min(7,Number($('rc76-workdays').value)||6))};save(next);refresh();const sl=$('status-line');if(sl)sl.textContent='Metas financieras guardadas ✓';};
+}
+function injectFinance(){
+  const host=$('screen-finanzas');if(!host||$('rc76-goals-panel'))return;
+  const sec=document.createElement('section');sec.id='rc76-goals-panel';sec.className='rc76-goals-panel';sec.innerHTML=`<div class="rc76-goals-kicker">INSTARA AI · GOAL TRACKER</div><h3>Ritmo financiero</h3><div class="rc76-goal-grid"><article class="rc76-goal-card"><small>ESTA SEMANA</small><b id="rc76-week-value">$0.00</b><em id="rc76-week-status">—</em><div class="rc76-goal-track"><i id="rc76-week-fill"></i></div><p id="rc76-week-copy"></p></article><article class="rc76-goal-card"><small>ESTE MES</small><b id="rc76-month-value">$0.00</b><em id="rc76-month-status">—</em><div class="rc76-goal-track"><i id="rc76-month-fill"></i></div><p id="rc76-month-copy"></p></article></div>`;
+  host.insertBefore(sec,host.firstChild);
+}
+function snapshot(){
+  const g=get(),now=new Date(),today=iso(now),mon=mondayOf(now),sun=new Date(mon);sun.setDate(mon.getDate()+6);const monthStart=new Date(now.getFullYear(),now.getMonth(),1),monthEnd=new Date(now.getFullYear(),now.getMonth()+1,0);
+  const week=periodExpected(iso(mon),iso(sun)),month=periodExpected(iso(monthStart),iso(monthEnd)),day=dayExpected(today),dailyGoal=g.weekly/Math.max(1,g.workdays);
+  const weekElapsed=((now.getDay()+6)%7)+1,weekPace=weekElapsed/7,monthPace=now.getDate()/monthEnd.getDate();
+  return {g,day,dailyGoal,week,month,weekPace,monthPace};
+}
+function syncDashboard(s=snapshot()){
+  const label=$('daily-goal-label'),fill=$('money-progress-fill');if(!label)return;
+  const st=status(s.day,s.dailyGoal,1);label.textContent=`Meta hoy: ${money(s.dailyGoal)} · ${st.text}`;setClass(label,st.cls);if(fill)fill.style.width=Math.min(100,s.dailyGoal>0?s.day/s.dailyGoal*100:100)+'%';
+}
+function refresh(){
+  injectSettings();injectFinance();const s=snapshot();syncDashboard(s);
+  const dayAuto=$('rc76-daily-auto');if(dayAuto)dayAuto.textContent=`Meta diaria calculada: ${money(s.dailyGoal)} (${s.g.workdays} días de trabajo).`;
+  const ws=status(s.week,s.g.weekly,s.weekPace),ms=status(s.month,s.g.monthly,s.monthPace);
+  const wv=$('rc76-week-value'),mv=$('rc76-month-value');if(wv)wv.textContent=`${money(s.week)} / ${money(s.g.weekly)}`;if(mv)mv.textContent=`${money(s.month)} / ${money(s.g.monthly)}`;
+  const wst=$('rc76-week-status'),mst=$('rc76-month-status');if(wst){wst.textContent=ws.text;setClass(wst,ws.cls)}if(mst){mst.textContent=ms.text;setClass(mst,ms.cls)}
+  const wf=$('rc76-week-fill'),mf=$('rc76-month-fill');if(wf)wf.style.width=Math.min(100,s.g.weekly>0?s.week/s.g.weekly*100:100)+'%';if(mf)mf.style.width=Math.min(100,s.g.monthly>0?s.month/s.g.monthly*100:100)+'%';
+  const wc=$('rc76-week-copy'),mc=$('rc76-month-copy');if(wc)wc.textContent=s.week>=s.g.weekly?`Meta cubierta por ${money(s.week-s.g.weekly)}.`:`Faltan ${money(s.g.weekly-s.week)} para la meta semanal.`;if(mc)mc.textContent=s.month>=s.g.monthly?`Meta cubierta por ${money(s.month-s.g.monthly)}.`:`Faltan ${money(s.g.monthly-s.month)} para la meta mensual.`;
+}
+window.InstaraFinancialGoals={get,save,refresh,syncDashboard,snapshot};
+function boot(){refresh();setInterval(refresh,1800);document.addEventListener('click',e=>{if(e.target.closest('.status-btn,.submit-btn,.extra-save,.comp-save,[data-add-tip]'))setTimeout(refresh,180)});}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(boot,600));else setTimeout(boot,600);
+})();
+</script>
+
 </body>
