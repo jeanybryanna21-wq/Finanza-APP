@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC103">
+  <meta name="instara-ai-version" content="RC104">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1286,6 +1286,11 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   </div>
 
   <div class="screen active" id="screen-hoy">
+
+  <div class="today-route-maintenance">
+    <button class="btn-outline today-route-clear" id="clear-today-route-btn" type="button">BORRAR RUTA DE HOY</button>
+    <div class="section-hint">Vacía únicamente la ruta visible de hoy. Los tickets de Mega siguen guardados en Calendario y puedes volver a agregarlos desde allí.</div>
+  </div>
 
   <div id="route-list"></div>
 
@@ -2618,7 +2623,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
 
   function reorderStop(id, newOrderRaw, dateIso){
     const dayStops = state.entries
-      .filter(e=> e.type==='income' && e.date===dateIso && e.status !== 'missing_price' && !e.isFinanceOnly)
+      .filter(e=> e.type==='income' && e.date===dateIso && e.status !== 'missing_price' && !e.isFinanceOnly && e.routeExcluded!==true)
       .sort((a,b)=> (a.order ?? 9999) - (b.order ?? 9999));
 
     const idx = dayStops.findIndex(e=> e.id === id);
@@ -2704,7 +2709,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
 
     const wrap = document.getElementById('route-list');
     const stops = state.entries
-      .filter(e=> e.type==='income' && e.date===dateIso && e.status !== 'missing_price' && !e.isFinanceOnly)
+      .filter(e=> e.type==='income' && e.date===dateIso && e.status !== 'missing_price' && !e.isFinanceOnly && e.routeExcluded!==true)
       .sort((a,b)=> (a.order ?? 9999) - (b.order ?? 9999));
 
     if(stops.length === 0){
@@ -3030,22 +3035,49 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     wrap.querySelectorAll('.route-stop .status-btn').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         const entry = state.entries.find(e=> e.id === btn.dataset.id);
-        if(entry){
-          const previousStatus = entry.status;
-          entry.status = btn.dataset.status;
-          persistEntries();
-          render();
-          window.MirutaSchedule?.handleStatusChange?.(entry, previousStatus, btn.dataset.status);
+        if(!entry)return;
+        const nextStatus=btn.dataset.status;
+        const previousStatus=entry.status;
+
+        if(nextStatus==='completed'){
+          const confirmed=confirm('¿Confirmas que terminaste este trabajo?\n\nINSTARA recomienda enviar el mensaje de agradecimiento/evaluación, pero el SMS NO es obligatorio para completar el ticket.');
+          if(!confirmed)return;
+          entry.status='completed';
+          entry.manualCompletion=true;
+          entry.completedAt=new Date().toISOString();
+          entry.mirutaCompletedAt=entry.mirutaCompletedAt||entry.completedAt;
+          entry.routeExcluded=false;
+        }else{
+          entry.status=nextStatus;
+          if(nextStatus!=='completed'){
+            entry.manualCompletion=false;
+            if(nextStatus==='pending'){
+              entry.completedAt=null;
+              entry.mirutaCompletedAt=null;
+            }
+          }
         }
+
+        persistEntries();
+        render();
+        try{window.MirutaNav?.refreshRoute?.();window.MirutaAI?.refresh?.()}catch(_e){}
+        window.MirutaSchedule?.handleStatusChange?.(entry, previousStatus, nextStatus);
       });
     });
 
     wrap.querySelectorAll('.route-del').forEach(btn=>{
       btn.addEventListener('click', (ev)=>{
         ev.stopPropagation();
-        state.entries = state.entries.filter(e=> e.id !== btn.dataset.id);
+        const entry=state.entries.find(e=>String(e.id)===String(btn.dataset.id));
+        if(!entry)return;
+        if(!confirm(`¿Quitar ${entry.customerName||entry.category||'este ticket'} de la ruta de hoy?\n\nEl ticket seguirá guardado en Calendario.`))return;
+        entry.routeExcluded=true;
+        entry.routeExcludedAt=new Date().toISOString();
+        entry.routeExcludedReason='manual_today_route_remove';
         persistEntries();
         render();
+        try{window.MirutaNav?.refreshRoute?.();window.MirutaAI?.refresh?.()}catch(_e){}
+        statusLine.textContent='ticket quitado de la ruta de hoy ✓ sigue guardado en Calendario';
       });
     });
 
@@ -3984,7 +4016,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   function routeReportSectionHtml(dateIso){
     const agg = dayAgg(dateIso);
     const stops = state.entries
-      .filter(e=> e.type==='income' && e.date===dateIso && e.status !== 'missing_price' && !e.isFinanceOnly)
+      .filter(e=> e.type==='income' && e.date===dateIso && e.status !== 'missing_price' && !e.isFinanceOnly && e.routeExcluded!==true)
       .sort((a,b)=> (a.order ?? 9999) - (b.order ?? 9999));
     const expenses = state.entries.filter(e=> e.type==='expense' && e.date===dateIso);
 
@@ -4309,7 +4341,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     function clearMarkers(arr,map,kind='leaflet'){arr.forEach(m=>{try{kind==='maplibre'?m.remove():map.removeLayer(m)}catch(_e){}});arr.length=0;}
     function todayNavigableStops(){
       const date=$('route-date')?.value||todayISO();
-      return state.entries.filter(e=>e.type==='income'&&e.date===date&&!['missing_price','cancelled','completed','paid'].includes(String(e.status||''))&&!e.isFinanceOnly&&e.address&&e.address.trim()).sort((a,b)=>(a.order??e.orderIndex??9999)-(b.order??b.orderIndex??9999));
+      return state.entries.filter(e=>e.type==='income'&&e.date===date&&!['missing_price','cancelled','completed','paid'].includes(String(e.status||''))&&!e.isFinanceOnly&&e.routeExcluded!==true&&e.address&&e.address.trim()).sort((a,b)=>(a.order??e.orderIndex??9999)-(b.order??b.orderIndex??9999));
     }
     async function geocodeEntry(entry){
       if(Number.isFinite(Number(entry.lat))&&Number.isFinite(Number(entry.lng)))return{lat:Number(entry.lat),lng:Number(entry.lng)};
@@ -4878,12 +4910,28 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       clearInterval(refreshTimer); refreshTimer=setInterval(()=>recalculate(false),120000);
     }
     function handleStatusChange(entry,previousStatus,newStatus){
-      if(newStatus!=='completed' || previousStatus==='completed' || !entry?.phone || entry.isStoreStop || entry.isAdditional || /exception\s*category|trabajo\s*adicional/i.test(String(entry.category||'')))return;
+      if(newStatus!=='completed' || previousStatus==='completed')return;
+      setTimeout(()=>recalculate(false),300);
+
+      if(!entry?.phone || entry.isStoreStop || entry.isAdditional || /exception\s*category|trabajo\s*adicional/i.test(String(entry.category||''))){
+        statusLine.textContent='trabajo marcado COMPLETADO ✓';
+        return;
+      }
+
       setTimeout(()=>{
+        const prepare=confirm(`Trabajo marcado COMPLETADO ✓\n\n¿Quieres preparar ahora el SMS de agradecimiento y evaluación para ${entry.customerName||'el cliente'}?\n\nPuedes elegir Cancelar y el trabajo seguirá completado.`);
+        if(!prepare){
+          statusLine.textContent='trabajo marcado COMPLETADO ✓ SMS omitido';
+          return;
+        }
         const href=smsHref(entry.phone,buildReviewMessage(entry));
-        if(href){window.location.href=href;statusLine.textContent=`mensaje de agradecimiento y evaluación para ${entry.customerName||'cliente'} listo para enviar ✓`;}
-      },120);
-      setTimeout(()=>recalculate(false),500);
+        if(href){
+          window.location.href=href;
+          statusLine.textContent=`trabajo completado ✓ SMS para ${entry.customerName||'cliente'} listo para revisar`;
+        }else{
+          statusLine.textContent='trabajo marcado COMPLETADO ✓';
+        }
+      },180);
     }
     document.getElementById('miruta-go-btn')?.addEventListener('click',startRouteClock,{capture:true});
     document.getElementById('navigate-route-btn')?.addEventListener('click',startRouteClock,{capture:true});
@@ -4906,7 +4954,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     function currentJobs(){
       const date=document.getElementById('route-date')?.value||todayISO();
       return (state.entries||[])
-        .filter(e=>e.type==='income'&&e.date===date&&e.status!=='missing_price'&&e.status!=='cancelled'&&!e.isFinanceOnly)
+        .filter(e=>e.type==='income'&&e.date===date&&e.status!=='missing_price'&&e.status!=='cancelled'&&!e.isFinanceOnly&&e.routeExcluded!==true)
         .sort((a,b)=>(a.order??9999)-(b.order??9999));
     }
     function activeJob(){
@@ -5083,7 +5131,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     function loadJSON(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')||fallback}catch(_e){return fallback}}
     function saveJSON(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch(_e){}}
     function routeDate(){return document.getElementById('route-date')?.value||todayISO()}
-    function jobs(date=routeDate()){return state.entries.filter(e=>e.type==='income'&&e.date===date&&e.status!=='cancelled'&&e.status!=='missing_price'&&!e.isFinanceOnly).sort((a,b)=>(a.order??9999)-(b.order??9999))}
+    function jobs(date=routeDate()){return state.entries.filter(e=>e.type==='income'&&e.date===date&&e.status!=='cancelled'&&e.status!=='missing_price'&&!e.isFinanceOnly&&e.routeExcluded!==true).sort((a,b)=>(a.order??9999)-(b.order??9999))}
     function serviceKey(entry){
       const t=[entry?.category,entry?.variant,entry?.scopeNotes,entry?.notes].filter(Boolean).join(' ').toLowerCase();
       if(/dish\s*washer|dishwasher|lavaplatos/.test(t))return 'dishwasher'; if(/\botr\b|microwave|over the range/.test(t))return 'microwave';
@@ -7503,6 +7551,9 @@ function moveSelectedDayToToday(){
     e.date=today();
     e.manualRouteOverride=true;
     e.routeForcedAt=new Date().toISOString();
+    e.routeExcluded=false;
+    e.routeExcludedAt=null;
+    e.routeExcludedReason='';
     e.cioRouteHold=false;
     e.cioDateReview=false;
     moved++;
@@ -7537,7 +7588,7 @@ window.InstaraRC97={cleanupManualRouteCache,moveSelectedDayToToday,install};
 <script id="instara-rc98-runtime-integrity">
 (function(){
 'use strict';
-const VERSION='RC103';
+const VERSION='RC104';
 const $=id=>document.getElementById(id);
 function state(){return window.__INSTARA_STATE__||window.state}
 function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
@@ -8324,6 +8375,97 @@ window.InstaraRC103={
   refresh,reconcileAll,decorateCalendar,evidenceState,
   paidEvidence,completedEvidence,cancelledEvidence,amountOf
 };
+})();
+</script>
+
+
+<style id="instara-rc104-today-route-controls">
+.today-route-maintenance{
+  margin:8px 0 14px;padding:12px;border:1px solid rgba(255,255,255,.16);
+  border-radius:18px;background:rgba(8,14,18,.72)
+}
+.today-route-maintenance .today-route-clear{
+  width:100%;border-color:rgba(255,112,102,.72)!important;color:#ff9a92!important
+}
+.today-route-maintenance .section-hint{margin-top:8px;text-align:center}
+#screen-hoy .route-del{
+  display:grid!important;width:34px!important;height:34px!important;place-items:center!important;
+  border-radius:50%!important;border:1px solid rgba(255,112,102,.55)!important;
+  background:rgba(255,75,65,.13)!important;color:#ff9a92!important;font-size:15px!important;
+  position:relative!important;z-index:8!important;pointer-events:auto!important
+}
+#screen-hoy .route-header-row{grid-template-columns:30px minmax(0,1fr) auto 32px 36px!important}
+</style>
+<script id="instara-rc104-today-route-maintenance">
+(function(){
+'use strict';
+const VERSION='RC104';
+const app=()=>window.__INSTARA_STATE__||window.state;
+const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+
+function persist(){
+  try{window.persistEntries?.();window.persistentEntries?.()}catch(_e){}
+}
+
+function clearTodayRoute(){
+  const s=app();if(!s?.entries)return 0;
+  const date=today();
+  const candidates=s.entries.filter(e=>
+    e?.type==='income' &&
+    e?.date===date &&
+    !e?.isFinanceOnly &&
+    e?.status!=='missing_price' &&
+    e?.routeExcluded!==true
+  );
+
+  if(!candidates.length){
+    const status=document.getElementById('status-line');
+    if(status)status.textContent='la ruta de hoy ya está vacía';
+    return 0;
+  }
+
+  const confirmed=confirm(`¿Borrar la ruta visible de hoy?\\n\\nSe quitarán ${candidates.length} parada${candidates.length===1?'':'s'} de la ruta.\\n\\nNO se borrarán los tickets de Mega. Seguirán en Calendario para volver a agregarlos.`);
+  if(!confirmed)return 0;
+
+  const now=new Date().toISOString();
+  candidates.forEach(entry=>{
+    entry.routeExcluded=true;
+    entry.routeExcludedAt=now;
+    entry.routeExcludedReason='manual_today_route_clear';
+  });
+
+  [
+    'instara-route-active-v1',
+    'miruta-route-order-v1',
+    'instara-tomorrow-plan-v1',
+    'instara-next-day-plan-v1',
+    'instara-gps-session-v1'
+  ].forEach(key=>{try{localStorage.removeItem(key)}catch(_e){}});
+
+  persist();
+  try{
+    window.MirutaNav?.finish?.(false);
+    window.render?.();
+    window.MirutaNav?.refreshRoute?.();
+    window.MirutaAI?.refresh?.();
+    window.InstaraSchedule?.refresh?.();
+  }catch(_e){}
+
+  const status=document.getElementById('status-line');
+  if(status)status.textContent='ruta de hoy vaciada ✓ los tickets siguen disponibles en Calendario';
+  return candidates.length;
+}
+
+function install(){
+  const btn=document.getElementById('clear-today-route-btn');
+  if(btn&&!btn.__rc104){
+    btn.__rc104=true;
+    btn.addEventListener('click',clearTodayRoute);
+  }
+}
+document.addEventListener('DOMContentLoaded',install);
+window.addEventListener('focus',install);
+window.InstaraRC104={clearTodayRoute,install};
 })();
 </script>
 
