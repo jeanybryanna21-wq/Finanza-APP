@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC96">
+  <meta name="instara-ai-version" content="RC96.1">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -3525,6 +3525,10 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       btn.addEventListener('click', ()=>{ editingId = null; render(); });
     });
   }
+  // RC96.1: expose the canonical renderer for later modular layers
+  // (Sync Hub, Mega Bridge and route intelligence) without duplicating UI logic.
+  window.render = render;
+
 
   // ---------- importar desde correo ----------
   const monthMap = {january:1,february:2,march:3,april:4,may:5,june:6,july:7,august:8,september:9,october:10,november:11,december:12,
@@ -5635,7 +5639,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
         e.cioReviewReason='';
       }
     }
-    persistEntries();render();window.InstaraSchedule?.refresh?.();
+    persistEntries();if(typeof window.render==='function')window.render();window.InstaraSchedule?.refresh?.();
     const impact={added,rescheduled,updated,suspended,preserved,totalObserved:jobs.length,totalConfirmed:confirmed.length,syncedAt:payload.syncedAt||nowIso(),source:payload.source||'CiO',windowFrom:payload.schedule?.windowFrom||'',windowTo:payload.schedule?.windowTo||''};save(BRIDGE_KEY,impact);lastPayload=payload;
     const delta=[];if(added)delta.push(`${added} nuevo${added===1?'':'s'} confirmado${added===1?'':'s'}`);if(rescheduled)delta.push(`${rescheduled} reprogramado${rescheduled===1?'':'s'}`);if(suspended)delta.push(`${suspended} observado${suspended===1?'':'s'} fuera de ruta`);if(!delta.length)delta.push('sin cambios operativos');const phase=payload?.hydrating?' · cargando detalles…':'';setBridgeStatus(`CiO 3 meses · ${jobs.length} trabajos · ${confirmed.length} confirmados${phase} · ${delta.join(' · ')}`,new Date(impact.syncedAt).toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'}));
     setTimeout(()=>{try{window.InstaraSchedule?.refresh?.();window.InstaraNextDay?.preplan?.()}catch(_e){}},120);
@@ -7054,7 +7058,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <script id="instara-rc96-sync-hub-persistence-merge-guard">
 (function(){
 'use strict';
-const VERSION='RC96';
+const VERSION='RC96.1';
 const CFG_KEY='instara-sync-hub-config-v1';
 const GUARD_KEY='instara-rc96-merge-guard-v1';
 let mounting=false;
@@ -7160,7 +7164,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <script id="instara-rc96-integrity-date-route-law">
 (function(){
 'use strict';
-const VERSION='RC96';
+const VERSION='RC96.1';
 const OBSERVED_KEY='instara-cio-observed-jobs-v2';
 const MIGRATION_KEY='instara-rc96-date-integrity-v1';
 
