@@ -6475,7 +6475,7 @@ function tempStoreStops(entries,date){const s=appState(),stores=[...new Set(entr
 function ensureTomorrowCard(){if($('instara-tomorrow-card'))return;const anchor=$('live-activity')||$('mini-map-card');if(!anchor)return;const card=document.createElement('section');card.id='instara-tomorrow-card';card.innerHTML=`<div class="it-head"><div><small>PLAN PREPARADO POR INSTARA</small><b>Ruta de mañana</b></div><span class="it-state" id="instara-tomorrow-state">ESPERANDO TICKETS</span></div><div class="it-grid"><article><small>TRABAJOS</small><b id="instara-tomorrow-jobs">0</b></article><article><small>LOWE'S</small><b id="instara-tomorrow-stores">0</b></article><article><small>DESPERTAR</small><b id="instara-tomorrow-wake">—</b></article><article><small>SALIR</small><b id="instara-tomorrow-leave">—</b></article></div><button id="instara-post-tomorrow" type="button">POSTEAR RUTA DE MAÑANA</button><div id="instara-tomorrow-note">INSTARA prepara un borrador con los tickets conocidos y lo actualiza cuando CiO confirma estados. Los mensajes siguen bloqueados hasta las 7:30 AM del día real de la ruta.</div>`;anchor.parentNode.insertBefore(card,anchor);$('instara-post-tomorrow').onclick=postTomorrow}
 function fmtTime(v){if(!v)return '—';const d=new Date(v);return Number.isNaN(d.getTime())?'—':d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
 function renderTomorrowCard(){ensureTomorrowCard();const jobs=knownJobsFor(tomorrow()),plan=load(PLAN_KEY,null);const stores=new Set(jobs.map(e=>String(e.storeNumber||'')).filter(Boolean));const put=(id,v)=>{const n=$(id);if(n)n.textContent=v};put('instara-tomorrow-jobs',jobs.length);put('instara-tomorrow-stores',stores.size);put('instara-tomorrow-wake',plan?.date===tomorrow()?fmtTime(plan.wakeAt):'—');put('instara-tomorrow-leave',plan?.date===tomorrow()?fmtTime(plan.leaveAt):'—');const confirmed=jobs.filter(e=>e.cioConfirmed||!e.cioObservedOnly).length;put('instara-tomorrow-state',jobs.length?(plan?.date===tomorrow()?`LISTA · ${confirmed}/${jobs.length} CONF.`:'CALCULANDO'):'SIN TICKETS')}
-async function preplanTomorrow(){const s=appState();ensureTomorrowCard();renderTomorrowCard();if(!s||!window.MirutaRouteBrain?.analyze)return null;const date=tomorrow(),known=knownJobsFor(date);if(!known.length){save(PLAN_KEY,{date,jobs:0,at:new Date().toISOString()});renderTomorrowCard();return null}const permanentIds=new Set((s.entries||[]).map(e=>e.id));const tempJobs=known.filter(e=>!permanentIds.has(e.id)).map((e,i)=>({...e,id:e.id+'_plan',instaraDraftOnly:true,order:100+i,orderIndex:100+i}));const tempStores=tempStoreStops(known,date).filter(st=>!(s.entries||[]).some(e=>e.date===date&&e.isStoreStop&&String(e.storeNumber)===String(st.storeNumber)));const rd=$('route-date'),old=rd?.value||today();try{s.entries.push(...tempStores,...tempJobs);if(rd)rd.value=date;const analysis=await window.MirutaRouteBrain.analyze({autoApply:true,force:true});const plan={date,jobs:known.length,confirmed:known.filter(e=>e.cioConfirmed||!e.cioObservedOnly).length,leaveAt:analysis?.leaveAt||null,wakeAt:analysis?.wakeAt||null,finishAt:analysis?.sim?.finish||analysis?.finishAt||null,order:(analysis?.order||[]).map(e=>String(e.id||'').replace(/_plan$/,'')),at:new Date().toISOString()};save(PLAN_KEY,plan);return plan}catch(err){save(PLAN_KEY,{date,jobs:known.length,error:String(err?.message||err),at:new Date().toISOString()});return null}finally{s.entries=s.entries.filter(e=>!e.instaraDraftOnly);if(rd)rd.value=old;try{render()}catch(_e){};renderTomorrowCard()}}
+async function preplanTomorrow(){const s=appState();ensureTomorrowCard();renderTomorrowCard();if(!s||!window.MirutaRouteBrain?.analyze)return null;const date=tomorrow(),known=knownJobsFor(date);if(!known.length){save(PLAN_KEY,{date,jobs:0,at:new Date().toISOString()});renderTomorrowCard();return null}const permanentIds=new Set((s.entries||[]).map(e=>e.id));const tempJobs=known.filter(e=>!permanentIds.has(e.id)).map((e,i)=>({...e,id:e.id+'_plan',instaraDraftOnly:true,order:100+i,orderIndex:100+i}));const tempStores=tempStoreStops(known,date).filter(st=>!(s.entries||[]).some(e=>e.date===date&&e.isStoreStop&&String(e.storeNumber)===String(st.storeNumber)));const rd=$('route-date'),old=rd?.value||today();try{s.entries.push(...tempStores,...tempJobs);if(rd)rd.value=date;const analysisPromise=window.MirutaRouteBrain.analyze({autoApply:true,force:true});if(rd)rd.value=old;const analysis=await analysisPromise;const plan={date,jobs:known.length,confirmed:known.filter(e=>e.cioConfirmed||!e.cioObservedOnly).length,leaveAt:analysis?.leaveAt||null,wakeAt:analysis?.wakeAt||null,finishAt:analysis?.sim?.finish||analysis?.finishAt||null,order:(analysis?.order||[]).map(e=>String(e.id||'').replace(/_plan$/,'')),at:new Date().toISOString()};save(PLAN_KEY,plan);return plan}catch(err){save(PLAN_KEY,{date,jobs:known.length,error:String(err?.message||err),at:new Date().toISOString()});return null}finally{s.entries=s.entries.filter(e=>!e.instaraDraftOnly);if(rd)rd.value=old;try{render()}catch(_e){};renderTomorrowCard()}}
 function publishKnownDate(date){const s=appState();if(!s)return 0;const observed=stableObserved({jobs:load(OBSERVED_KEY,[])}).filter(j=>jobDate(j)===date);let added=0;for(const j of observed){const key=jobKey(j),exists=(s.entries||[]).some(e=>String(e.cioOrderId||e.cioJobNumber||e.po||e.cioEventId||'')===key);if(exists)continue;const e=draftEntry(j,date);e.instaraPublishedDraft=true;e.order=(s.entries||[]).filter(x=>x.date===date).length+1;e.orderIndex=e.order;s.entries.push(e);added++}if(added){try{localStorage.setItem('miruta-entries',JSON.stringify(s.entries));window.render?.()}catch(_e){}}return added}
 async function postTomorrow(){const date=tomorrow();publishKnownDate(date);const rd=$('route-date');if(!rd)return;rd.value=date;const force=$('force-route-date');if(force)force.checked=true;rd.dispatchEvent(new Event('change',{bubbles:true}));try{render()}catch(_e){};await window.MirutaRouteBrain?.analyze?.({autoApply:true,force:true});window.MirutaNav?.refreshRoute?.();window.MirutaRC68?.refresh?.();document.querySelector('.nav-btn[data-screen="hoy"]')?.click();window.scrollTo({top:0,behavior:'smooth'});const line=$('status-line');if(line)line.textContent='Ruta de mañana publicada con los tickets conocidos. INSTARA seguirá reemplazando borradores por estados confirmados de CiO. Mensajes bloqueados hasta las 7:30 AM.'}
 function patchBridge(){const bridge=window.InstaraMegaBridge;if(!bridge||bridge.__instaraRC87)return false;bridge.__instaraRC87=true;const original=bridge.applySnapshot?.bind(bridge);if(!original)return false;bridge.applySnapshot=function(payload){const merged=stableObserved(payload);const safe={...(payload||{}),jobs:merged};const result=original(safe);setTimeout(()=>{window.InstaraSchedule?.refresh?.();preplanTomorrow()},120);return result};return true}
@@ -6739,6 +6739,61 @@ addEventListener('message',ev=>{const d=ev.data;if(d?.source==='INSTARA_BRIDGE'&
 document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{refreshStable();renderFinance()},700));
 setInterval(()=>{if(document.body.dataset.activeScreen==='finanzas')renderFinance()},2500);
 window.InstaraRC90={repairAll,renderFinance,financialAgg,strictAmount,cioState};
+})();
+</script>
+
+
+<script id="instara-rc92-active-route-priority-fix-js">
+(function(){
+'use strict';
+const OBSERVED_KEY='instara-cio-observed-jobs-v2';
+const $=id=>document.getElementById(id);
+const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch(_e){return f}};
+const app=()=>window.__INSTARA_STATE__||window.state||null;
+const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const today=()=>iso(new Date());
+const tomorrow=()=>{const d=new Date();d.setDate(d.getDate()+1);return iso(d)};
+const norm=v=>String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+function dateOf(x){const v=x?.date||x?.scheduledDate||x?.start||'';const m=String(v).match(/^(\d{4}-\d{2}-\d{2})/);if(m)return m[1];const d=new Date(v);return Number.isNaN(d.getTime())?'':iso(d)}
+function statusOf(x){return norm([x?.status,x?.paymentState,x?.jobStatus,x?.cioJobStatus,x?.imsStatus,x?.cioIMSStatus,x?.lowesActivity,x?.cioLowesActivity].filter(Boolean).join(' '))}
+function terminal(x){const t=statusOf(x);return /cancel|void|declin|payment received|past paid po|\bpaid\b|\bclosed\b|\bcomplete\b|\bcompleted\b|work_complete|work complete/.test(t)}
+function operational(x){if(!x||x.isFinanceOnly||x.isStoreStop)return false;if(window.InstaraNextDay?.isOperationalJob){try{return window.InstaraNextDay.isOperationalJob(x)}catch(_e){}}
+ const t=norm([x.category,x.laborCategory,x.eventService,x.service,x.jobType,x.eventHtml,x.html].filter(Boolean).join(' '));
+ return /(dish\s*washer|dishwasher|microwave|\botr\b|toilet|faucet|disposal|cooktop|range|oven|hood|washer|dryer|installation|trip charge|additional mileage|change order|exception category)/.test(t);
+}
+function knownRows(){const s=app();const entries=(s?.entries||[]).filter(operational);const observed=(load(OBSERVED_KEY,[])||[]).filter(operational);return [...entries,...observed]}
+function pendingDates(){const t=today();const map=new Map();for(const row of knownRows()){const d=dateOf(row);if(!d||d<t||terminal(row))continue;map.set(d,(map.get(d)||0)+1)}return [...map.keys()].sort()}
+function hasPending(date){return knownRows().some(x=>dateOf(x)===date&&!terminal(x)&&operational(x))}
+function resolveActiveDate(){const now=new Date(),t=today();if(now.getDay()===0){const mon=tomorrow();if(hasPending(mon))return mon}
+ if(hasPending(t))return t;
+ const dates=pendingDates();return dates[0]||t;
+}
+let enforcing=false,lastDate='';
+async function enforceActiveRoute(reason){if(enforcing)return;enforcing=true;try{
+ const active=resolveActiveDate();
+ if(window.InstaraNextDay?.publishKnownDate)window.InstaraNextDay.publishKnownDate(active);
+ const rd=$('route-date'),force=$('force-route-date');
+ if(force)force.checked=true;
+ if(rd&&rd.value!==active){rd.value=active;rd.dispatchEvent(new Event('change',{bubbles:true}));}
+ if(active!==lastDate){lastDate=active;try{window.render?.()}catch(_e){};try{window.MirutaNav?.refreshRoute?.()}catch(_e){};try{window.MirutaRC68?.refresh?.()}catch(_e){};
+   setTimeout(()=>{window.MirutaRouteBrain?.analyze?.({autoApply:true,force:true}).catch?.(()=>{})},120);
+ }
+ const btn=$('instara-post-tomorrow');
+ if(btn){const sunday=new Date().getDay()===0;const currentPending=hasPending(active)&&active!==tomorrow();const allowed=sunday||!currentPending;
+   btn.disabled=!allowed;btn.textContent=allowed?'POSTEAR RUTA DE MAÑANA':'MAÑANA PREPARADA · CIERRA RUTA ACTUAL';
+   btn.onclick=async()=>{const chosen=resolveActiveDate();const sundayNow=new Date().getDay()===0;const blocked=!sundayNow&&hasPending(chosen)&&chosen!==tomorrow();if(blocked){const line=$('status-line');if(line)line.textContent=`La ruta activa sigue siendo ${chosen}. INSTARA no reemplazará una ruta pendiente por la de mañana.`;await enforceActiveRoute('blocked-post');return}
+     window.InstaraNextDay?.publishKnownDate?.(tomorrow());
+     const r=$('route-date');if(r){r.value=tomorrow();r.dispatchEvent(new Event('change',{bubbles:true}))}
+     await window.MirutaRouteBrain?.analyze?.({autoApply:true,force:true});document.querySelector('.nav-btn[data-screen="hoy"]')?.click();
+   };
+ }
+ const line=$('status-line');
+ if(line&&reason==='boot')line.textContent=`Ruta activa protegida por INSTARA: ${active}. La siguiente ruta puede prepararse, pero no reemplaza esta hasta cerrarla.`;
+}finally{enforcing=false}}
+addEventListener('message',ev=>{const d=ev.data;if(d?.source==='INSTARA_BRIDGE'&&d?.type==='INSTARA_BRIDGE_SNAPSHOT')setTimeout(()=>enforceActiveRoute('bridge'),180)});
+document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>enforceActiveRoute('boot'),1000));
+setInterval(()=>enforceActiveRoute('watchdog'),1500);
+window.InstaraActiveRouteLaw={resolveActiveDate,enforceActiveRoute,hasPending,pendingDates};
 })();
 </script>
 
