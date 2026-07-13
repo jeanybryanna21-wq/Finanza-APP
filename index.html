@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC104">
+  <meta name="instara-ai-version" content="RC105">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2007,7 +2007,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     state.entries.forEach(e=>{
       if(e.type !== 'income') return;
       if(statusMigration[e.status]) e.status = statusMigration[e.status];
-      if(!e.status) e.status = 'completed';
+      if(!e.status) e.status = 'pending';
     });
 
     try{
@@ -6897,7 +6897,17 @@ const prRefs=j=>Array.isArray(j?.prReferences)?j.prReferences:[...new Set((Strin
 const jobId=j=>String(j?.orderViewId||j?.cioOrderId||j?.jobNumber||j?.cioJobNumber||j?.purchaseOrderNumber||j?.po||j?.eventId||j?.cioEventId||'');
 const normDate=v=>{const s=String(v||'');const a=s.match(/^(\d{4}-\d{2}-\d{2})/);if(a)return a[1];const m=s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);return m?`${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`:''};
 function explicitAmount(j){return Number(j?.purchaseOrderAmount||j?.amount||0)||0}
-function paymentState(j){const amount=explicitAmount(j);if(amount<=0)return 'no_payment';if(j?.crewPaymentComplete===true||j?.paymentState==='completed'||/payment received|past paid po|\bpaid\b/i.test([j?.jobStatus,j?.cioJobStatus,j?.status].join(' ')))return 'completed';return 'pending'}
+function paymentState(j){
+  const amount=explicitAmount(j);
+  if(amount<=0)return 'no_payment';
+  const raw=j?._cioRaw||{};
+  const t=[
+    j?.imsStatus,j?.cioIMSStatus,j?.jobStatus,j?.cioJobStatus,j?.displayStatus,j?.lowesActivity,
+    raw?.imsStatus,raw?.jobStatus,raw?.displayStatus,raw?.lowesActivity
+  ].filter(Boolean).join(' ').toLowerCase();
+  if(j?.crewPaymentComplete===true||/past\s+paid\s+po|payment\s+receiv(?:ed|ing)|payment\s+posted/.test(t))return 'completed';
+  return 'pending';
+}
 function exceptionKind(j){const t=text(j).toLowerCase();if(/additional mileage/.test(t))return'additional mileage';if(/trip charge/.test(t))return'trip charge';if(/change order/.test(t))return'change order';if(/compensation/.test(t))return'compensation';return'exception category'}
 function median(a){const x=a.filter(n=>Number(n)>0).map(Number).sort((a,b)=>a-b);if(!x.length)return 0;const m=Math.floor(x.length/2);return x.length%2?x[m]:(x[m-1]+x[m])/2}
 function learnedExceptionAmount(job,jobs){const kind=exceptionKind(job);let vals=jobs.filter(j=>isException(j)&&explicitAmount(j)>0&&exceptionKind(j)===kind).map(explicitAmount);if(!vals.length)vals=jobs.filter(j=>isException(j)&&explicitAmount(j)>0).map(explicitAmount);return Math.round(median(vals)*100)/100}
@@ -6947,7 +6957,7 @@ function decorateCalendar(){
 }
 addEventListener('message',ev=>{const d=ev.data;if(d?.source==='INSTARA_BRIDGE'&&d?.type==='INSTARA_BRIDGE_SNAPSHOT'&&d.payload){setTimeout(()=>{enforceObserved();enforceEntries();decorateCalendar();window.InstaraSchedule?.refresh?.();setTimeout(decorateCalendar,40)},80)}});
 document.addEventListener('DOMContentLoaded',()=>{window.state=window.__INSTARA_STATE__;setTimeout(decorateCalendar,300);});
-setInterval(()=>{if(document.body.dataset.activeScreen==='schedule')decorateCalendar()},30000);
+/* RC105: legacy PaymentLaw mutator disabled; RC103 is the sole Mega status writer. */
 window.InstaraPaymentLaw={enforceObserved,enforceEntries,paymentView,createPrExceptionTickets};
 })();
 </script>
@@ -6994,23 +7004,25 @@ function strictAmount(j){
   return Math.round(n*100)/100;
 }
 function cioState(j){
-  const t=txt(j);
-  const amount=strictAmount(j);
-  if(/cancel|void|declin|customer request the delay|customer requested delay/.test(t))return 'cancelled';
-  if(j?.crewPaymentComplete===true||j?.paymentState==='completed'||/payment received|past paid po|\bpaid\b/.test(t))return amount>0?'paid':'completed';
-  if(/\bclosed\b|\bcomplete\b|\bcompleted\b|work_complete|work complete/.test(t))return 'completed';
+  const raw=j?._cioRaw||{};
+  const t=[
+    j?.imsStatus,j?.cioIMSStatus,j?.jobStatus,j?.cioJobStatus,j?.displayStatus,j?.lowesActivity,
+    j?.statusText,j?.notesText,
+    raw?.imsStatus,raw?.jobStatus,raw?.displayStatus,raw?.lowesActivity,raw?.statusText,raw?.notesText
+  ].filter(Boolean).join(' | ').toLowerCase();
+
+  if(/(?:^|\W)(?:cancelled|canceled|void|declined)(?:\W|$)/.test(t))return 'cancelled';
+  if(/(?:^|\W)past\s+paid\s+po(?:\W|$)|(?:^|\W)payment\s+receiv(?:ed|ing)(?:\W|$)|(?:^|\W)payment\s+posted(?:\W|$)/.test(t))return 'paid';
+  if(/(?:^|\W)job\s+completed(?:\W|$)|(?:^|\W)work\s+completed(?:\W|$)|(?:^|\W)installation\s+completed(?:\W|$)/.test(t))return 'completed';
   return 'pending';
 }
 function normalizeJob(j){
   if(!j)return j;
-  const amount=strictAmount(j),st=cioState(j),r=rate();
+  const amount=strictAmount(j),r=rate();
   j.purchaseOrderAmount=amount;
   j.amount=amount;
   j.rate=r;
   j.net=Math.round(amount*r)/100;
-  j.paymentState=amount<=0?'no_payment':(st==='paid'?'completed':'pending');
-  j.status=st;
-  j.cioDerivedStatus=st;
   if(amount>0)j.paymentAmountSource='Crew Payment Tracking · Purchase Order Amount';
   return j;
 }
@@ -7031,9 +7043,13 @@ function upsertClosedFinance(jobs){
 }
 function repairAll(){
   const jobs=(load(OBSERVED_KEY,[])||[]).map(normalizeJob);
-  save(OBSERVED_KEY,jobs);
   const s=app();
-  if(s?.entries){for(const e of s.entries){if(e.bridgeSource==='CiO Mega Bridge'||e.cioOrderId||e.cioEventId)normalizeJob(e)};upsertClosedFinance(jobs);save('miruta-entries',s.entries)}
+  if(s?.entries){
+    for(const e of s.entries){
+      if(e.bridgeSource==='CiO Mega Bridge'||e.cioOrderId||e.cioEventId)normalizeJob(e);
+    }
+    save('miruta-entries',s.entries);
+  }
   return jobs;
 }
 function periodBounds(kind){
@@ -7062,6 +7078,7 @@ function financialAgg(start,end){
 function countHtml(a){return `<div class="count-chip"><div class="n">${a.counts.total}</div><div class="l">Detectados</div></div><div class="count-chip completed"><div class="n">${a.counts.completed}</div><div class="l">Completados</div></div><div class="count-chip pending"><div class="n">${a.counts.pending}</div><div class="l">Pendientes</div></div><div class="count-chip cancelled"><div class="n">${a.counts.cancelled}</div><div class="l">Cancelados</div></div><div class="count-chip missing"><div class="n">${a.counts.missing}</div><div class="l">Sin precio</div></div><div class="count-chip paid"><div class="n">${a.counts.paid}</div><div class="l">Pagados</div></div>`}
 function amountHtml(a){return `<div class="stat system"><div class="label">Total Crew PO cerrado</div><div class="value">${money(a.gross)}</div></div><div class="stat expected"><div class="label">Pago esperado Mega ${rate()}%</div><div class="value">${money(a.expected)}</div></div><div class="stat expense"><div class="label">Gastos</div><div class="value">${money(a.expense)}</div></div><div class="stat net"><div class="label">Neto</div><div class="value">${money(a.net)}</div></div>`}
 function renderFinance(){
+  try{window.InstaraRC103?.reconcileAll?.()}catch(_e){}
   repairAll();
   for(const kind of ['day','week','month']){const [a,b]=periodBounds(kind),x=financialAgg(a,b),c=$(`counts-${kind}`),m=$(`amounts-${kind}`);if(c)c.innerHTML=countHtml(x);if(m)m.innerHTML=amountHtml(x)}
   const goals=(()=>{try{return {weekly:1990,monthly:7800,...JSON.parse(localStorage.getItem('instara-financial-goals-v1')||'{}')}}catch(_e){return{weekly:1990,monthly:7800}}})();
@@ -7071,9 +7088,10 @@ function renderFinance(){
   const wc=$('rc76-week-copy'),mc=$('rc76-month-copy');if(wc)wc.textContent=week>=goals.weekly?`Meta cubierta por ${money(week-goals.weekly)}.`:`Faltan ${money(goals.weekly-week)} para la meta semanal.`;if(mc)mc.textContent=month>=goals.monthly?`Meta cubierta por ${money(month-goals.monthly)}.`:`Faltan ${money(goals.monthly-month)} para la meta mensual.`;
 }
 function refreshStable(){
+  try{window.InstaraRC103?.reconcileAll?.()}catch(_e){}
   repairAll();
   try{window.InstaraSchedule?.refresh?.()}catch(_e){}
-  setTimeout(()=>{try{window.InstaraPaymentLaw?.paymentView&&document.body.dataset.activeScreen==='schedule'&&window.InstaraPaymentLaw?.enforceEntries?.()}catch(_e){};renderFinance()},80);
+  setTimeout(()=>{renderFinance()},80);
 }
 addEventListener('message',ev=>{const d=ev.data;if(d?.source==='INSTARA_BRIDGE'&&d?.type==='INSTARA_BRIDGE_SNAPSHOT'&&d.payload){setTimeout(refreshStable,120)}});
 document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{refreshStable();renderFinance()},700));
@@ -7588,7 +7606,7 @@ window.InstaraRC97={cleanupManualRouteCache,moveSelectedDayToToday,install};
 <script id="instara-rc98-runtime-integrity">
 (function(){
 'use strict';
-const VERSION='RC104';
+const VERSION='RC105';
 const $=id=>document.getElementById(id);
 function state(){return window.__INSTARA_STATE__||window.state}
 function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
@@ -8466,6 +8484,120 @@ function install(){
 document.addEventListener('DOMContentLoaded',install);
 window.addEventListener('focus',install);
 window.InstaraRC104={clearTodayRoute,install};
+})();
+</script>
+
+
+<style id="instara-rc105-status-stability-css">
+#instara-status-engine-indicator{
+  display:none;
+}
+</style>
+<script id="instara-rc105-single-status-writer">
+(function(){
+'use strict';
+
+const VERSION='RC105';
+const OBSERVED_KEY='instara-cio-observed-jobs-v2';
+const app=()=>window.__INSTARA_STATE__||window.state;
+const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch(_e){return f}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(_e){return false}};
+const keyOf=j=>String(
+  j?.orderViewId||j?.cioOrderId||j?.jobNumber||j?.cioJobNumber||
+  j?.purchaseOrderNumber||j?.po||j?.eventId||j?.cioEventId||j?.id||''
+);
+const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+
+function rawText(j){
+  const raw=j?._cioRaw||{};
+  return [
+    j?.imsStatus,j?.cioIMSStatus,j?.jobStatus,j?.cioJobStatus,j?.displayStatus,
+    j?.lowesActivity,j?.cioLowesActivity,j?.statusText,j?.notesText,
+    raw?.imsStatus,raw?.jobStatus,raw?.displayStatus,raw?.lowesActivity,
+    raw?.statusText,raw?.notesText
+  ].filter(Boolean).join(' | ').toLowerCase();
+}
+function hasPaid(j){
+  const t=rawText(j);
+  return /(?:^|\W)past\s+paid\s+po(?:\W|$)|(?:^|\W)payment\s+receiv(?:ed|ing)(?:\W|$)|(?:^|\W)payment\s+posted(?:\W|$)/.test(t);
+}
+function hasCompleted(j){
+  const t=rawText(j);
+  return /(?:^|\W)job\s+completed(?:\W|$)|(?:^|\W)work\s+completed(?:\W|$)|(?:^|\W)installation\s+completed(?:\W|$)/.test(t);
+}
+function hasCancelled(j){
+  const t=rawText(j);
+  return /(?:^|\W)(?:cancelled|canceled|void|declined)(?:\W|$)/.test(t);
+}
+function canonicalStatus(entry,raw){
+  const joined={...(raw||{}),_cioRaw:{...(raw||{}),...(entry?._cioRaw||{})}};
+  if(entry?.manualCompletion===true||entry?.mirutaCompletedAt||entry?.completedAt)return hasPaid(joined)?'paid':'completed';
+  if(hasCancelled(joined))return 'cancelled';
+  if(hasPaid(joined))return 'paid';
+  if(hasCompleted(joined))return 'completed';
+  return 'pending';
+}
+function stabilize(reason='watchdog'){
+  const s=app();if(!s?.entries)return {changed:0,total:0,reason};
+  const observed=load(OBSERVED_KEY,[]);
+  const byKey=new Map(observed.map(j=>[keyOf(j),j]).filter(pair=>pair[0]));
+  let changed=0,total=0;
+
+  for(const entry of s.entries){
+    const isMega=entry?.bridgeSource==='CiO Mega Bridge'||entry?.cioOrderId||entry?.cioEventId||entry?.cioJobNumber;
+    if(!isMega)continue;
+    total++;
+
+    const raw=byKey.get(keyOf(entry))||entry._cioRaw||entry;
+    const next=canonicalStatus(entry,raw);
+    const amount=Number(entry.purchaseOrderAmount||entry.amount||0)||0;
+    const before=`${entry.status}|${entry.paymentState}`;
+
+    entry.status=next;
+    entry.paymentState=
+      next==='paid'?'completed':
+      next==='cancelled'?'cancelled':
+      amount>0?'pending':'no_payment';
+    entry.cioDerivedStatus=next;
+    entry.megaEvidenceState=next;
+    entry.statusAuthority='RC105_SINGLE_WRITER';
+    entry.statusCheckedAt=new Date().toISOString();
+
+    if(`${entry.status}|${entry.paymentState}`!==before)changed++;
+  }
+
+  if(changed){
+    save('miruta-entries',s.entries);
+    try{window.persistEntries?.()}catch(_e){}
+  }
+  return {changed,total,reason};
+}
+
+let applying=false;
+function stableRefresh(reason){
+  if(applying)return;
+  applying=true;
+  try{
+    const result=stabilize(reason);
+    if(result.changed){
+      try{window.render?.();window.InstaraSchedule?.refresh?.()}catch(_e){}
+    }
+    try{window.InstaraRC90?.renderFinance?.()}catch(_e){}
+  }finally{
+    setTimeout(()=>{applying=false},80);
+  }
+}
+
+document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>stableRefresh('boot'),900));
+window.addEventListener('focus',()=>setTimeout(()=>stableRefresh('focus'),120));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(()=>stableRefresh('visible'),120)});
+addEventListener('message',event=>{
+  const d=event.data;
+  if(d?.source==='INSTARA_BRIDGE'&&d?.type==='INSTARA_BRIDGE_SNAPSHOT')setTimeout(()=>stableRefresh('bridge'),180);
+});
+setInterval(()=>stableRefresh('guard'),5000);
+
+window.InstaraRC105={stabilize,stableRefresh,canonicalStatus,hasPaid,hasCompleted,hasCancelled};
 })();
 </script>
 
