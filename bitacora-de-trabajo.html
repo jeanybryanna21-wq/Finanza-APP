@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC84">
+  <meta name="instara-ai-version" content="RC86">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1431,13 +1431,13 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   <div class="section-card">
     <button class="section-toggle open" data-section="route-intelligence" type="button"><span>IA de ruta y tiempos</span><span class="chev">▾</span></button>
     <div class="section-body open" id="body-route-intelligence">
-      <div class="section-hint">Miruta organiza la ruta desde tu base, respeta tiendas Lowe's y ventanas de Mega, y aprende de tus tiempos reales. Los SMS sugeridos siguen bloqueados antes de las 7:00 AM.</div>
+      <div class="section-hint">Miruta organiza la ruta desde tu base, respeta tiendas Lowe's y ventanas de Mega, y aprende de tus tiempos reales. Los SMS sugeridos siguen bloqueados antes de las 7:30 AM.</div>
       <div class="route-intelligence-settings">
         <div class="field" style="grid-column:1/-1"><label>Base de salida</label><input type="text" id="miruta-base-address" value="6451 Archcrest Dr, Roanoke, VA 24019"></div>
         <div class="field"><label>Preparación antes de salir (min)</label><input type="number" min="10" max="180" id="miruta-prep-minutes" value="60"></div>
         <div class="field"><label>Margen para llegar a tiempo (min)</label><input type="number" min="0" max="60" id="miruta-route-buffer" value="15"></div>
         <div class="field"><label>Tiempo en Lowe's (min)</label><input type="number" min="0" max="90" id="miruta-store-minutes" value="10"></div>
-        <div class="field"><label>SMS sugeridos desde</label><input type="text" value="7:00 AM" readonly></div>
+        <div class="field"><label>SMS sugeridos desde</label><input type="text" value="7:30 AM" readonly></div>
       </div>
       <div class="service-time-list" id="miruta-service-time-list"></div>
       <div class="miruta-learning-note">El tiempo efectivo mezcla tu valor inicial con el promedio real aprendido. Cada trabajo completado después de una llegada GPS mejora el cálculo del servicio correspondiente.</div>
@@ -4556,7 +4556,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     function clock(dt){return dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});}
     function minsDiff(a,b){return Math.round((a-b)/60000);}
     function routeDate(){return document.getElementById('route-date')?.value||todayISO();}
-    function isMessagingWindow(dateIso){const now=new Date();return dateIso===todayISO() && now.getHours()>=SUGGEST_AFTER_HOUR;}
+    function isMessagingWindow(dateIso){const now=new Date();return dateIso===todayISO() && (now.getHours()*60+now.getMinutes())>=450;}
     function getFirstNameSafe(name){return typeof getFirstName==='function'?getFirstName(name):(String(name||'Customer').trim().split(/\s+/)[0]||'Customer');}
     function smsHref(phone,message){const digits=String(phone||'').replace(/[^\d+]/g,'');return digits?`sms:${digits}&body=${encodeURIComponent(message)}`:'';}
     function serviceName(entry){return typeof simplifyServiceName==='function'?simplifyServiceName(entry.category):(entry.category||'installation');}
@@ -4601,8 +4601,8 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       const last=plan[plan.length-1];
       $s('schedule-end-time').textContent=last?clock(new Date(startedAt+last.departureOffsetSeconds*1000)):'—';
       if(!isMessagingWindow(dateIso)){
-        $s('schedule-intel-status').textContent='SMS desde 7:00 AM';
-        list.innerHTML='<div class="schedule-intel-empty">Miruta ya calculó el horario, pero no sugerirá mensajes antes de las 7:00 AM del día de la ruta. Puedes organizar la ruta de madrugada sin recibir avisos repetidos.</div>';
+        $s('schedule-intel-status').textContent='SMS desde 7:30 AM';
+        list.innerHTML='<div class="schedule-intel-empty">Miruta ya calculó el horario, pero no sugerirá mensajes antes de las 7:30 AM del día de la ruta. Puedes organizar la ruta de madrugada sin recibir avisos repetidos.</div>';
         return;
       }
       $s('schedule-intel-status').textContent=alerts.length?`${alerts.length} aviso${alerts.length===1?'':'s'} sugerido${alerts.length===1?'':'s'}`:'Horario dentro de lo previsto';
@@ -5485,7 +5485,13 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   function jobKey(j){return String(j.orderViewId||j.jobNumber||j.purchaseOrderNumber||j.eventId||'')}
   function entryKey(e){return String(e.cioOrderId||e.cioJobNumber||e.po||e.cioEventId||'')}
   function applySnapshot(payload){
-    const jobs=Array.isArray(payload?.jobs)?payload.jobs:[];
+    const rawJobs=Array.isArray(payload?.jobs)?payload.jobs:[];
+    const jobs=window.InstaraNextDay?.cleanJobs?window.InstaraNextDay.cleanJobs(rawJobs):rawJobs.filter(j=>{
+      const text=[j.eventHtml,j.eventCustomer,j.customerName,j.eventService,j.laborCategory,j.service].filter(Boolean).join(' ').toLowerCase();
+      const resource=/\b1 man team\b|\bone man team\b|\bmax\s*\d+\s*jobs\b|resource availability|crew availability/.test(text);
+      const service=/(dish\s*washer|dishwasher|microwave|\botr\b|toilet|faucet|disposal|cooktop|range|oven|hood|washer|dryer|installation|trip charge|additional mileage|change order|exception category)/.test(text);
+      return service&&!resource;
+    });
     save(OBSERVED_KEY,jobs);
     const confirmed=jobs.filter(j=>j.confirmed),observedById=new Map(jobs.map(j=>[jobKey(j),j]));
     let added=0,rescheduled=0,updated=0,suspended=0,preserved=0;
@@ -5493,7 +5499,8 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
     for(const e of (state.entries||[]).filter(x=>x.bridgeSource==='CiO Mega Bridge'&&!statusIsDone(x))){const j=observedById.get(entryKey(e));if(j&&!j.confirmed&&!e.cioObservedOnly){e.status='cancelled';e.cioObservedOnly=true;e.cioSuspended=true;e.cioSuspendedReason=j.confirmationReason||j.jobStatus||j.imsStatus||'Observado, no confirmado';addJournal(e,`INSTARA dejó este trabajo fuera de la ruta activa porque CiO todavía no lo considera confirmado: ${e.cioSuspendedReason}.`);suspended++}}
     persistEntries();render();window.InstaraSchedule?.refresh?.();
     const impact={added,rescheduled,updated,suspended,preserved,totalObserved:jobs.length,totalConfirmed:confirmed.length,syncedAt:payload.syncedAt||nowIso(),source:payload.source||'CiO',windowFrom:payload.schedule?.windowFrom||'',windowTo:payload.schedule?.windowTo||''};save(BRIDGE_KEY,impact);lastPayload=payload;
-    const delta=[];if(added)delta.push(`${added} nuevo${added===1?'':'s'} confirmado${added===1?'':'s'}`);if(rescheduled)delta.push(`${rescheduled} reprogramado${rescheduled===1?'':'s'}`);if(suspended)delta.push(`${suspended} observado${suspended===1?'':'s'} fuera de ruta`);if(!delta.length)delta.push('sin cambios operativos');setBridgeStatus(`CiO 3 meses · ${jobs.length} trabajos · ${confirmed.length} confirmados · ${delta.join(' · ')}`,new Date(impact.syncedAt).toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'}));
+    const delta=[];if(added)delta.push(`${added} nuevo${added===1?'':'s'} confirmado${added===1?'':'s'}`);if(rescheduled)delta.push(`${rescheduled} reprogramado${rescheduled===1?'':'s'}`);if(suspended)delta.push(`${suspended} observado${suspended===1?'':'s'} fuera de ruta`);if(!delta.length)delta.push('sin cambios operativos');const phase=payload?.hydrating?' · cargando detalles…':'';setBridgeStatus(`CiO 3 meses · ${jobs.length} trabajos · ${confirmed.length} confirmados${phase} · ${delta.join(' · ')}`,new Date(impact.syncedAt).toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'}));
+    setTimeout(()=>{try{window.InstaraSchedule?.refresh?.();window.InstaraNextDay?.preplan?.()}catch(_e){}},120);
     if(added||rescheduled||suspended)setTimeout(async()=>{try{await window.MirutaRouteBrain?.analyze?.({autoApply:true,force:true});window.MirutaSchedule?.recalculate?.(true);window.MirutaNav?.refreshRoute?.();window.MirutaRC68?.refresh?.()}catch(_e){}},250);
     return impact;
   }
@@ -6407,5 +6414,119 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
  #screen-schedule .schedule-ticket .copy span{font-size:12px!important}
 }
 </style>
+
+
+<style id="instara-rc85-nextday-ops-css">
+#instara-tomorrow-card{margin:14px 0 16px;padding:16px 18px;border-radius:24px;background:rgba(5,10,14,.88);border:1px solid rgba(255,208,90,.46);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+#instara-tomorrow-card .it-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+#instara-tomorrow-card .it-head small{display:block;color:#7ec7ff!important;font-weight:800;letter-spacing:.1em;font-size:12px!important}
+#instara-tomorrow-card .it-head b{display:block;color:#ffd05a!important;font-size:24px!important;line-height:1.1;margin-top:4px}
+#instara-tomorrow-card .it-state{color:#fff!important;font-weight:800;font-size:13px!important;text-align:right}
+#instara-tomorrow-card .it-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+#instara-tomorrow-card .it-grid article{padding:10px;border-radius:15px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.13);min-width:0}
+#instara-tomorrow-card .it-grid small{display:block;color:#7ec7ff!important;font-size:11px!important;font-weight:700}
+#instara-tomorrow-card .it-grid b{display:block;color:#ffd05a!important;font-size:18px!important;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#instara-post-tomorrow{width:100%;min-height:50px;border-radius:16px;border:1px solid #ffd05a;background:#ffd05a;color:#101418!important;font-weight:900;font-size:16px!important;letter-spacing:.03em}
+#instara-tomorrow-note{margin-top:9px;color:#fff!important;font-size:13px!important;line-height:1.35}
+.schedule-day.today{outline:2px solid #ffd05a!important;outline-offset:2px!important}
+.schedule-day.selected{box-shadow:0 0 0 3px #7ec7ff inset,0 9px 24px rgba(16,42,56,.26)!important}
+.schedule-day.today.selected{box-shadow:0 0 0 3px #7ec7ff inset,0 0 0 2px #ffd05a,0 9px 24px rgba(16,42,56,.26)!important}
+.schedule-ticket .copy b{font-size:14px!important}
+.schedule-ticket .copy span,.schedule-ticket .time,.schedule-ticket .po,.schedule-ticket .pill,.schedule-ticket .schedule-more{font-size:12px!important;line-height:1.3!important}
+.schedule-ticket{padding:13px 8px!important;grid-template-columns:64px 4px minmax(0,1fr) minmax(92px,auto)!important;gap:10px!important}
+.schedule-ticket .copy span{white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+.schedule-ticket .meta{min-width:92px}
+.schedule-ticket .schedule-more{color:#ffd05a!important;font-weight:900}
+@media(max-width:640px){#instara-tomorrow-card .it-grid{grid-template-columns:repeat(2,1fr)}.schedule-ticket{grid-template-columns:58px 4px minmax(0,1fr)!important}.schedule-ticket .meta{grid-column:3;align-items:flex-start!important;text-align:left!important;margin-top:4px}}
+</style>
+
+
+<script id="instara-rc85-nextday-ops-js">
+(function(){
+'use strict';
+const OBSERVED_KEY='instara-cio-observed-jobs-v2';
+const PLAN_KEY='instara-next-day-plan-v1';
+const $=id=>document.getElementById(id);
+const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch(_e){return f}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_e){}};
+const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const today=()=>iso(new Date());
+const tomorrow=()=>{const d=new Date();d.setDate(d.getDate()+1);return iso(d)};
+const norm=v=>String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+const joined=j=>[j.eventHtml,j.html,j.eventCustomer,j.customerName,j.eventService,j.laborCategory,j.service,j.jobType,j.scheduleDetails,j.deliveryNotes,j.scopeNotes].filter(Boolean).join(' ');
+function durationHours(j){const a=new Date(j.start||j.scheduledDate||''),b=new Date(j.end||'');return Number.isFinite(a.getTime())&&Number.isFinite(b.getTime())?(b-a)/36e5:0}
+function isResourceBlock(j){
+  const t=norm(joined(j));
+  const resource=/\b1 man team\b|\bone man team\b|\bmax\s*\d+\s*jobs\b|\bonly\s+\d{3,4}(?:\s*[,\/]\s*\d{3,4})+|resource availability|crew availability/.test(t);
+  const noInstall=!/(dish\s*washer|dishwasher|microwave|\botr\b|toilet|faucet|disposal|cooktop|range|oven|hood|washer|dryer|installation|trip charge|additional mileage|change order|exception category)/.test(t);
+  return (resource&&noInstall)||(durationHours(j)>24&&noInstall);
+}
+function isOperationalJob(j){
+  if(!j||isResourceBlock(j))return false;
+  const t=norm(joined(j));
+  const service=/(dish\s*washer|dishwasher|microwave|\botr\b|toilet|faucet|disposal|cooktop|range|oven|hood|washer|dryer|installation|trip charge|additional mileage|change order|exception category)/.test(t);
+  const identity=Boolean(j.customerName||j.eventCustomer||j.orderViewId||j.jobNumber||j.purchaseOrderNumber||j.eventId);
+  return service&&identity;
+}
+function strictConfirmed(j){
+  if(j.confirmed)return true;
+  const ims=norm(j.imsStatus),status=norm(j.jobStatus),date=String(j.scheduledDate||j.start||'');
+  return ims==='scheduled'&&status==='scheduled'&&/\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4}/.test(date);
+}
+function cleanJobs(jobs){return (Array.isArray(jobs)?jobs:[]).filter(isOperationalJob).map(j=>({...j,confirmed:strictConfirmed(j),instaraOperationalJob:true}))}
+function cleanExisting(){
+  const observed=load(OBSERVED_KEY,[]),clean=cleanJobs(observed);if(clean.length!==observed.length)save(OBSERVED_KEY,clean);
+  if(window.state?.entries){const before=state.entries.length;state.entries=state.entries.filter(e=>!(e.bridgeSource==='CiO Mega Bridge'&&!['completed','paid'].includes(e.status)&&isResourceBlock(e)));if(state.entries.length!==before){try{persistEntries();render()}catch(_e){}}}
+  window.InstaraSchedule?.refresh?.();
+}
+function fmtTime(v){if(!v)return '—';const d=new Date(v);return Number.isNaN(d.getTime())?'—':d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
+function tomorrowJobs(){const d=tomorrow();return (state.entries||[]).filter(e=>e.date===d&&e.type==='income'&&!e.isFinanceOnly&&!e.isStoreStop&&!['cancelled','missing_price'].includes(e.status))}
+function tomorrowStores(){const d=tomorrow();return (state.entries||[]).filter(e=>e.date===d&&e.isStoreStop&&!['cancelled'].includes(e.status)).length}
+function ensureTomorrowCard(){
+  if($('instara-tomorrow-card'))return;
+  const anchor=$('live-activity')||$('mini-map-card');if(!anchor)return;
+  const card=document.createElement('section');card.id='instara-tomorrow-card';card.innerHTML=`<div class="it-head"><div><small>PLAN PREPARADO POR INSTARA</small><b>Ruta de mañana</b></div><span class="it-state" id="instara-tomorrow-state">ESPERANDO TICKETS</span></div><div class="it-grid"><article><small>TRABAJOS</small><b id="instara-tomorrow-jobs">0</b></article><article><small>LOWE'S</small><b id="instara-tomorrow-stores">0</b></article><article><small>DESPERTAR</small><b id="instara-tomorrow-wake">—</b></article><article><small>SALIR</small><b id="instara-tomorrow-leave">—</b></article></div><button id="instara-post-tomorrow" type="button">POSTEAR RUTA DE MAÑANA</button><div id="instara-tomorrow-note">INSTARA prepara la ruta antes del día de trabajo. Los mensajes a clientes siguen bloqueados hasta las 7:30 AM del día de la ruta.</div>`;
+  anchor.parentNode.insertBefore(card,anchor);
+  $('instara-post-tomorrow').onclick=postTomorrow;
+}
+function renderTomorrowCard(){
+  ensureTomorrowCard();const jobs=tomorrowJobs(),plan=load(PLAN_KEY,null);const put=(id,v)=>{const n=$(id);if(n)n.textContent=v};
+  put('instara-tomorrow-jobs',jobs.length);put('instara-tomorrow-stores',tomorrowStores());put('instara-tomorrow-wake',plan?.date===tomorrow()?fmtTime(plan.wakeAt):'—');put('instara-tomorrow-leave',plan?.date===tomorrow()?fmtTime(plan.leaveAt):'—');
+  put('instara-tomorrow-state',jobs.length?(plan?.date===tomorrow()?'LISTA':'CALCULANDO'):'SIN CONFIRMADOS');
+}
+async function preplanTomorrow(){
+  cleanExisting();ensureTomorrowCard();renderTomorrowCard();
+  const jobs=tomorrowJobs();if(!jobs.length){save(PLAN_KEY,{date:tomorrow(),jobs:0,at:new Date().toISOString()});renderTomorrowCard();return null}
+  const rd=$('route-date');if(!rd||!window.MirutaRouteBrain?.analyze)return null;const old=rd.value||today();
+  try{
+    rd.value=tomorrow();
+    const analysis=await window.MirutaRouteBrain.analyze({autoApply:true,force:true});
+    const plan=analysis?{date:tomorrow(),jobs:jobs.length,leaveAt:analysis.leaveAt||null,wakeAt:analysis.wakeAt||null,finishAt:analysis.sim?.finish||analysis.finishAt||null,order:(analysis.order||[]).map(e=>e.id),at:new Date().toISOString()}:{date:tomorrow(),jobs:jobs.length,at:new Date().toISOString()};
+    save(PLAN_KEY,plan);return plan;
+  }catch(err){save(PLAN_KEY,{date:tomorrow(),jobs:jobs.length,error:String(err?.message||err),at:new Date().toISOString()});return null}
+  finally{
+    rd.value=old;try{render()}catch(_e){};renderTomorrowCard();
+    const current=(state.entries||[]).some(e=>e.date===old&&e.type==='income'&&!e.isFinanceOnly&&!['cancelled','missing_price'].includes(e.status));
+    if(current)setTimeout(()=>window.MirutaRouteBrain?.analyze?.({autoApply:true,force:true}),100);
+  }
+}
+async function postTomorrow(){
+  const rd=$('route-date');if(!rd)return;rd.value=tomorrow();const force=$('force-route-date');if(force)force.checked=true;rd.dispatchEvent(new Event('change',{bubbles:true}));
+  try{render()}catch(_e){};await window.MirutaRouteBrain?.analyze?.({autoApply:true,force:true});window.MirutaNav?.refreshRoute?.();window.MirutaRC68?.refresh?.();
+  document.querySelector('.nav-btn[data-screen="hoy"]')?.click();window.scrollTo({top:0,behavior:'smooth'});
+  const s=$('status-line');if(s)s.textContent='Ruta de mañana publicada en la vista operativa. Los mensajes siguen bloqueados hasta las 7:30 AM del día de la ruta.';
+}
+function patchBridge(){
+  const bridge=window.InstaraMegaBridge;if(!bridge||bridge.__instaraRC85)return false;bridge.__instaraRC85=true;const original=bridge.applySnapshot?.bind(bridge);if(!original)return false;
+  bridge.applySnapshot=function(payload){const filtered={...(payload||{}),jobs:cleanJobs(payload?.jobs||[])};const result=original(filtered);setTimeout(()=>{cleanExisting();preplanTomorrow();window.InstaraSchedule?.refresh?.()},180);return result};return true;
+}
+function updateSmsLaw(){
+  document.querySelectorAll('*').forEach(el=>{if(el.children.length)return;const t=el.textContent||'';if(/7:00 AM/.test(t)&&(t.includes('SMS')||t.includes('mensajes')))el.textContent=t.replace(/7:00 AM/g,'7:30 AM')});
+}
+function boot(){cleanExisting();ensureTomorrowCard();renderTomorrowCard();updateSmsLaw();let tries=0;const timer=setInterval(()=>{patchBridge();if(++tries>40)clearInterval(timer)},250);setTimeout(preplanTomorrow,800)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
+window.InstaraNextDay={preplan:preplanTomorrow,post:postTomorrow,cleanJobs,isOperationalJob};
+})();
+</script>
 
 </body>
