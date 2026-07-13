@@ -785,7 +785,7 @@ button{min-height:44px}
 .miruta-nav-eta{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:-1px 0 10px;padding:8px 10px;border-radius:14px;background:rgba(10,132,255,.12);border:1px solid rgba(88,166,255,.32);font-size:11px;color:rgba(255,255,255,.78)}.miruta-nav-eta b{color:#fff;font-size:13px;white-space:nowrap}.miruta-nav-eta span:last-child{color:#8fc4ff;font-weight:750;white-space:nowrap}
 .miruta-nav-actions{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:8px}.miruta-nav-actions button{border:1px solid rgba(255,255,255,.26);background:rgba(255,255,255,.1);color:#fff;border-radius:999px;padding:12px 8px;font:750 11px 'Jost',sans-serif}.miruta-nav-actions button.primary{background:var(--gold);color:#151515;border-color:var(--gold)}
 #nav-satellite-btn.active{background:rgba(88,166,255,.35)!important;border-color:#58a6ff!important}
-#miruta-fav-panel{position:fixed;inset:0;z-index:12000;background:rgba(5,8,10,.72);display:flex;align-items:flex-end;justify-content:center}
+#miruta-fav-panel{position:fixed;inset:0;z-index:14000;background:rgba(5,8,10,.72);display:flex;align-items:flex-end;justify-content:center}
 #miruta-fav-panel .miruta-fav-box{width:100%;max-width:560px;max-height:80vh;overflow-y:auto;background:rgba(15,18,19,.98);border-radius:20px 20px 0 0;border:1px solid rgba(255,255,255,.16);padding:16px}
 #miruta-fav-panel header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 #miruta-fav-panel header b{color:#fff;font-size:18px}
@@ -801,8 +801,15 @@ button{min-height:44px}
 .miruta-fav-form input{border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;padding:11px 12px;font-size:15px}
 .miruta-fav-form button{border-radius:12px;border:1px solid rgba(232,185,35,.5);background:var(--gold,#ffd05a);color:#151515;padding:11px;font-weight:800}
 #fav-save-status{font-size:13px;color:rgba(255,255,255,.7);min-height:16px}
+.miruta-fav-icon-picker{display:flex;gap:6px;flex-wrap:wrap}
+.fav-icon-opt{width:40px;height:40px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.06);font-size:19px;display:grid;place-items:center}
+.fav-icon-opt.active{background:rgba(255,208,90,.28);border-color:#ffd05a}
 .miruta-fav-marker{width:30px;height:30px;border-radius:50% 50% 50% 0;background:#ffd05a;transform:rotate(-45deg);border:2px solid #151515;display:flex;align-items:center;justify-content:center}
 .miruta-fav-marker span{transform:rotate(45deg);font-size:14px}
+.addr-suggest-box{position:absolute;left:0;right:0;z-index:9000;background:rgba(15,18,19,.98);border:1px solid rgba(255,255,255,.2);border-radius:0 0 12px 12px;max-height:220px;overflow-y:auto}
+.addr-suggest-item{padding:10px 12px;color:#fff;font-size:14px;border-bottom:1px solid rgba(255,255,255,.1);cursor:pointer}
+.addr-suggest-item:last-child{border-bottom:none}
+.addr-suggest-item:active{background:rgba(10,132,255,.2)}
 .miruta-arrival-toast{position:absolute;left:50%;top:22%;transform:translate(-50%,-50%) scale(.94);z-index:10005;min-width:min(88vw,420px);padding:16px 18px;border-radius:22px;background:rgba(17,20,21,.92);border:1px solid rgba(245,200,75,.55);box-shadow:0 24px 70px rgba(0,0,0,.5);backdrop-filter:blur(24px);text-align:center;opacity:0;pointer-events:none;transition:.25s ease}.miruta-arrival-toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}.miruta-arrival-toast b{display:block;color:var(--gold);font-size:20px}.miruta-arrival-toast span{font-size:12px;color:rgba(255,255,255,.72)}
 .miruta-van-marker{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:#367cff;border:3px solid #fff;box-shadow:0 4px 14px rgba(0,0,0,.45);font-size:17px;transform-origin:center}
 .miruta-stop-marker{width:29px;height:29px;border-radius:50% 50% 50% 12%;transform:rotate(-45deg);display:grid;place-items:center;background:var(--gold);border:2px solid #fff;box-shadow:0 4px 12px rgba(0,0,0,.4);color:#171717;font-weight:900;font-size:11px}.miruta-stop-marker span{transform:rotate(45deg)}
@@ -1258,6 +1265,17 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       <div id="miruta-fav-list"></div>
       <div class="miruta-fav-form">
         <input type="text" id="fav-nickname" placeholder="Sobrenombre (ej. Mi casa, Lowes 664)" />
+        <div id="fav-icon-picker" class="miruta-fav-icon-picker">
+          <button type="button" class="fav-icon-opt active" data-icon="⭐">⭐</button>
+          <button type="button" class="fav-icon-opt" data-icon="🏠">🏠</button>
+          <button type="button" class="fav-icon-opt" data-icon="🏬">🏬</button>
+          <button type="button" class="fav-icon-opt" data-icon="🔧">🔧</button>
+          <button type="button" class="fav-icon-opt" data-icon="🛞">🛞</button>
+          <button type="button" class="fav-icon-opt" data-icon="⛽">⛽</button>
+          <button type="button" class="fav-icon-opt" data-icon="🅿️">🅿️</button>
+          <button type="button" class="fav-icon-opt" data-icon="📦">📦</button>
+          <button type="button" class="fav-icon-opt" data-icon="🍽️">🍽️</button>
+        </div>
         <input type="text" id="fav-address" placeholder="Dirección completa" />
         <button id="fav-save-btn" type="button">Guardar favorito</button>
         <div id="fav-save-status"></div>
@@ -2942,6 +2960,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     attachDragHandlers(wrap, dateIso);
 
     wrap.querySelectorAll('.store-addr-input').forEach(inp=>{
+      attachAddressAutocomplete(inp);
       inp.addEventListener('change', ()=>{
         const entry = state.entries.find(e2=> e2.id === inp.dataset.id);
         if(!entry) return;
@@ -4586,7 +4605,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       favMarkers.forEach(m=>{try{m.remove()}catch(_e){}});favMarkers=[];
       loadFavorites().forEach(f=>{
         if(!Number.isFinite(f.lat)||!Number.isFinite(f.lng))return;
-        const el=document.createElement('div');el.className='miruta-fav-marker';el.innerHTML='<span>⭐</span>';el.title=f.label;
+        const el=document.createElement('div');el.className='miruta-fav-marker';el.innerHTML=`<span>${f.icon||'⭐'}</span>`;el.title=f.label;
         const m=new maplibregl.Marker({element:el,anchor:'bottom'}).setLngLat([f.lng,f.lat]).addTo(fullMap);
         favMarkers.push(m);
       });
@@ -4594,10 +4613,10 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     function renderFavoritesList(){
       const box=$('miruta-fav-list'),list=loadFavorites();
       if(!list.length){box.innerHTML='<div class="miruta-fav-empty">Todavía no tienes favoritos guardados.</div>';return}
-      box.innerHTML=list.map(f=>`<div class="miruta-fav-item" data-id="${f.id}"><div class="fav-info"><b>${(f.label||'').replace(/</g,'&lt;')}</b><span>${(f.address||'').replace(/</g,'&lt;')}</span></div><div class="fav-actions"><button class="fav-go" data-id="${f.id}">Ir</button><button class="fav-del" data-id="${f.id}">✕</button></div></div>`).join('');
+      box.innerHTML=list.map(f=>`<div class="miruta-fav-item" data-id="${f.id}"><div class="fav-info"><b>${f.icon||'⭐'} ${(f.label||'').replace(/</g,'&lt;')}</b><span>${(f.address||'').replace(/</g,'&lt;')}</span></div><div class="fav-actions"><button class="fav-go" data-id="${f.id}">Ir</button><button class="fav-del" data-id="${f.id}">✕</button></div></div>`).join('');
       box.querySelectorAll('.fav-go').forEach(btn=>btn.addEventListener('click',()=>{
         const f=list.find(x=>String(x.id)===btn.dataset.id);if(!f)return;
-        $('miruta-fav-panel').hidden=true;
+        closeFavorites();
         startAdHocFromCoord(f.label,f.lat,f.lng);
       }));
       box.querySelectorAll('.fav-del').forEach(btn=>btn.addEventListener('click',()=>{
@@ -4605,7 +4624,31 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         saveFavorites(remaining);renderFavoritesList();drawFavoriteMarkers();
       }));
     }
-    function openFavorites(){$('miruta-fav-panel').hidden=false;renderFavoritesList()}
+    function openFavorites(){$('miruta-fav-panel').hidden=false;renderFavoritesList();const cp=$('instara-copilot');if(cp)cp.style.display='none'}
+    function closeFavorites(){$('miruta-fav-panel').hidden=true;const cp=$('instara-copilot');if(cp)cp.style.display=''}
+    let favIconManual=false, favIconSelected='⭐';
+    function guessFavIcon(text){
+      const q=String(text||'').toLowerCase();
+      if(/\bcasa\b|\bhome\b|\bmi casa\b/.test(q))return'🏠';
+      if(/lowes|home depot|tienda|store|walmart/.test(q))return'🏬';
+      if(/taller|garage|mec[aá]nic|llanter|tire/.test(q))return'🛞';
+      if(/gasolin|gas station|combustible/.test(q))return'⛽';
+      if(/estacionamiento|parking/.test(q))return'🅿️';
+      if(/bodega|almac[eé]n|warehouse/.test(q))return'📦';
+      if(/restaurant|comida|almuerzo/.test(q))return'🍽️';
+      return'⭐';
+    }
+    function setFavIcon(icon){
+      favIconSelected=icon;
+      document.querySelectorAll('.fav-icon-opt').forEach(b=>b.classList.toggle('active',b.dataset.icon===icon));
+    }
+    $('fav-nickname')?.addEventListener('input',()=>{
+      if(favIconManual)return;
+      setFavIcon(guessFavIcon($('fav-nickname').value));
+    });
+    document.querySelectorAll('.fav-icon-opt').forEach(btn=>{
+      btn.addEventListener('click',()=>{favIconManual=true;setFavIcon(btn.dataset.icon)});
+    });
     async function saveFavoriteFromForm(){
       const nickname=$('fav-nickname').value.trim(),address=$('fav-address').value.trim(),statusEl=$('fav-save-status');
       if(!nickname||!address){statusEl.textContent='Escribe el sobrenombre y la dirección';return}
@@ -4613,19 +4656,58 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       try{
         const coord=await geocode(address);
         const list=loadFavorites();
-        list.push({id:'fav-'+Date.now(),label:nickname,address,lat:coord.lat,lng:coord.lng});
+        list.push({id:'fav-'+Date.now(),label:nickname,address,lat:coord.lat,lng:coord.lng,icon:favIconSelected});
         saveFavorites(list);
         $('fav-nickname').value='';$('fav-address').value='';statusEl.textContent='Guardado ✓';
+        favIconManual=false;setFavIcon('⭐');
         renderFavoritesList();drawFavoriteMarkers();
         setTimeout(()=>{statusEl.textContent=''},2200);
       }catch(err){statusEl.textContent='No se pudo encontrar esa dirección — revisa cómo la escribiste'}
     }
     $('miruta-favorites-btn')?.addEventListener('click',openFavorites);
-    $('miruta-fav-close')?.addEventListener('click',()=>{$('miruta-fav-panel').hidden=true});
+    $('miruta-fav-close')?.addEventListener('click',closeFavorites);
     $('fav-save-btn')?.addEventListener('click',saveFavoriteFromForm);
+    attachAddressAutocomplete($('fav-address'));
+    attachAddressAutocomplete($('knowledge-address'));
 
-    // ---------- buscador de dirección con sugerencias en vivo (mientras escribes) ----------
-    let searchDebounce=null, searchBusy=false, searchLastAt=0, searchSeq=0;
+    // ---------- sugerencias de dirección reusables para cualquier campo de la app ----------
+    const addrAutocompleteState=new WeakMap();
+    function attachAddressAutocomplete(inputEl,onSelect){
+      if(!inputEl||addrAutocompleteState.has(inputEl))return;
+      const box=document.createElement('div');box.className='addr-suggest-box';
+      inputEl.insertAdjacentElement('afterend',box);
+      inputEl.parentElement&&(inputEl.parentElement.style.position=inputEl.parentElement.style.position||'relative');
+      let debounceT=null,lastAt=0,seq=0;
+      function render(list){
+        if(!list||!list.length){box.innerHTML='';box.hidden=true;return}
+        box.hidden=false;
+        box.innerHTML=list.map((it,i)=>`<div class="addr-suggest-item" data-idx="${i}">${(it.display_name||'').replace(/</g,'&lt;')}</div>`).join('');
+        box.querySelectorAll('.addr-suggest-item').forEach(el=>{
+          el.addEventListener('click',()=>{
+            const it=list[Number(el.dataset.idx)];if(!it)return;
+            inputEl.value=it.display_name||inputEl.value;
+            inputEl.dispatchEvent(new Event('change',{bubbles:true}));
+            box.innerHTML='';box.hidden=true;
+            onSelect&&onSelect(it.display_name||inputEl.value,Number(it.lat),Number(it.lon));
+          });
+        });
+      }
+      inputEl.addEventListener('input',()=>{
+        const q=inputEl.value.trim();
+        clearTimeout(debounceT);
+        if(q.length<4){box.innerHTML='';box.hidden=true;return}
+        debounceT=setTimeout(async()=>{
+          const now=Date.now();
+          if(now-lastAt<1000){debounceT=setTimeout(()=>inputEl.dispatchEvent(new Event('input')),1000-(now-lastAt));return}
+          lastAt=now;const mySeq=++seq;
+          try{const list=await fetchSuggestions(q);if(mySeq===seq)render(list)}
+          catch(_e){if(mySeq===seq){box.innerHTML='<div class="addr-suggest-item" style="opacity:.6">Sin conexión para buscar ahora</div>';box.hidden=false}}
+        },550);
+      });
+      document.addEventListener('click',e=>{if(e.target!==inputEl && !box.contains(e.target)){box.hidden=true}});
+      addrAutocompleteState.set(inputEl,true);
+    }
+
     async function fetchSuggestions(q){
       const res=await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=0&limit=5&countrycodes=us&q='+encodeURIComponent(q),{headers:{'Accept-Language':'es-US'}});
       if(!res.ok)throw new Error('busqueda-fallo');
