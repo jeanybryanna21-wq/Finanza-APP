@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC105">
+  <meta name="instara-ai-version" content="RC106">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -6854,11 +6854,24 @@ const normDate=v=>{const raw=String(v||'');let m=raw.match(/^(\d{4}-\d{2}-\d{2})
 function bridgeJobs(){return (load(OBSERVED_KEY,[])||[]).filter(j=>j&&!/(?:1\s*MAN\s*TEAM|MAX\s*\d+\s*JOBS|ONLY\s+\d{3,4})/i.test([j.eventCustomer,j.eventService,j.customerName,j.laborCategory,j.html].filter(Boolean).join(' ')))}
 function jobKey(j){return String(j.orderViewId||j.cioOrderId||j.jobNumber||j.cioJobNumber||j.purchaseOrderNumber||j.po||j.eventId||j.cioEventId||'')}
 function status(j){
-  const t=[j.imsStatus,j.jobStatus,j.status,j.displayStatus].filter(Boolean).join(' ').toLowerCase();
-  if(/payment received|past paid|\bpaid\b/.test(t))return'paid';
-  if(/cancel|void|declin/.test(t))return'cancelled';
-  // RC99 law: a remote scheduling/payment snapshot never completes field work.
-  // Completion is local/manual (or paid) so future/current clients cannot be falsely marked done.
+  // RC106: calendar summary is a reader only. It reads the canonical status already
+  // owned by RC105 and explicitly honors manual INSTARA completion.
+  if(j?.manualCompletion===true||j?.mirutaCompletedAt||j?.completedAt)return j?.status==='paid'?'paid':'completed';
+  const canonical=String(j?.status||j?.megaEvidenceState||j?.cioDerivedStatus||'').toLowerCase();
+  if(canonical==='paid')return'paid';
+  if(canonical==='completed')return'completed';
+  if(canonical==='cancelled'||canonical==='canceled')return'cancelled';
+  if(canonical==='pending'||canonical==='active'||canonical==='scheduled')return'active';
+
+  // Fallback only for raw observed rows that do not yet have a canonical app entry.
+  const raw=j?._cioRaw||{};
+  const t=[
+    j?.imsStatus,j?.jobStatus,j?.displayStatus,j?.lowesActivity,
+    raw?.imsStatus,raw?.jobStatus,raw?.displayStatus,raw?.lowesActivity
+  ].filter(Boolean).join(' | ').toLowerCase();
+  if(/past\s+paid\s+po|payment\s+receiv(?:ed|ing)|payment\s+posted/.test(t))return'paid';
+  if(/job\s+completed|work\s+completed|installation\s+completed/.test(t))return'completed';
+  if(/(?:^|\W)(?:cancelled|canceled|void|declined)(?:\W|$)/.test(t))return'cancelled';
   return'active';
 }
 function monthRows(y,m){const prefix=`${y}-${String(m+1).padStart(2,'0')}-`;const app=(window.__INSTARA_STATE__?.entries||[]).filter(e=>e.type==='income'&&String(e.date||'').startsWith(prefix));const seen=new Set(),out=[];for(const e of [...app,...bridgeJobs()]){const d=normDate(e.scheduledDate||e.start||e.date);if(!d.startsWith(prefix))continue;const k=jobKey(e)||[d,e.customerName||e.eventCustomer,e.laborCategory||e.eventService].join('|');if(seen.has(k))continue;seen.add(k);out.push(e)}return out}
@@ -7606,7 +7619,7 @@ window.InstaraRC97={cleanupManualRouteCache,moveSelectedDayToToday,install};
 <script id="instara-rc98-runtime-integrity">
 (function(){
 'use strict';
-const VERSION='RC105';
+const VERSION='RC106';
 const $=id=>document.getElementById(id);
 function state(){return window.__INSTARA_STATE__||window.state}
 function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
@@ -8598,6 +8611,24 @@ addEventListener('message',event=>{
 setInterval(()=>stableRefresh('guard'),5000);
 
 window.InstaraRC105={stabilize,stableRefresh,canonicalStatus,hasPaid,hasCompleted,hasCancelled};
+})();
+</script>
+
+
+<script id="instara-rc106-calendar-completed-counter-refresh">
+(function(){
+'use strict';
+function refreshCalendarCounter(){
+  try{window.InstaraSchedule?.refresh?.()}catch(_e){}
+}
+document.addEventListener('click',event=>{
+  if(event.target.closest?.('#screen-hoy .status-btn'))setTimeout(refreshCalendarCounter,120);
+},true);
+addEventListener('message',event=>{
+  const d=event.data;
+  if(d?.source==='INSTARA_BRIDGE'&&d?.type==='INSTARA_BRIDGE_SNAPSHOT')setTimeout(refreshCalendarCounter,180);
+});
+window.InstaraRC106={refreshCalendarCounter};
 })();
 </script>
 
