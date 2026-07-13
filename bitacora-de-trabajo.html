@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC106">
+  <meta name="instara-ai-version" content="RC111">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1153,11 +1153,28 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     </div>
 
     <div class="exact-stats">
-      <article><span class="stat-icon gold">▣</span><small>Trabajos hoy</small><b id="dash-jobs">0</b><em id="dash-pending-text">0 pendientes</em></article>
+      <article><span class="stat-icon gold">⌁</span><small>Millas hoy</small><b id="dash-jobs">0.0 mi</b><em id="dash-pending-text">Sin sesión GPS</em></article>
       <article><span class="stat-icon gold">$</span><small>Ganancias hoy</small><b class="gold-text" id="dash-money">$0.00</b><em id="daily-goal-label">Meta: $1,200</em><div class="tiny-track"><i id="money-progress-fill"></i></div></article>
       <article><span class="stat-icon green">✓</span><small>Completados</small><b class="green-text" id="live-progress">0/0</b><em id="dash-percent">0%</em><div class="tiny-track"><i class="green-fill" id="dash-progress-fill"></i></div></article>
       <article><span class="stat-icon blue">◷</span><small>Horas trabajadas</small><b class="blue-text" id="hours-worked">0h 00m</b><em>Meta: 8h</em><div class="tiny-track"><i class="blue-fill" id="hours-progress-fill"></i></div></article>
     </div>
+
+    <section class="instara-work-clock" id="instara-work-clock" aria-label="Control de jornada">
+      <div class="work-clock-head">
+        <div>
+          <small>INSTARA · CONTROL DE JORNADA</small>
+          <b id="work-clock-state">SIN JORNADA ACTIVA</b>
+          <span id="work-clock-detail">El tiempo real no se calcula desde los tickets.</span>
+        </div>
+        <strong id="work-clock-live">0h 00m</strong>
+      </div>
+      <div class="work-clock-actions">
+        <button id="work-clock-in" type="button">▶ PUNCH IN</button>
+        <button id="work-clock-out" type="button">■ PUNCH OUT</button>
+        <button id="work-clock-adjust" type="button">✎ AJUSTAR HOY</button>
+      </div>
+      <div class="work-clock-auto" id="work-clock-auto">AUTO: esperando ubicación precisa · salida/regreso a Base de Jean</div>
+    </section>
 
     <div class="next-client-card" id="live-activity">
       <div class="next-left"><span class="route-live-pill">EN RUTA <i></i></span><small>Siguiente cliente</small><b id="live-next-title">Ruta preparada</b><em id="next-time-range">—</em></div>
@@ -4224,25 +4241,47 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   }
   function updatePremiumDashboard(){
     const jobs=getTodayRouteEntries();
-    const completed=jobs.filter(e=>e.status==='completed'||e.status==='paid').length;
-    const pending=jobs.filter(e=>e.status==='pending').length;
-    const cancelled=jobs.filter(e=>e.status==='cancelled').length;
-    const total=jobs.reduce((sum,e)=>sum+(Number(e.net)||0),0);
-    const active=jobs.find(e=>e.status==='pending') || jobs[0];
-    const pct=jobs.length?Math.round(completed/jobs.length*100):0;
+    const workJobs=jobs.filter(e=>e.isStoreStop!==true);
+    const completed=workJobs.filter(e=>e.status==='completed'||e.status==='paid'||e.manualCompletion===true||!!e.mirutaCompletedAt||!!e.completedAt).length;
+    const pending=workJobs.filter(e=>e.status==='pending').length;
+    const cancelled=workJobs.filter(e=>e.status==='cancelled').length;
+    const total=Math.round(workJobs
+      .filter(e=>{
+        const st=String(e.status||'').toLowerCase();
+        return st==='completed'||st==='paid'||e.manualCompletion===true||!!e.mirutaCompletedAt||!!e.completedAt;
+      })
+      .reduce((sum,e)=>{
+        const amount=Number(e.purchaseOrderAmount??e.amount??e.net??0)||0;
+        return sum+amount;
+      },0)*100)/100;
+    const active=workJobs.find(e=>e.status==='pending') || workJobs[0];
+    const pct=workJobs.length?Math.round(completed/workJobs.length*100):0;
     const hour=new Date().getHours();
     const greeting=hour<12?'Buenos días':hour<19?'Buenas tardes':'Buenas noches';
     const put=(id,val)=>{const n=document.getElementById(id);if(n)n.textContent=val};
     put('premium-greeting',`${greeting}, Jean`);
-    put('premium-subtitle',jobs.length?`${jobs.length} trabajos programados para hoy`:'No tienes trabajos cargados para hoy');
+    put('premium-subtitle',workJobs.length?`${workJobs.length} trabajos reales para hoy`:'No tienes trabajos cargados para hoy');
     put('premium-date',new Intl.DateTimeFormat('es-US',{weekday:'short',day:'numeric',month:'short'}).format(new Date()).toUpperCase());
-    put('dash-jobs',jobs.length); put('dash-money',fmt(total)); put('dash-completed',completed); put('dash-pending',pending); put('dash-cancelled',cancelled);
-    put('live-progress',`${completed}/${jobs.length}`); put('route-section-count',jobs.length);
-    put('dash-pending-text',`${pending} ${pending===1?'pendiente':'pendientes'}`); put('dash-percent',`${pct}%`); put('alert-count',pending+cancelled);
+
+    const mileageToday=(()=>{
+      try{
+        const ledger=JSON.parse(localStorage.getItem('miruta-mileage-ledger-v1')||'[]')||[];
+        const closed=ledger.filter(x=>x?.date===todayISO()).reduce((sum,x)=>sum+Number(x.businessMiles??x.totalMiles??0),0);
+        const activeMileage=JSON.parse(localStorage.getItem('miruta-mileage-active-v1')||'null');
+        const activeMiles=activeMileage?.date===todayISO()?Number(activeMileage.meters||0)/1609.344:0;
+        return {miles:Math.max(0,closed+activeMiles),active:!!(activeMileage?.date===todayISO()&&activeMileage?.active!==false)};
+      }catch(_e){return {miles:0,active:false}}
+    })();
+
+    put('dash-jobs',`${mileageToday.miles.toFixed(1)} mi`);
+    put('dash-pending-text',mileageToday.active?'GPS observando':'Sin sesión GPS');
+    put('dash-money',fmt(total)); put('dash-completed',completed); put('dash-pending',pending); put('dash-cancelled',cancelled);
+    put('live-progress',`${completed}/${workJobs.length}`); put('route-section-count',jobs.length);
+    put('dash-percent',`${pct}%`); put('alert-count',pending+cancelled);
     put('map-caption',jobs.length?`${jobs.length} paradas • Ruta optimizada`:'Sin paradas cargadas');
     const fill=document.getElementById('dash-progress-fill'); if(fill) fill.style.width=pct+'%';
     const fg=window.InstaraFinancialGoals?.get?.()||{weekly:1990,monthly:7800,workdays:6}; const dailyGoal=Math.max(1,Number(fg.weekly||1990)/Math.max(1,Number(fg.workdays||6))); const moneyPct=Math.min(100,Math.round(total/dailyGoal*100)); const moneyFill=document.getElementById('money-progress-fill'); if(moneyFill) moneyFill.style.width=moneyPct+'%'; const goalLabel=document.getElementById('daily-goal-label'); if(goalLabel) goalLabel.textContent=`Meta hoy: ${fmt(dailyGoal)}`;
-    let workedMinutes=0; jobs.filter(e=>e.status==='completed'||e.status==='paid').forEach(e=>{ const a=(e.timeStart||'').match(/(\d{1,2}):(\d{2})/), b=(e.timeEnd||'').match(/(\d{1,2}):(\d{2})/); if(a&&b){let d=(+b[1]*60+ +b[2])-(+a[1]*60+ +a[2]);if(d>0&&d<600)workedMinutes+=d;} else workedMinutes+=60; });
+    const workedMinutes=Math.max(0,Math.round(Number(window.InstaraWorkClock?.todayWorkedMs?.()||0)/60000));
     put('hours-worked',`${Math.floor(workedMinutes/60)}h ${String(workedMinutes%60).padStart(2,'0')}m`); const hp=document.getElementById('hours-progress-fill'); if(hp) hp.style.width=Math.min(100,workedMinutes/480*100)+'%';
     if(active){
       put('live-next-title',active.customerName||'Siguiente cliente');
@@ -6683,7 +6722,7 @@ function refresh(){
   const wc=$('rc76-week-copy'),mc=$('rc76-month-copy');if(wc)wc.textContent=s.week>=s.g.weekly?`Meta cubierta por ${money(s.week-s.g.weekly)}.`:`Faltan ${money(s.g.weekly-s.week)} para la meta semanal.`;if(mc)mc.textContent=s.month>=s.g.monthly?`Meta cubierta por ${money(s.month-s.g.monthly)}.`:`Faltan ${money(s.g.monthly-s.month)} para la meta mensual.`;
 }
 window.InstaraFinancialGoals={get,save,refresh,syncDashboard,snapshot};
-function boot(){refresh();setInterval(refresh,1800);document.addEventListener('click',e=>{if(e.target.closest('.status-btn,.submit-btn,.extra-save,.comp-save,[data-add-tip]'))setTimeout(refresh,180)});}
+function boot(){refresh();document.addEventListener('click',e=>{if(e.target.closest('.status-btn,.submit-btn,.extra-save,.comp-save,[data-add-tip]'))setTimeout(()=>window.InstaraRC90?.renderFinance?.(),180)});}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(boot,600));else setTimeout(boot,600);
 })();
 </script>
@@ -7072,33 +7111,102 @@ function periodBounds(kind){
   return[`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`,`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-31`]
 }
 function financialAgg(start,end){
-  const s=app(),counts={total:0,completed:0,pending:0,cancelled:0,missing:0,paid:0};let gross=0,expected=0,expense=0;
+  const s=app(),counts={total:0,completed:0,pending:0,cancelled:0,missing:0,paid:0};
+  let megaGross=0,crewExpected=0,expense=0;
+  const pct=Math.max(1,rate())/100;
+
   for(const e of (s?.entries||[])){
     if(!e.date||e.date<start||e.date>end)continue;
-    if(e.type==='expense'){expense+=Number(e.amount||0);continue}
+
+    if(e.type==='expense'){
+      expense+=Number(e.amount||0);
+      continue;
+    }
     if(e.type!=='income')continue;
-    if(e.isFinanceOnly){expected+=Number(e.net??e.amount)||0;continue}
+
+    if(e.isFinanceOnly){
+      crewExpected+=Number(e.net??e.amount)||0;
+      continue;
+    }
+
     counts.total++;
-    const st=e.status||'pending';
-    if(st==='completed'){counts.completed++;const a=strictAmount(e);gross+=a;expected+=Math.round(a*rate())/100}
-    else if(st==='paid'){counts.paid++;const a=strictAmount(e);gross+=a;expected+=Math.round(a*rate())/100}
-    else if(st==='pending')counts.pending++;
+    const st=String(e.status||'pending').toLowerCase();
+
+    if(st==='completed'||st==='paid'){
+      if(st==='completed')counts.completed++;
+      else counts.paid++;
+
+      // CiO Crew Payment / Purchase Order Amount is already Jean's payout.
+      const crew=strictAmount(e);
+      crewExpected+=crew;
+
+      // Reconstruct Mega's 100% amount for the gross card only.
+      megaGross+=pct>0?crew/pct:crew;
+    }else if(st==='pending')counts.pending++;
     else if(st==='cancelled')counts.cancelled++;
     else if(st==='missing_price')counts.missing++;
   }
-  return {counts,gross,expected,expense,net:expected-expense};
+
+  megaGross=Math.round(megaGross*100)/100;
+  crewExpected=Math.round(crewExpected*100)/100;
+  expense=Math.round(expense*100)/100;
+
+  return {
+    counts,
+    gross:megaGross,
+    expected:crewExpected,
+    expense,
+    net:Math.round((crewExpected-expense)*100)/100
+  };
 }
 function countHtml(a){return `<div class="count-chip"><div class="n">${a.counts.total}</div><div class="l">Detectados</div></div><div class="count-chip completed"><div class="n">${a.counts.completed}</div><div class="l">Completados</div></div><div class="count-chip pending"><div class="n">${a.counts.pending}</div><div class="l">Pendientes</div></div><div class="count-chip cancelled"><div class="n">${a.counts.cancelled}</div><div class="l">Cancelados</div></div><div class="count-chip missing"><div class="n">${a.counts.missing}</div><div class="l">Sin precio</div></div><div class="count-chip paid"><div class="n">${a.counts.paid}</div><div class="l">Pagados</div></div>`}
-function amountHtml(a){return `<div class="stat system"><div class="label">Total Crew PO cerrado</div><div class="value">${money(a.gross)}</div></div><div class="stat expected"><div class="label">Pago esperado Mega ${rate()}%</div><div class="value">${money(a.expected)}</div></div><div class="stat expense"><div class="label">Gastos</div><div class="value">${money(a.expense)}</div></div><div class="stat net"><div class="label">Neto</div><div class="value">${money(a.net)}</div></div>`}
+function amountHtml(a){return `<div class="stat system"><div class="label">Total Mega PO 100% cerrado</div><div class="value">${money(a.gross)}</div></div><div class="stat expected"><div class="label">Pago Crew esperado · tu ${rate()}%</div><div class="value">${money(a.expected)}</div></div><div class="stat expense"><div class="label">Gastos</div><div class="value">${money(a.expense)}</div></div><div class="stat net"><div class="label">Neto</div><div class="value">${money(a.net)}</div></div>`}
 function renderFinance(){
-  try{window.InstaraRC103?.reconcileAll?.()}catch(_e){}
+  try{window.InstaraRC105?.stabilize?.('finance-read')}catch(_e){}
   repairAll();
-  for(const kind of ['day','week','month']){const [a,b]=periodBounds(kind),x=financialAgg(a,b),c=$(`counts-${kind}`),m=$(`amounts-${kind}`);if(c)c.innerHTML=countHtml(x);if(m)m.innerHTML=amountHtml(x)}
-  const goals=(()=>{try{return {weekly:1990,monthly:7800,...JSON.parse(localStorage.getItem('instara-financial-goals-v1')||'{}')}}catch(_e){return{weekly:1990,monthly:7800}}})();
-  const week=financialAgg(...periodBounds('week')).expected,month=financialAgg(...periodBounds('month')).expected;
-  const wv=$('rc76-week-value'),mv=$('rc76-month-value');if(wv)wv.textContent=`${money(week)} / ${money(goals.weekly)}`;if(mv)mv.textContent=`${money(month)} / ${money(goals.monthly)}`;
-  const wf=$('rc76-week-fill'),mf=$('rc76-month-fill');if(wf)wf.style.width=Math.min(100,goals.weekly?week/goals.weekly*100:100)+'%';if(mf)mf.style.width=Math.min(100,goals.monthly?month/goals.monthly*100:100)+'%';
-  const wc=$('rc76-week-copy'),mc=$('rc76-month-copy');if(wc)wc.textContent=week>=goals.weekly?`Meta cubierta por ${money(week-goals.weekly)}.`:`Faltan ${money(goals.weekly-week)} para la meta semanal.`;if(mc)mc.textContent=month>=goals.monthly?`Meta cubierta por ${money(month-goals.monthly)}.`:`Faltan ${money(goals.monthly-month)} para la meta mensual.`;
+
+  const aggregates={};
+  for(const kind of ['day','week','month']){
+    const [a,b]=periodBounds(kind);
+    const x=financialAgg(a,b);
+    aggregates[kind]=x;
+    const c=$(`counts-${kind}`),m=$(`amounts-${kind}`);
+    if(c)c.innerHTML=countHtml(x);
+    if(m)m.innerHTML=amountHtml(x);
+  }
+
+  const goals=(()=>{
+    try{return {weekly:1990,monthly:7800,workdays:6,...JSON.parse(localStorage.getItem('instara-financial-goals-v1')||'{}')}}
+    catch(_e){return{weekly:1990,monthly:7800,workdays:6}}
+  })();
+
+  // Goal Tracker reads the same "expected" value shown in finance cards.
+  const day=aggregates.day.expected;
+  const week=aggregates.week.expected;
+  const month=aggregates.month.expected;
+  const dailyGoal=Number(goals.weekly||0)/Math.max(1,Number(goals.workdays||6));
+
+  const wv=$('rc76-week-value'),mv=$('rc76-month-value');
+  if(wv)wv.textContent=`${money(week)} / ${money(goals.weekly)}`;
+  if(mv)mv.textContent=`${money(month)} / ${money(goals.monthly)}`;
+
+  const wf=$('rc76-week-fill'),mf=$('rc76-month-fill');
+  if(wf)wf.style.width=Math.min(100,goals.weekly?week/goals.weekly*100:100)+'%';
+  if(mf)mf.style.width=Math.min(100,goals.monthly?month/goals.monthly*100:100)+'%';
+
+  const wc=$('rc76-week-copy'),mc=$('rc76-month-copy');
+  if(wc)wc.textContent=week>=goals.weekly?`Meta cubierta por ${money(week-goals.weekly)}.`:`Faltan ${money(goals.weekly-week)} para la meta semanal.`;
+  if(mc)mc.textContent=month>=goals.monthly?`Meta cubierta por ${money(month-goals.monthly)}.`:`Faltan ${money(goals.monthly-month)} para la meta mensual.`;
+
+  const dailyLabel=$('daily-goal-label');
+  if(dailyLabel){
+    const dailyState=day>=dailyGoal?'EN RITMO':day>=dailyGoal*.85?'CERCA':'BAJO';
+    dailyLabel.textContent=`Meta hoy: ${money(dailyGoal)} · ${dailyState}`;
+  }
+  const dailyFill=$('money-progress-fill');
+  if(dailyFill)dailyFill.style.width=Math.min(100,dailyGoal?day/dailyGoal*100:100)+'%';
+
+  window.__INSTARA_FINANCE_SNAPSHOT__={day:aggregates.day,week:aggregates.week,month:aggregates.month,goals,dailyGoal,updatedAt:new Date().toISOString()};
 }
 function refreshStable(){
   try{window.InstaraRC103?.reconcileAll?.()}catch(_e){}
@@ -7619,7 +7727,7 @@ window.InstaraRC97={cleanupManualRouteCache,moveSelectedDayToToday,install};
 <script id="instara-rc98-runtime-integrity">
 (function(){
 'use strict';
-const VERSION='RC106';
+const VERSION='RC111';
 const $=id=>document.getElementById(id);
 function state(){return window.__INSTARA_STATE__||window.state}
 function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
@@ -8629,6 +8737,525 @@ addEventListener('message',event=>{
   if(d?.source==='INSTARA_BRIDGE'&&d?.type==='INSTARA_BRIDGE_SNAPSHOT')setTimeout(refreshCalendarCounter,180);
 });
 window.InstaraRC106={refreshCalendarCounter};
+})();
+</script>
+
+
+<script id="instara-rc107-visible-month-summary">
+(function(){
+'use strict';
+
+const VERSION='RC107';
+
+function visibleMonthKey(){
+  const title=document.querySelector('#screen-schedule .schedule-month-title,#screen-schedule [data-schedule-month-title],#schedule-month-title');
+  const txt=String(title?.textContent||'').trim().toLowerCase();
+
+  const months={
+    enero:0,febrero:1,marzo:2,abril:3,mayo:4,junio:5,
+    julio:6,agosto:7,septiembre:8,octubre:9,noviembre:10,diciembre:11,
+    january:0,february:1,march:2,april:3,may:4,june:5,
+    july:6,august:7,september:8,october:9,november:10,december:11
+  };
+
+  for(const [name,index] of Object.entries(months)){
+    if(txt.includes(name)){
+      const yearMatch=txt.match(/20\d{2}/);
+      if(yearMatch)return `${yearMatch[0]}-${String(index+1).padStart(2,'0')}`;
+    }
+  }
+
+  const selected=document.querySelector('#instara-schedule-grid .schedule-day.selected')?.dataset?.date;
+  if(selected&&/^\d{4}-\d{2}-\d{2}$/.test(selected))return selected.slice(0,7);
+
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+function appState(){return window.__INSTARA_STATE__||window.state}
+
+function statusOf(j){
+  if(j?.manualCompletion===true||j?.mirutaCompletedAt||j?.completedAt)return j?.status==='paid'?'paid':'completed';
+
+  const canonical=String(j?.status||j?.megaEvidenceState||j?.cioDerivedStatus||'').toLowerCase();
+  if(canonical==='paid')return'paid';
+  if(canonical==='completed')return'completed';
+  if(canonical==='cancelled'||canonical==='canceled')return'cancelled';
+  return'active';
+}
+
+function monthRows(monthKey){
+  const s=appState();
+  const entries=Array.isArray(s?.entries)?s.entries:[];
+  return entries.filter(e=>{
+    if(e?.type!=='income'||e?.isFinanceOnly)return false;
+    const date=String(e?.date||'');
+    return date.startsWith(monthKey+'-');
+  });
+}
+
+function updateVisibleMonthSummary(){
+  const monthKey=visibleMonthKey();
+  const rows=monthRows(monthKey);
+
+  const totals={
+    jobs:rows.length,
+    completed:rows.filter(e=>statusOf(e)==='completed').length,
+    cancelled:rows.filter(e=>statusOf(e)==='cancelled').length,
+    paid:rows.filter(e=>statusOf(e)==='paid').length
+  };
+
+  const set=(id,value)=>{
+    const el=document.getElementById(id);
+    if(el)el.textContent=String(value);
+  };
+
+  set('schedule-month-jobs',totals.jobs);
+  set('schedule-month-completed',totals.completed);
+  set('schedule-month-cancelled',totals.cancelled);
+  set('schedule-month-paid',totals.paid);
+
+  // Fallback for current markup if IDs differ.
+  const cards=[...document.querySelectorAll('#screen-schedule .summary-card,#screen-schedule .schedule-stat-card,#screen-schedule .stat-card')];
+  for(const card of cards){
+    const label=String(card.textContent||'').toLowerCase();
+    const value=card.querySelector('.value,.stat-value,big,strong,[data-value]');
+    if(!value)continue;
+    if(label.includes('trabajos del mes'))value.textContent=totals.jobs;
+    else if(label.includes('completados'))value.textContent=totals.completed;
+    else if(label.includes('cancelados'))value.textContent=totals.cancelled;
+    else if(label.includes('pagados'))value.textContent=totals.paid;
+  }
+
+  return {monthKey,...totals};
+}
+
+function bindMonthNavigation(){
+  document.addEventListener('click',event=>{
+    const btn=event.target.closest?.(
+      '#screen-schedule [data-month-prev],#screen-schedule [data-month-next],'+
+      '#screen-schedule .schedule-month-prev,#screen-schedule .schedule-month-next,'+
+      '#screen-schedule .month-prev,#screen-schedule .month-next'
+    );
+    if(btn)setTimeout(updateVisibleMonthSummary,80);
+  },true);
+
+  const screen=document.getElementById('screen-schedule');
+  if(screen){
+    const observer=new MutationObserver(()=>setTimeout(updateVisibleMonthSummary,30));
+    observer.observe(screen,{subtree:true,childList:true,characterData:true});
+  }
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+  setTimeout(()=>{
+    bindMonthNavigation();
+    updateVisibleMonthSummary();
+  },700);
+});
+
+window.addEventListener('focus',()=>setTimeout(updateVisibleMonthSummary,120));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(updateVisibleMonthSummary,120)});
+
+window.InstaraRC107={visibleMonthKey,monthRows,statusOf,updateVisibleMonthSummary};
+})();
+</script>
+
+
+<style id="instara-rc108-finance-math-css">
+#screen-finanzas .stat.system .label,
+#screen-finanzas .stat.expected .label{line-height:1.2!important}
+</style>
+<script id="instara-rc108-finance-single-source">
+(function(){
+'use strict';
+const VERSION='RC108';
+
+function refreshFinance(){
+  try{window.InstaraRC90?.renderFinance?.()}catch(err){console.error('RC108 finance render',err)}
+}
+
+function install(){
+  document.querySelectorAll('#screen-finanzas .tabs button[data-tab]').forEach(btn=>{
+    if(btn.__rc108)return;
+    btn.__rc108=true;
+    btn.addEventListener('click',()=>setTimeout(refreshFinance,40));
+  });
+}
+
+document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{install();refreshFinance()},850));
+window.addEventListener('focus',()=>setTimeout(refreshFinance,120));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(refreshFinance,120)});
+document.addEventListener('click',event=>{
+  if(event.target.closest?.('.status-btn,.submit-btn,.extra-save,.comp-save,[data-add-tip]'))setTimeout(refreshFinance,160);
+},true);
+
+window.InstaraRC108={refreshFinance,install};
+})();
+</script>
+
+
+<style id="instara-rc109-work-clock-css">
+.instara-work-clock{
+  margin:14px 0 16px;padding:16px;border-radius:24px;
+  background:linear-gradient(145deg,rgba(5,16,24,.92),rgba(13,23,29,.88));
+  border:1px solid rgba(126,199,255,.36);box-shadow:0 18px 45px rgba(0,0,0,.28)
+}
+.work-clock-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.work-clock-head div{display:flex;flex-direction:column;gap:4px;min-width:0}
+.work-clock-head small{font-size:11px;letter-spacing:1.5px;color:#7ec7ff;font-weight:900}
+.work-clock-head b{font-size:17px;color:#fff}
+.work-clock-head span{font-size:12px;color:rgba(255,255,255,.72);line-height:1.35}
+#work-clock-live{font-size:28px;color:#7ec7ff;white-space:nowrap}
+.work-clock-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px}
+.work-clock-actions button{
+  min-height:48px;border-radius:16px;border:1px solid rgba(255,255,255,.26);
+  background:rgba(255,255,255,.05);color:#fff;font-weight:900;font-size:14px
+}
+#work-clock-in{border-color:rgba(94,225,139,.72);color:#7be39c}
+#work-clock-out{border-color:rgba(255,112,102,.72);color:#ff9a92}
+#work-clock-adjust{grid-column:1/-1;color:#ffd05a;border-color:rgba(255,208,90,.62)}
+.work-clock-actions button:active{transform:scale(.97)}
+.work-clock-actions button[disabled]{opacity:.38;filter:grayscale(.4)}
+.work-clock-auto{margin-top:11px;padding-top:10px;border-top:1px solid rgba(255,255,255,.10);font-size:11px;line-height:1.4;color:rgba(255,255,255,.68)}
+.work-clock-auto.good{color:#7be39c}.work-clock-auto.warn{color:#ffd05a}.work-clock-auto.bad{color:#ff9a92}
+</style>
+<script id="instara-rc109-work-clock">
+(function(){
+'use strict';
+
+const VERSION='RC109';
+const KEY='instara-work-clock-v1';
+const GEO_KEY='miruta-route-geocache-v2';
+const SETTINGS_KEY='miruta-route-brain-settings-v1';
+const DEFAULT_BASE='6451 Archcrest Dr, Roanoke, VA 24019';
+const HOME_RADIUS_M=180;
+const AUTO_MIN_SESSION_MS=15*60*1000;
+
+let watchId=null;
+let autoChecking=false;
+let timer=null;
+
+const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch(_e){return f}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(_e){return false}};
+const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+const clock=ms=>new Date(ms).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+const fmtMs=ms=>{const m=Math.max(0,Math.floor(Number(ms||0)/60000));return `${Math.floor(m/60)}h ${String(m%60).padStart(2,'0')}m`};
+const normalize=(s)=>{
+  s=s&&typeof s==='object'?s:{};
+  s.sessions=Array.isArray(s.sessions)?s.sessions:[];
+  s.active=s.active&&typeof s.active==='object'?s.active:null;
+  s.auto=s.auto&&typeof s.auto==='object'?s.auto:{armed:true,lastZone:'unknown',lastDistance:null,lastFixAt:null};
+  if(s.auto.armed!==false)s.auto.armed=true;
+  return s;
+};
+let ledger=normalize(load(KEY,{}));
+
+function persist(){save(KEY,ledger)}
+function todaySessions(){return ledger.sessions.filter(s=>s.date===today())}
+function todayWorkedMs(){
+  let total=todaySessions().reduce((sum,s)=>sum+Math.max(0,Number(s.endedAt||0)-Number(s.startedAt||0)),0);
+  if(ledger.active?.date===today())total+=Math.max(0,Date.now()-Number(ledger.active.startedAt||Date.now()));
+  return total;
+}
+function active(){return ledger.active}
+function hasTodayJobs(){
+  const state=window.__INSTARA_STATE__||window.state;
+  return Array.isArray(state?.entries)&&state.entries.some(e=>e?.type==='income'&&e?.date===today()&&!e?.isFinanceOnly&&e?.status!=='cancelled');
+}
+function setStatus(text,klass=''){
+  const el=document.getElementById('work-clock-auto');
+  if(el){el.textContent=text;el.className='work-clock-auto '+klass}
+}
+function refreshUI(){
+  const a=active();
+  const state=document.getElementById('work-clock-state');
+  const detail=document.getElementById('work-clock-detail');
+  const live=document.getElementById('work-clock-live');
+  const inBtn=document.getElementById('work-clock-in');
+  const outBtn=document.getElementById('work-clock-out');
+
+  if(state)state.textContent=a?'JORNADA ACTIVA':'SIN JORNADA ACTIVA';
+  if(detail)detail.textContent=a
+    ?`${a.source==='auto'?'Inicio automático':'Inicio manual'} · ${clock(a.startedAt)}`
+    :todaySessions().length
+      ?`${todaySessions().length} jornada${todaySessions().length===1?'':'s'} registrada${todaySessions().length===1?'':'s'} hoy`
+      :'El tiempo real no se calcula desde los tickets.';
+  if(live)live.textContent=fmtMs(todayWorkedMs());
+  if(inBtn)inBtn.disabled=!!a;
+  if(outBtn)outBtn.disabled=!a;
+
+  const minutes=Math.round(todayWorkedMs()/60000);
+  const hours=document.getElementById('hours-worked');
+  const fill=document.getElementById('hours-progress-fill');
+  if(hours)hours.textContent=`${Math.floor(minutes/60)}h ${String(minutes%60).padStart(2,'0')}m`;
+  if(fill)fill.style.width=Math.min(100,minutes/480*100)+'%';
+}
+
+function punchIn(source='manual',at=Date.now(),meta={}){
+  if(ledger.active)return false;
+  ledger.active={
+    id:'work-'+Date.now()+'-'+Math.random().toString(36).slice(2,7),
+    date:today(),startedAt:Number(at),source,
+    startReason:meta.reason||source,
+    startLat:meta.lat??null,startLng:meta.lng??null
+  };
+  persist();refreshUI();
+  try{window.updatePremiumDashboard?.()}catch(_e){}
+  const line=document.getElementById('status-line');
+  if(line)line.textContent=`Punch in ${clock(at)} ✓ jornada iniciada`;
+  return true;
+}
+
+function punchOut(source='manual',at=Date.now(),meta={}){
+  const a=ledger.active;
+  if(!a)return false;
+  const end=Math.max(Number(a.startedAt||0),Number(at));
+  ledger.sessions.push({
+    ...a,
+    endedAt:end,
+    endSource:source,
+    endReason:meta.reason||source,
+    endLat:meta.lat??null,endLng:meta.lng??null,
+    durationMs:Math.max(0,end-Number(a.startedAt||end))
+  });
+  ledger.active=null;
+  persist();refreshUI();
+  try{window.updatePremiumDashboard?.()}catch(_e){}
+  const line=document.getElementById('status-line');
+  if(line)line.textContent=`Punch out ${clock(end)} ✓ ${fmtMs(end-Number(a.startedAt||end))} registrados`;
+  return true;
+}
+
+function parseTimeInput(value,date=today()){
+  const m=String(value||'').trim().match(/^(\d{1,2}):(\d{2})\s*([ap]m)?$/i);
+  if(!m)return null;
+  let h=Number(m[1]),min=Number(m[2]);
+  if(min>59)return null;
+  const ap=String(m[3]||'').toLowerCase();
+  if(ap){h%=12;if(ap==='pm')h+=12}
+  if(h>23)return null;
+  const [y,mo,d]=date.split('-').map(Number);
+  return new Date(y,mo-1,d,h,min,0,0).getTime();
+}
+
+function adjustToday(){
+  const existing=todaySessions();
+  const a=active();
+  const defaultStart=a?clock(a.startedAt):(existing[0]?clock(existing[0].startedAt):'9:40 AM');
+  const defaultEnd=a?'':(existing.length?clock(existing[existing.length-1].endedAt):clock(Date.now()));
+
+  const startRaw=prompt('Hora real de inicio de hoy. Ejemplo: 9:40 AM',defaultStart);
+  if(startRaw===null)return;
+  const endRaw=prompt('Hora real de salida/fin de hoy. Ejemplo: 6:15 PM',defaultEnd);
+  if(endRaw===null)return;
+
+  const start=parseTimeInput(startRaw);
+  const end=parseTimeInput(endRaw);
+  if(!start||!end||end<=start){
+    alert('No pude guardar esas horas. Revisa el formato y que la salida sea después del inicio.');
+    return;
+  }
+
+  if(!confirm(`¿Guardar hoy ${clock(start)} → ${clock(end)}?\\n\\nTotal: ${fmtMs(end-start)}`))return;
+
+  ledger.sessions=ledger.sessions.filter(s=>s.date!==today());
+  if(ledger.active?.date===today())ledger.active=null;
+  ledger.sessions.push({
+    id:'work-adjusted-'+Date.now(),
+    date:today(),
+    startedAt:start,
+    endedAt:end,
+    durationMs:end-start,
+    source:'manual_adjustment',
+    startReason:'manual_adjustment',
+    endSource:'manual_adjustment',
+    endReason:'manual_adjustment'
+  });
+  persist();refreshUI();
+  const line=document.getElementById('status-line');
+  if(line)line.textContent=`Jornada de hoy ajustada ✓ ${fmtMs(end-start)}`;
+}
+
+function radians(n){return n*Math.PI/180}
+function distanceM(a,b){
+  const R=6371000;
+  const dLat=radians(b.lat-a.lat),dLng=radians(b.lng-a.lng);
+  const x=Math.sin(dLat/2)**2+Math.cos(radians(a.lat))*Math.cos(radians(b.lat))*Math.sin(dLng/2)**2;
+  return 2*R*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
+}
+
+async function resolveBase(){
+  const settings=load(SETTINGS_KEY,{});
+  const address=String(settings.baseAddress||DEFAULT_BASE).trim().replace(/\s+/g,' ');
+  const cache=load(GEO_KEY,{});
+  const key=address.toLowerCase();
+  if(cache[key]?.lat&&cache[key]?.lng)return {lat:Number(cache[key].lat),lng:Number(cache[key].lng),address};
+
+  if(!navigator.onLine)return null;
+  try{
+    const res=await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&q='+encodeURIComponent(address),{headers:{'Accept-Language':'en-US'}});
+    if(!res.ok)return null;
+    const data=await res.json();
+    if(!data?.[0])return null;
+    const point={lat:Number(data[0].lat),lng:Number(data[0].lon),address};
+    cache[key]={lat:point.lat,lng:point.lng,display:data[0].display_name||address};
+    save(GEO_KEY,cache);
+    return point;
+  }catch(_e){return null}
+}
+
+async function handlePosition(pos){
+  if(autoChecking)return;
+  autoChecking=true;
+  try{
+    const base=await resolveBase();
+    if(!base){
+      setStatus('AUTO: no pude resolver Base de Jean. Punch In/Out manual sigue disponible.','warn');
+      return;
+    }
+
+    const point={lat:pos.coords.latitude,lng:pos.coords.longitude};
+    const dist=distanceM(base,point);
+    const zone=dist<=HOME_RADIUS_M?'home':'away';
+    const prev=ledger.auto.lastZone||'unknown';
+    ledger.auto.lastZone=zone;
+    ledger.auto.lastDistance=Math.round(dist);
+    ledger.auto.lastFixAt=Date.now();
+    persist();
+
+    if(!ledger.active && ledger.auto.armed!==false && hasTodayJobs() && zone==='away'){
+      // First verified observation away from home starts the workday.
+      punchIn('auto',Date.now(),{reason:prev==='home'?'left_home_geofence':'observed_away_from_home',lat:point.lat,lng:point.lng});
+    }else if(ledger.active && ledger.active.source==='auto' && zone==='home' && Date.now()-ledger.active.startedAt>=AUTO_MIN_SESSION_MS){
+      punchOut('auto',Date.now(),{reason:'returned_home_geofence',lat:point.lat,lng:point.lng});
+    }
+
+    const a=ledger.active;
+    if(a)setStatus(`AUTO ACTIVO · ${zone==='home'?'en Base de Jean':Math.max(0,Math.round(dist/1609.344*10)/10)+' mi de Base'} · última lectura ${clock(Date.now())}`,'good');
+    else setStatus(`AUTO LISTO · ${zone==='home'?'en Base de Jean':Math.max(0,Math.round(dist/1609.344*10)/10)+' mi de Base'} · ${hasTodayJobs()?'jornada detectada por salida/regreso':'sin trabajos de hoy'}`,zone==='home'?'good':'warn');
+  }finally{
+    autoChecking=false;
+    refreshUI();
+  }
+}
+
+function startAuto(){
+  if(watchId!==null)return;
+  if(!navigator.geolocation){
+    setStatus('AUTO NO DISPONIBLE · este navegador no ofrece ubicación. Usa Punch In/Out.','bad');
+    return;
+  }
+
+  setStatus('AUTO: solicitando ubicación precisa…','warn');
+  watchId=navigator.geolocation.watchPosition(
+    handlePosition,
+    err=>setStatus(`AUTO: ubicación no disponible (${err.message||'permiso requerido'}). Punch In/Out sigue activo.`,'bad'),
+    {enableHighAccuracy:true,maximumAge:15000,timeout:20000}
+  );
+}
+
+function install(){
+  document.getElementById('work-clock-in')?.addEventListener('click',()=>{
+    if(confirm('¿Punch In ahora?\\n\\nEsto inicia el temporizador de trabajo manualmente.'))punchIn('manual');
+  });
+  document.getElementById('work-clock-out')?.addEventListener('click',()=>{
+    if(confirm('¿Punch Out ahora?\\n\\nEsto detiene el tiempo de trabajo aunque no hayas regresado a casa.'))punchOut('manual');
+  });
+  document.getElementById('work-clock-adjust')?.addEventListener('click',adjustToday);
+
+  refreshUI();
+  startAuto();
+  clearInterval(timer);
+  timer=setInterval(refreshUI,15000);
+}
+
+document.addEventListener('DOMContentLoaded',()=>setTimeout(install,650));
+window.addEventListener('focus',()=>{refreshUI();startAuto()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){refreshUI();startAuto()}});
+window.addEventListener('pagehide',()=>{if(watchId!==null&&navigator.geolocation){navigator.geolocation.clearWatch(watchId);watchId=null}});
+
+window.InstaraWorkClock={
+  todayWorkedMs,
+  todaySessions:()=>structuredClone(todaySessions()),
+  active:()=>ledger.active?structuredClone(ledger.active):null,
+  punchIn,punchOut,adjustToday,refreshUI,startAuto
+};
+})();
+</script>
+
+
+<script id="instara-rc110-today-closed-earnings">
+(function(){
+'use strict';
+
+const VERSION='RC110';
+
+function refreshToday(){
+  try{
+    window.InstaraRC105?.stabilize?.('today-earnings-read');
+    window.updatePremiumDashboard?.();
+  }catch(err){
+    console.error('RC110 today earnings refresh',err);
+  }
+}
+
+document.addEventListener('click',event=>{
+  if(event.target.closest?.('#screen-hoy .status-btn')){
+    setTimeout(refreshToday,80);
+    setTimeout(refreshToday,220);
+  }
+},true);
+
+addEventListener('message',event=>{
+  const d=event.data;
+  if(d?.source==='INSTARA_BRIDGE'&&d?.type==='INSTARA_BRIDGE_SNAPSHOT'){
+    setTimeout(refreshToday,180);
+  }
+});
+
+window.addEventListener('focus',()=>setTimeout(refreshToday,100));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(refreshToday,100)});
+
+window.InstaraRC110={refreshToday};
+})();
+</script>
+
+
+<script id="instara-rc111-real-work-counts-mileage-kpi">
+(function(){
+'use strict';
+
+const VERSION='RC111';
+
+function refreshTodayKpis(){
+  try{window.updatePremiumDashboard?.()}catch(err){console.error('RC111 Today KPI refresh',err)}
+}
+
+document.addEventListener('click',event=>{
+  if(event.target.closest?.('#screen-hoy .status-btn,#screen-hoy .route-del,#clear-today-route-btn')){
+    setTimeout(refreshTodayKpis,80);
+    setTimeout(refreshTodayKpis,240);
+  }
+},true);
+
+window.addEventListener('storage',event=>{
+  if(['miruta-mileage-ledger-v1','miruta-mileage-active-v1','miruta-entries'].includes(event.key)){
+    setTimeout(refreshTodayKpis,40);
+  }
+});
+
+window.addEventListener('focus',()=>setTimeout(refreshTodayKpis,100));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(refreshTodayKpis,100)});
+
+// This does not invent background mileage. It only refreshes mileage already observed by the existing tracker.
+setInterval(()=>{
+  if(document.body.dataset.activeScreen==='hoy'||document.getElementById('screen-hoy')?.classList.contains('active')){
+    refreshTodayKpis();
+  }
+},15000);
+
+window.InstaraRC111={refreshTodayKpis};
 })();
 </script>
 
