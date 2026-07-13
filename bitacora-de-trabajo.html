@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC113">
+  <meta name="instara-ai-version" content="RC114">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -6947,7 +6947,10 @@ function renderSummary(){
   const counts={total:all.length,completed:0,cancelled:0,paid:0};
   for(const r of all){
     const st=status(r);
-    if(st==='completed')counts.completed++;
+
+    // Payment is downstream of completion:
+    // every paid ticket is also a completed job for calendar productivity.
+    if(st==='completed'||st==='paid')counts.completed++;
     if(st==='cancelled')counts.cancelled++;
     if(st==='paid')counts.paid++;
   }
@@ -7778,7 +7781,7 @@ window.InstaraRC97={cleanupManualRouteCache,moveSelectedDayToToday,install};
 <script id="instara-rc98-runtime-integrity">
 (function(){
 'use strict';
-const VERSION='RC113';
+const VERSION='RC114';
 const $=id=>document.getElementById(id);
 function state(){return window.__INSTARA_STATE__||window.state}
 function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
@@ -9337,6 +9340,27 @@ function visibleMonthSummary(){
   };
 }
 window.InstaraRC113={visibleMonthSummary};
+})();
+</script>
+
+
+<script id="instara-rc114-paid-is-completed-calendar-law">
+(function(){
+'use strict';
+const VERSION='RC114';
+
+function auditCalendarSummary(){
+  const box=document.getElementById('instara-month-summary');
+  return {
+    month:box?.dataset?.summaryMonth||null,
+    total:Number(box?.querySelector('[data-kind="total"] b')?.textContent||0),
+    completed:Number(box?.querySelector('[data-kind="completed"] b')?.textContent||0),
+    paid:Number(box?.querySelector('[data-kind="paid"] b')?.textContent||0),
+    law:'paid ⊂ completed'
+  };
+}
+
+window.InstaraRC114={auditCalendarSummary};
 })();
 </script>
 
