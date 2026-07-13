@@ -786,6 +786,7 @@ button{min-height:44px}
 .miruta-nav-actions{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:8px}.miruta-nav-actions button{border:1px solid rgba(255,255,255,.26);background:rgba(255,255,255,.1);color:#fff;border-radius:999px;padding:12px 8px;font:750 11px 'Jost',sans-serif}.miruta-nav-actions button.primary{background:var(--gold);color:#151515;border-color:var(--gold)}
 #nav-satellite-btn.active{background:rgba(88,166,255,.35)!important;border-color:#58a6ff!important}
 #miruta-fav-panel{position:fixed;inset:0;z-index:14000;background:rgba(5,8,10,.72);display:flex;align-items:flex-end;justify-content:center}
+#miruta-fav-panel[hidden]{display:none!important}
 #miruta-fav-panel .miruta-fav-box{width:100%;max-width:560px;max-height:80vh;overflow-y:auto;background:rgba(15,18,19,.98);border-radius:20px 20px 0 0;border:1px solid rgba(255,255,255,.16);padding:16px}
 #miruta-fav-panel header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 #miruta-fav-panel header b{color:#fff;font-size:18px}
@@ -4671,8 +4672,9 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     attachAddressAutocomplete($('knowledge-address'));
 
     // ---------- sugerencias de dirección reusables para cualquier campo de la app ----------
-    const addrAutocompleteState=new WeakMap();
     function attachAddressAutocomplete(inputEl,onSelect){
+      window.__addrAutocompleteState = window.__addrAutocompleteState || new WeakMap();
+      const addrAutocompleteState = window.__addrAutocompleteState;
       if(!inputEl||addrAutocompleteState.has(inputEl))return;
       const box=document.createElement('div');box.className='addr-suggest-box';
       inputEl.insertAdjacentElement('afterend',box);
