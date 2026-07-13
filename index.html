@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC77">
+  <meta name="instara-ai-version" content="RC84">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -5389,14 +5389,15 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   const monthNames=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const statusName={pending:'PROGRAMADO',completed:'COMPLETADO',paid:'PAGADO',cancelled:'CANCELADO',missing_price:'REVISAR',observed:'OBSERVADO'};
   let cursor=new Date(); cursor.setDate(1); cursor.setHours(12,0,0,0);
-  let selected=new Date().toISOString().slice(0,10);
+  const localToday=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+  let selected=localToday();
   const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   function load(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch(_e){return fallback}}
   function rows(){try{return Array.isArray(state.entries)?state.entries:[]}catch(e){return[]}}
   function keyOf(e){return String(e.cioOrderId||e.orderViewId||e.cioJobNumber||e.jobNumber||e.po||e.purchaseOrderNumber||e.eventId||e.cioEventId||'')}
-  function isoDate(v){if(!v)return '';const d=new Date(v);if(!Number.isNaN(d.getTime()))return d.toISOString().slice(0,10);const m=String(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);return m?`${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`:''}
+  function isoDate(v){if(!v)return '';const raw=String(v).trim();const direct=raw.match(/^(\d{4}-\d{2}-\d{2})/);if(direct)return direct[1];const m=raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;const d=new Date(raw);return Number.isNaN(d.getTime())?'':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
   function observedStatus(j){const text=[j.imsStatus,j.jobStatus,j.raw?.barColor,j.laborCategory].filter(Boolean).join(' ').toLowerCase();if(j.confirmed)return 'pending';if(/payment received|past paid|paid/.test(text))return 'paid';if(/closed|complete|completed|work_complete/.test(text))return 'completed';if(/cancel|void|declin/.test(text))return 'cancelled';return 'observed'}
-  function virtualJob(j){const status=observedStatus(j);return {_cioObserved:true,cioOrderId:String(j.orderViewId||''),cioEventId:String(j.eventId||''),date:isoDate(j.scheduledDate||j.start),type:'income',status,displayStatus:statusName[status],customerName:j.customerName||j.eventCustomer||'Trabajo Mega',category:j.laborCategory||j.eventService||'Trabajo Mega',service:j.laborCategory||j.eventService||'Trabajo Mega',storeNumber:String(j.storeNumber||''),store:j.storeNumber?'Store '+String(j.storeNumber).replace(/^0+/,''):'',po:j.purchaseOrderNumber||'',windowStart:j.start||'',scheduledStart:j.start||'',time:j.start||''}}
+  function virtualJob(j){const status=observedStatus(j),fallbackId=String(j.orderViewId||j.eventId||j.text||'').trim();return {_cioObserved:true,_cioRaw:j,cioOrderId:String(j.orderViewId||''),cioEventId:String(j.eventId||''),date:isoDate(j.scheduledDate||j.start),type:'income',status,displayStatus:statusName[status],customerName:j.customerName||j.eventCustomer||(fallbackId?`Ticket Mega #${fallbackId}`:'Ticket Mega sin identidad'),category:j.laborCategory||j.eventService||'Servicio pendiente de detalle',service:j.laborCategory||j.eventService||'Servicio pendiente de detalle',storeNumber:String(j.storeNumber||''),store:j.storeNumber?'Store '+String(j.storeNumber).replace(/^0+/,''):(j.sellerName||''),po:j.purchaseOrderNumber||'',windowStart:j.start||'',scheduledStart:j.start||'',time:j.start||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',jobNumber:j.jobNumber||'',projectNumber:j.projectNumber||'',invoiceNumber:j.invoiceNumber||'',imsStatus:j.imsStatus||'',jobStatus:j.jobStatus||'',purchaseOrderAmount:Number(j.purchaseOrderAmount||0),lineItems:j.lineItems||[],relatedOrders:j.relatedOrders||[],deliveryNotes:j.deliveryNotes||'',scopeNotes:j.scopeNotes||'',notesText:j.notesText||'',notesHistory:j.notesHistory||[],haulAway:/haul\s*away/i.test((j.lineItems||[]).map(x=>x.description||'').join(' | ')),detailError:j.detailError||''}}
   function dayRows(day){
     const active=rows().filter(e=>e.date===day&&e.type==='income'&&e.status!=='missing_price');
     const keys=new Set(active.map(keyOf).filter(Boolean));
@@ -5405,14 +5406,50 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   }
   function iso(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
   function niceDay(v){const d=new Date(v+'T12:00:00');return d.toLocaleDateString('es-US',{weekday:'long',month:'short',day:'numeric'}).replace(/^./,x=>x.toUpperCase())}
-  function timeOf(e,i){const raw=e.windowStart||e.scheduledStart||e.time||'';const m=String(raw).match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);if(m){const mi=m[2]||'00',ap=(m[3]||'').toUpperCase();return ap?m[1]+':'+mi+' '+ap:String(m[1]).padStart(2,'0')+':'+mi}return i===0?'7:30':String(8+i)+':00'}
+  function timeOf(e,i){const raw=String(e.windowStart||e.scheduledStart||e.time||'').trim();let m=raw.match(/T(\d{2}):(\d{2})/);if(m){let h=Number(m[1]),ap=h>=12?'PM':'AM';h=h%12||12;return `${h}:${m[2]} ${ap}`}m=raw.match(/(?:^|\s)(\d{1,2})(?::(\d{2}))?\s*(AM|PM)(?:$|\s)/i);if(m)return `${m[1]}:${m[2]||'00'} ${m[3].toUpperCase()}`;m=raw.match(/^(\d{1,2}):(\d{2})$/);if(m)return `${m[1].padStart(2,'0')}:${m[2]}`;return i===0?'7:30 AM':`${8+i}:00 AM`}
   const customer=e=>e.customerName||e.customer||e.clientName||e.name||e.category||'Ticket Mega';
   const service=e=>e.service||e.category||'Instalación';
   const store=e=>e.storeNumber?'Store '+e.storeNumber:(e.store||'');
   function labelOf(e){if(e.cioObservedOnly||e._cioObserved)return e.displayStatus||'OBSERVADO';return statusName[e.status]||'PROGRAMADO'}
   function classOf(e){const l=labelOf(e);return /COMPLETADO|PAGADO/.test(l)?'done':/CANCELADO/.test(l)?'cancelled':/OBSERVADO/.test(l)?'observed':''}
-  function renderAgenda(){const box=$('instara-schedule-agenda'),title=$('schedule-selected-title'),count=$('schedule-selected-count');if(!box)return;const data=dayRows(selected);title.textContent=niceDay(selected);count.textContent=data.length+' ticket'+(data.length===1?'':'s');if(!data.length){box.innerHTML='<div class="schedule-empty">SIN TICKETS PARA ESTE DÍA</div>';return}box.innerHTML=data.map((e,i)=>{const cls=classOf(e);return '<article class="schedule-ticket '+cls+'"><div class="time">'+esc(timeOf(e,i))+'</div><div class="rail"></div><div class="copy"><b>'+esc(customer(e))+'</b><span>'+esc(service(e))+(store(e)?' · '+esc(store(e)):'')+'</span></div><div class="meta"><span class="pill">'+esc(labelOf(e))+'</span><span class="po">'+(e.po?'PO '+esc(e.po):'—')+'</span></div></article>'}).join('')}
-  function renderCalendar(){const grid=$('instara-schedule-grid'),head=$('schedule-month-title');if(!grid)return;const y=cursor.getFullYear(),m=cursor.getMonth();head.textContent=monthNames[m][0].toUpperCase()+monthNames[m].slice(1)+' '+y;const start=new Date(y,m,1,12).getDay(),days=new Date(y,m+1,0).getDate(),prevDays=new Date(y,m,0).getDate(),today=new Date().toISOString().slice(0,10);let html='';for(let cell=0;cell<42;cell++){let d,cm=m,cy=y,out=false;if(cell<start){d=prevDays-start+cell+1;cm=m-1;out=true;if(cm<0){cm=11;cy--}}else if(cell>=start+days){d=cell-start-days+1;cm=m+1;out=true;if(cm>11){cm=0;cy++}}else d=cell-start+1;const date=iso(cy,cm,d),data=dayRows(date),done=data.filter(e=>/COMPLETADO|PAGADO/.test(labelOf(e))).length,cancel=data.filter(e=>/CANCELADO/.test(labelOf(e))).length,observed=data.filter(e=>/OBSERVADO/.test(labelOf(e))).length;html+='<button class="schedule-day '+(out?'out ':'')+(data.length?'has ':'')+(date===today?'today ':'')+(date===selected?'selected':'')+'" data-date="'+date+'" type="button"><span class="num">'+d+'</span>'+(data.length?'<span class="count">'+data.length+'</span><span class="dots">'+(done?'<i class="done"></i>':'')+(cancel?'<i class="warn"></i>':'')+(observed?'<i class="observed"></i>':'')+(data.length-done-cancel-observed>0?'<i></i>':'')+'</span>':'')+'</button>'}grid.innerHTML=html;grid.querySelectorAll('.schedule-day').forEach(b=>b.addEventListener('click',()=>{selected=b.dataset.date;const d=new Date(selected+'T12:00:00');if(d.getMonth()!==cursor.getMonth()||d.getFullYear()!==cursor.getFullYear())cursor=new Date(d.getFullYear(),d.getMonth(),1,12);renderCalendar()}));renderAgenda()}
+  function norm(v){return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'')}
+  function allKnownRows(){
+    const active=rows();
+    const observed=(load(OBSERVED_KEY,[])||[]).map(virtualJob);
+    const out=[],seen=new Set();
+    for(const e of [...active,...observed]){const k=keyOf(e)||[e.date,norm(customer(e)),norm(e.address||e.customerAddress),norm(e.phone||e.customerPhone)].join('|');if(seen.has(k))continue;seen.add(k);out.push(e)}
+    return out;
+  }
+  function sameClient(a,b){
+    const an=norm(customer(a)),bn=norm(customer(b));
+    const ap=norm(a.phone||a.customerPhone),bp=norm(b.phone||b.customerPhone);
+    const aa=norm(a.address||a.customerAddress),ba=norm(b.address||b.customerAddress);
+    return Boolean((an&&bn&&an===bn)||(ap&&bp&&ap===bp)||(aa&&ba&&aa===ba));
+  }
+  function clientHistory(entry){
+    const currentDate=isoDate(entry.scheduledDate||entry.start||entry.date)||entry.date||'9999-12-31';
+    return allKnownRows().filter(e=>e!==entry&&sameClient(e,entry)).filter(e=>{const d=isoDate(e.scheduledDate||e.start||e.date)||e.date||'';return d&&d<currentDate}).sort((a,b)=>String(b.date||b.start||'').localeCompare(String(a.date||a.start||''))).slice(0,6);
+  }
+  function fmtHistoryDate(v){const d=isoDate(v);if(!d)return String(v||'');const [y,m,day]=d.split('-');return `${m}/${day}/${String(y).slice(-2)}`}
+  function detailLine(label,value,kind=''){if(value===undefined||value===null||value==='')return '';return `<div class="instara-detail-row ${kind}"><b>${esc(label)}</b><span>${esc(value)}</span></div>`}
+  function showTicketDetail(entry){
+    const e=entry?._cioRaw?{...entry._cioRaw,...entry}:entry||{};
+    const items=Array.isArray(e.lineItems)?e.lineItems:[],related=Array.isArray(e.relatedOrders)?e.relatedOrders:[],history=Array.isArray(e.notesHistory||e.cioHistory)?(e.notesHistory||e.cioHistory):[];
+    const prior=clientHistory(entry);
+    const modal=document.createElement('div');modal.className='historical-modal instara-ticket-detail-modal';
+    modal.innerHTML=`<div class="instara-ticket-detail"><button class="btn-mini" data-close>CERRAR</button><h2>${esc(e.customerName||e.eventCustomer||'Ticket Mega')}</h2><p class="instara-detail-service">${esc(e.laborCategory||e.service||e.category||e.eventService||'Servicio pendiente de detalle')}</p>${detailLine('Estado INSTARA',labelOf(entry),'gold')}${detailLine('IMS Status',e.imsStatus||e.cioIMSStatus)}${detailLine('Job Status',e.jobStatus||e.cioJobStatus)}${detailLine('Fecha',e.scheduledDate||entry.date)}${detailLine('Horario',timeOf(entry,0)+(e.end?' – '+timeOf({time:e.end},0):''))}${detailLine('Store',store(entry)||e.sellerName)}${detailLine('Dirección',e.customerAddress||entry.address,'info')}${detailLine('Teléfono',e.customerPhone||entry.phone,'info')}${detailLine('Email',e.customerEmail||entry.email,'info')}${detailLine('PO',e.purchaseOrderNumber||entry.po,'gold')}${detailLine('Job Number',e.jobNumber||entry.jobNumber)}${detailLine('Project Number',e.projectNumber||entry.projectNumber)}${detailLine('Invoice',e.invoiceNumber||entry.invoiceNumber)}${detailLine('Purchase Order Amount',Number(e.purchaseOrderAmount||entry.purchaseOrderAmount||0)?money(Number(e.purchaseOrderAmount||entry.purchaseOrderAmount||0)):'')}${detailLine('Haul Away',entry.haulAway||e.haulAway?'SÍ':'NO')}
+    <section><h3>MINI HISTORIAL DEL CLIENTE</h3>${prior.length?prior.map(h=>`<p class="instara-history-line"><b>Cita anterior · ${esc(fmtHistoryDate(h.date||h.start||h.scheduledDate))}</b><span>${esc(service(h))} · ${esc(labelOf(h))}${store(h)?' · '+esc(store(h)):''}</span></p>`).join(''):'<p>Sin citas anteriores conocidas en la memoria local de INSTARA.</p>'}</section>
+    <section><h3>LINE ITEMS / ITEM #</h3>${items.length?items.map(x=>`<div class="instara-detail-item"><b>${esc(x.itemNumber||'—')}</b><span>${esc(x.description||'')}</span></div>`).join(''):'<p>Sin line items cargados.</p>'}</section><section><h3>DELIVERY / SCHEDULING NOTES</h3><p>${esc(e.deliveryNotes||'Sin notas.')}</p></section><section><h3>SCOPE OF WORK NOTES</h3><p>${esc(e.scopeNotes||'Sin notas.')}</p></section><section><h3>HISTORIAL / NOTES</h3>${history.length?history.slice(-30).map(x=>`<p>${esc(typeof x==='string'?x:JSON.stringify(x))}</p>`).join(''):`<p>${esc(e.notesText||'Sin historial cargado.')}</p>`}</section><section><h3>RELATED ORDERS</h3>${related.length?related.map(r=>`<p>${esc(Object.values(r).filter(Boolean).join(' · '))}</p>`).join(''):'<p>Sin órdenes relacionadas cargadas.</p>'}</section>${e.detailError?`<div class="instara-detail-warning">Detalle CiO incompleto: ${esc(e.detailError)}</div>`:''}</div>`;
+    document.body.appendChild(modal);modal.querySelector('[data-close]').onclick=()=>modal.remove();modal.addEventListener('click',ev=>{if(ev.target===modal)modal.remove()})
+  }
+  function renderAgenda(){
+    const box=$('instara-schedule-agenda'),title=$('schedule-selected-title'),count=$('schedule-selected-count');if(!box)return;
+    const data=dayRows(selected);title.textContent=niceDay(selected);count.textContent=data.length+' ticket'+(data.length===1?'':'s');
+    if(!data.length){box.innerHTML='<div class="schedule-empty">SIN TICKETS PARA ESTE DÍA</div>';return}
+    box.innerHTML=data.map((e,i)=>{const cls=classOf(e),phone=e.phone||e.customerPhone||'TELÉFONO NO CARGADO',address=e.address||e.customerAddress||'DIRECCIÓN NO CARGADA',po=e.po||e.purchaseOrderNumber||'—';return `<article class="schedule-ticket ${cls}" data-ticket-index="${i}" tabindex="0" role="button"><div class="time">${esc(timeOf(e,i))}</div><div class="rail"></div><div class="copy"><b>${esc(customer(e))}</b><span class="schedule-service">${esc(service(e))}</span><span class="schedule-address">${esc(address)}</span><span class="schedule-phone">${esc(phone)}</span><span class="schedule-store">${esc(store(e)||'TIENDA NO CARGADA')}</span></div><div class="meta"><span class="pill">${esc(labelOf(e))}</span><span class="po">PO ${esc(po)}</span><span class="schedule-more">VER FICHA</span></div></article>`}).join('');
+    box.querySelectorAll('.schedule-ticket').forEach(card=>{const open=()=>showTicketDetail(data[Number(card.dataset.ticketIndex)]);card.addEventListener('click',open);card.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();open()}})})
+  }
+  function renderCalendar(){const grid=$('instara-schedule-grid'),head=$('schedule-month-title');if(!grid)return;const y=cursor.getFullYear(),m=cursor.getMonth();head.textContent=monthNames[m][0].toUpperCase()+monthNames[m].slice(1)+' '+y;const start=new Date(y,m,1,12).getDay(),days=new Date(y,m+1,0).getDate(),prevDays=new Date(y,m,0).getDate(),today=localToday();let html='';for(let cell=0;cell<42;cell++){let d,cm=m,cy=y,out=false;if(cell<start){d=prevDays-start+cell+1;cm=m-1;out=true;if(cm<0){cm=11;cy--}}else if(cell>=start+days){d=cell-start-days+1;cm=m+1;out=true;if(cm>11){cm=0;cy++}}else d=cell-start+1;const date=iso(cy,cm,d),data=dayRows(date),done=data.filter(e=>/COMPLETADO|PAGADO/.test(labelOf(e))).length,cancel=data.filter(e=>/CANCELADO/.test(labelOf(e))).length,observed=data.filter(e=>/OBSERVADO/.test(labelOf(e))).length;html+='<button class="schedule-day '+(out?'out ':'')+(data.length?'has ':'')+(date===today?'today ':'')+(date===selected?'selected':'')+'" data-date="'+date+'" type="button"><span class="num">'+d+'</span>'+(data.length?'<span class="count">'+data.length+'</span><span class="dots">'+(done?'<i class="done"></i>':'')+(cancel?'<i class="warn"></i>':'')+(observed?'<i class="observed"></i>':'')+(data.length-done-cancel-observed>0?'<i></i>':'')+'</span>':'')+'</button>'}grid.innerHTML=html;grid.querySelectorAll('.schedule-day').forEach(b=>b.addEventListener('click',()=>{selected=b.dataset.date;const d=new Date(selected+'T12:00:00');if(d.getMonth()!==cursor.getMonth()||d.getFullYear()!==cursor.getFullYear())cursor=new Date(d.getFullYear(),d.getMonth(),1,12);renderCalendar();setTimeout(()=>document.getElementById('instara-schedule-agenda')?.scrollIntoView({behavior:'smooth',block:'start'}),50)}));renderAgenda()}
   async function syncNow(){const btn=$('instara-mega-sync'),copy=$('instara-sync-copy'),time=$('instara-sync-time');if(!btn)return;btn.disabled=true;btn.textContent='REVISANDO…';copy.textContent='Solicitando ventana de 3 meses a INSTARA Mega Bridge…';try{const result=await window.InstaraMegaBridge?.requestSync?.();if(!result?.ok)copy.textContent=result?.message||'Mega Bridge no conectado.'}catch(err){copy.textContent='No pude contactar el Bridge: '+(err?.message||'error desconocido')}finally{time.textContent=new Date().toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'});btn.disabled=false;btn.textContent='ACTUALIZAR MEGA';renderCalendar()}}
   document.addEventListener('DOMContentLoaded',()=>{const input=$('route-date');selected=input&&input.value?input.value:selected;const sd=new Date(selected+'T12:00:00');cursor=new Date(sd.getFullYear(),sd.getMonth(),1,12);$('schedule-prev')?.addEventListener('click',()=>{cursor.setMonth(cursor.getMonth()-1);renderCalendar()});$('schedule-next')?.addEventListener('click',()=>{cursor.setMonth(cursor.getMonth()+1);renderCalendar()});$('instara-mega-sync')?.addEventListener('click',syncNow);renderCalendar();setInterval(()=>{if(document.body.dataset.activeScreen==='schedule')renderCalendar()},30000)});
   window.InstaraSchedule={refresh:renderCalendar,syncNow,dayRows};
@@ -6315,4 +6352,60 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 .schedule-ticket.observed .rail{background:var(--instara-gold)!important}
 .schedule-ticket.observed .pill{border-color:var(--instara-gold)!important;color:var(--instara-gold)!important}
 </style>
+
+<style id="instara-rc83-ticket-detail-css">
+.schedule-ticket{cursor:pointer}.schedule-ticket:active{transform:scale(.985)}
+.instara-ticket-detail-modal>div{max-width:min(760px,94vw)!important;max-height:90vh!important;overflow:auto!important}
+.instara-ticket-detail h2{color:var(--instara-gold)!important;margin:12px 0 2px!important}.instara-detail-service{color:#fff!important;font-weight:800!important;margin:0 0 14px!important}
+.instara-detail-row{display:grid;grid-template-columns:minmax(120px,.8fr) minmax(0,1.5fr);gap:12px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.14)}.instara-detail-row b{color:var(--instara-blue)!important}.instara-detail-row span{color:#fff!important;overflow-wrap:anywhere}.instara-detail-row.gold span{color:var(--instara-gold)!important;font-weight:900}.instara-detail-row.info span{color:var(--instara-blue)!important}
+.instara-ticket-detail section{margin-top:18px;padding:14px;border-radius:16px;background:rgba(5,10,14,.82);border:1px solid rgba(255,255,255,.16)}.instara-ticket-detail section h3{color:var(--instara-gold)!important;margin:0 0 10px}.instara-ticket-detail section p{color:#fff!important;white-space:pre-wrap;overflow-wrap:anywhere}.instara-detail-item{display:grid;grid-template-columns:100px 1fr;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.1)}.instara-detail-item b{color:var(--instara-gold)!important}.instara-detail-item span{color:#fff!important}.instara-detail-warning{margin-top:14px;padding:12px;border:1px solid var(--instara-red);color:var(--instara-red)!important;border-radius:12px}
+@media(max-width:520px){.instara-detail-row{grid-template-columns:1fr;gap:3px}.instara-detail-item{grid-template-columns:80px 1fr}}
+</style>
+
+
+<style id="instara-rc84-live-calendar">
+/* RC84 calendar semantics: gold = today, blue = selected day. */
+#screen-schedule .schedule-shell{max-width:980px;margin:0 auto;padding-bottom:32px}
+#screen-schedule .schedule-brand-row h2{font-size:34px!important;line-height:1.05!important}
+#screen-schedule .schedule-monthbar{grid-template-columns:54px 1fr 54px!important;margin:8px 0 12px!important}
+#screen-schedule .schedule-monthbar button{width:50px!important;height:50px!important;font-size:27px!important}
+#screen-schedule .schedule-monthbar h3{font-size:27px!important;color:var(--instara-gold)!important;text-shadow:none!important}
+#screen-schedule .schedule-weekdays span{font-size:12px!important;color:var(--instara-blue)!important}
+#screen-schedule .schedule-grid{gap:6px!important;padding:9px 0 18px!important}
+#screen-schedule .schedule-day{min-height:78px!important;border:1px solid rgba(255,255,255,.2)!important;border-radius:16px!important;padding:10px 8px!important;background:rgba(5,10,14,.82)!important;box-shadow:none!important;outline:none!important}
+#screen-schedule .schedule-day .num{font-size:18px!important;color:#fff!important}
+#screen-schedule .schedule-day .count{min-width:25px!important;height:25px!important;border-radius:14px!important;font-size:12px!important;background:var(--instara-gold)!important;color:#111!important}
+#screen-schedule .schedule-day.today{border:3px solid var(--instara-gold)!important;box-shadow:0 0 0 1px rgba(0,0,0,.55) inset!important}
+#screen-schedule .schedule-day.selected{border:3px solid var(--instara-blue)!important;box-shadow:0 0 0 2px rgba(126,199,255,.18) inset!important}
+#screen-schedule .schedule-day.today.selected{border-color:var(--instara-gold)!important;box-shadow:0 0 0 3px var(--instara-blue) inset!important}
+#screen-schedule .schedule-day:active{transform:scale(.97)!important}
+#screen-schedule .schedule-day-panel{border-top:2px solid rgba(255,255,255,.28)!important;padding-top:17px!important}
+#screen-schedule .schedule-day-title small{font-size:12px!important;color:var(--instara-blue)!important}
+#screen-schedule .schedule-day-title b{font-size:25px!important;color:var(--instara-gold)!important}
+#screen-schedule .schedule-day-title span{font-size:13px!important;color:var(--instara-gold)!important}
+#screen-schedule .schedule-ticket{grid-template-columns:74px 4px minmax(0,1fr) minmax(122px,auto)!important;gap:12px!important;min-height:142px!important;padding:15px 10px!important;margin:0 0 8px!important;border:1px solid rgba(255,255,255,.18)!important;border-radius:18px!important;background:rgba(5,10,14,.9)!important;overflow:hidden!important}
+#screen-schedule .schedule-ticket .time{font-size:14px!important;line-height:1.25!important;color:var(--instara-gold)!important;padding-top:3px!important}
+#screen-schedule .schedule-ticket .copy{gap:4px!important;overflow:hidden!important}
+#screen-schedule .schedule-ticket .copy b{font-size:18px!important;line-height:1.2!important;color:var(--instara-gold)!important;white-space:normal!important}
+#screen-schedule .schedule-ticket .copy span{font-size:12px!important;line-height:1.35!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+#screen-schedule .schedule-ticket .schedule-service{color:#fff!important;font-weight:800!important}
+#screen-schedule .schedule-ticket .schedule-address,#screen-schedule .schedule-ticket .schedule-phone,#screen-schedule .schedule-ticket .schedule-store{color:var(--instara-blue)!important}
+#screen-schedule .schedule-ticket .meta{min-width:0!important;max-width:155px!important;gap:8px!important}
+#screen-schedule .schedule-ticket .pill{font-size:10px!important;max-width:100%!important;padding:7px 9px!important;color:#fff!important;border-color:rgba(255,255,255,.55)!important}
+#screen-schedule .schedule-ticket .po{font-size:12px!important;color:var(--instara-gold)!important;white-space:normal!important;text-align:right!important}
+#screen-schedule .schedule-ticket .schedule-more{font-size:10px!important;color:#fff!important;border:1px solid rgba(255,255,255,.35);padding:6px 8px;border-radius:8px}
+.instara-ticket-detail-modal .instara-ticket-detail{max-width:760px!important;max-height:88vh!important;overflow:auto!important}
+.instara-ticket-detail .instara-history-line{display:flex!important;flex-direction:column!important;gap:4px!important;padding:10px 0!important;border-bottom:1px solid rgba(255,255,255,.15)!important}
+.instara-ticket-detail .instara-history-line b{color:var(--instara-gold)!important;font-size:14px!important}
+.instara-ticket-detail .instara-history-line span{color:#fff!important;font-size:13px!important}
+@media(max-width:640px){
+ #screen-schedule .schedule-day{min-height:72px!important}
+ #screen-schedule .schedule-ticket{grid-template-columns:58px 3px minmax(0,1fr)!important;min-height:154px!important;padding:13px 9px!important}
+ #screen-schedule .schedule-ticket .meta{grid-column:3!important;display:flex!important;flex-direction:row!important;align-items:center!important;justify-content:flex-start!important;flex-wrap:wrap!important;max-width:none!important;text-align:left!important}
+ #screen-schedule .schedule-ticket .po{font-size:12px!important;text-align:left!important}
+ #screen-schedule .schedule-ticket .copy b{font-size:17px!important}
+ #screen-schedule .schedule-ticket .copy span{font-size:12px!important}
+}
+</style>
+
 </body>
