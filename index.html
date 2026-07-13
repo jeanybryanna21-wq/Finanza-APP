@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC100">
+  <meta name="instara-ai-version" content="RC101">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -5626,6 +5626,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   const localToday=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
   let selected=localToday();
   const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const detailMoney=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(n||0));
   function load(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch(_e){return fallback}}
   function rows(){try{return Array.isArray(state.entries)?state.entries:[]}catch(e){return[]}}
   function keyOf(e){return String(e.cioOrderId||e.orderViewId||e.cioJobNumber||e.jobNumber||e.po||e.purchaseOrderNumber||e.eventId||e.cioEventId||'')}
@@ -5671,29 +5672,29 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
     const e=entry?._cioRaw?{...entry._cioRaw,...entry}:entry||{};
     const items=Array.isArray(e.lineItems)?e.lineItems:[],extendedRows=Array.isArray(e.extendedOrderRows)?e.extendedOrderRows:[],related=Array.isArray(e.relatedOrders)?e.relatedOrders:[],history=Array.isArray(e.notesHistory||e.cioHistory)?(e.notesHistory||e.cioHistory):[];
     const prior=clientHistory(entry);
-    const modal=document.createElement('div');modal.className='historical-modal instara-ticket-detail-modal';
-    modal.innerHTML=`<div class="instara-ticket-detail"><button class="btn-mini" data-close>CERRAR</button><h2>${esc(e.customerName||e.eventCustomer||'Ticket Mega')}</h2><p class="instara-detail-service">${esc(e.laborCategory||e.service||e.category||e.eventService||'Servicio pendiente de detalle')}</p>${detailLine('Estado INSTARA',labelOf(entry),'gold')}${detailLine('IMS Status',e.imsStatus||e.cioIMSStatus)}${detailLine('Job Status',e.jobStatus||e.cioJobStatus)}${detailLine('Fecha',e.scheduledDate||entry.date)}${detailLine('Horario',timeOf(entry,0)+(e.end?' – '+timeOf({time:e.end},0):''))}${detailLine('Store',store(entry)||e.sellerName)}${detailLine('Dirección',e.customerAddress||entry.address,'info')}${detailLine('Teléfono',e.customerPhone||entry.phone,'info')}${detailLine('Email',e.customerEmail||entry.email,'info')}${detailLine('PO',e.purchaseOrderNumber||entry.po,'gold')}${detailLine('Job Number',e.jobNumber||entry.jobNumber)}${detailLine('Project Number',e.projectNumber||entry.projectNumber)}${detailLine('Invoice',e.invoiceNumber||entry.invoiceNumber)}${detailLine('Purchase Order Amount',Number(e.purchaseOrderAmount||entry.purchaseOrderAmount||0)?money(Number(e.purchaseOrderAmount||entry.purchaseOrderAmount||0)):'')}${detailLine('Haul Away',entry.haulAway||e.haulAway?'SÍ':'NO')}
+    document.querySelectorAll('.instara-ticket-detail-modal').forEach(n=>n.remove());const modal=document.createElement('div');modal.className='historical-modal instara-ticket-detail-modal';modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');
+    modal.innerHTML=`<div class="instara-ticket-detail"><button class="btn-mini" data-close>CERRAR</button><h2>${esc(e.customerName||e.eventCustomer||'Ticket Mega')}</h2><p class="instara-detail-service">${esc(e.laborCategory||e.service||e.category||e.eventService||'Servicio pendiente de detalle')}</p>${detailLine('Estado INSTARA',labelOf(entry),'gold')}${detailLine('IMS Status',e.imsStatus||e.cioIMSStatus)}${detailLine('Job Status',e.jobStatus||e.cioJobStatus)}${detailLine('Fecha',e.scheduledDate||entry.date)}${detailLine('Horario',timeOf(entry,0)+(e.end?' – '+timeOf({time:e.end},0):''))}${detailLine('Store',store(entry)||e.sellerName)}${detailLine('Dirección',e.customerAddress||entry.address,'info')}${detailLine('Teléfono',e.customerPhone||entry.phone,'info')}${detailLine('Email',e.customerEmail||entry.email,'info')}${detailLine('PO',e.purchaseOrderNumber||entry.po,'gold')}${detailLine('Job Number',e.jobNumber||entry.jobNumber)}${detailLine('Project Number',e.projectNumber||entry.projectNumber)}${detailLine('Invoice',e.invoiceNumber||entry.invoiceNumber)}${detailLine('Purchase Order Amount',Number(e.purchaseOrderAmount||entry.purchaseOrderAmount||0)?detailMoney(Number(e.purchaseOrderAmount||entry.purchaseOrderAmount||0)):'')}${detailLine('Haul Away',entry.haulAway||e.haulAway?'SÍ':'NO')}
     <section><h3>MINI HISTORIAL DEL CLIENTE</h3>${prior.length?prior.map(h=>`<p class="instara-history-line"><b>Cita anterior · ${esc(fmtHistoryDate(h.date||h.start||h.scheduledDate))}</b><span>${esc(service(h))} · ${esc(labelOf(h))}${store(h)?' · '+esc(store(h)):''}</span></p>`).join(''):'<p>Sin citas anteriores conocidas en la memoria local de INSTARA.</p>'}</section>
     <section><h3>EXTENDED ORDER DETAILS</h3>${extendedRows.length?extendedRows.map(r=>`<div class="instara-extended-row">${Object.entries(r).filter(([,v])=>String(v||'').trim()).map(([k,v])=>`<div><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('')}</div>`).join(''):`<p>${esc(e.extendedOrderText||'Sin Extended Order Details cargado.')}</p>`}</section>
     <section><h3>LINE ITEMS / ITEM #</h3>${items.length?items.map(x=>`<div class="instara-detail-item"><b>${esc(x.itemNumber||'—')}</b><span>${esc(x.description||'')}</span></div>`).join(''):'<p>Sin line items cargados.</p>'}</section><section><h3>DELIVERY / SCHEDULING NOTES</h3><p>${esc(e.deliveryNotes||'Sin notas.')}</p></section><section><h3>SCOPE OF WORK NOTES</h3><p>${esc(e.scopeNotes||'Sin notas.')}</p></section><section><h3>HISTORIAL / NOTES</h3>${history.length?history.slice(-30).map(x=>`<p>${esc(typeof x==='string'?x:JSON.stringify(x))}</p>`).join(''):`<p>${esc(e.notesText||'Sin historial cargado.')}</p>`}</section><section><h3>RELATED ORDERS</h3>${related.length?related.map(r=>`<p>${esc(Object.values(r).filter(Boolean).join(' · '))}</p>`).join(''):'<p>Sin órdenes relacionadas cargadas.</p>'}</section>${e.detailError?`<div class="instara-detail-warning">Detalle CiO incompleto: ${esc(e.detailError)}</div>`:''}</div>`;
-    document.body.appendChild(modal);modal.querySelector('[data-close]').onclick=()=>modal.remove();modal.addEventListener('click',ev=>{if(ev.target===modal)modal.remove()})
+    document.body.appendChild(modal);document.body.style.overflow='hidden';const close=()=>{modal.remove();document.body.style.overflow=''};modal.querySelector('[data-close]').onclick=close;modal.addEventListener('click',ev=>{if(ev.target===modal)close()});document.addEventListener('keydown',function escClose(ev){if(ev.key==='Escape'){close();document.removeEventListener('keydown',escClose)}});setTimeout(()=>modal.querySelector('[data-close]')?.focus(),30)
   }
   window.InstaraTicketDetail={open:showTicketDetail};
-  document.addEventListener('click',ev=>{
-    const card=ev.target.closest?.('.schedule-ticket');
-    if(!card)return;
-    const selectedDate=document.querySelector('#instara-schedule-grid .schedule-day.selected')?.dataset?.date||selected;
-    const list=dayRows(selectedDate);
-    const entry=list[Number(card.dataset.ticketIndex)];
-    if(entry){ev.preventDefault();showTicketDetail(entry)}
-  },true);
 
   function renderAgenda(){
     const box=$('instara-schedule-agenda'),title=$('schedule-selected-title'),count=$('schedule-selected-count');if(!box)return;
     const data=dayRows(selected);title.textContent=niceDay(selected);count.textContent=data.length+' ticket'+(data.length===1?'':'s');
     if(!data.length){box.innerHTML='<div class="schedule-empty">SIN TICKETS PARA ESTE DÍA</div>';return}
-    box.innerHTML=data.map((e,i)=>{const cls=classOf(e),phone=e.phone||e.customerPhone||'TELÉFONO NO CARGADO',address=e.address||e.customerAddress||'DIRECCIÓN NO CARGADA',po=e.po||e.purchaseOrderNumber||'—';return `<article class="schedule-ticket ${cls}" data-ticket-index="${i}" data-ticket-key="${esc(keyOf(e)||e.id||'')}" tabindex="0" role="button"><div class="time">${esc(timeOf(e,i))}</div><div class="rail"></div><div class="copy"><b>${esc(customer(e))}</b><span class="schedule-service">${esc(service(e))}</span><span class="schedule-address">${esc(address)}</span><span class="schedule-phone">${esc(phone)}</span><span class="schedule-store">${esc(store(e)||'TIENDA NO CARGADA')}</span></div><div class="meta"><span class="pill">${esc(labelOf(e))}</span><span class="po">PO ${esc(po)}</span><span class="schedule-more">VER FICHA</span></div></article>`}).join('');
-    box.querySelectorAll('.schedule-ticket').forEach(card=>{const open=()=>showTicketDetail(data[Number(card.dataset.ticketIndex)]);card.addEventListener('click',open);card.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();open()}})})
+    box.innerHTML=data.map((e,i)=>{const cls=classOf(e),phone=e.phone||e.customerPhone||'TELÉFONO NO CARGADO',address=e.address||e.customerAddress||'DIRECCIÓN NO CARGADA',po=e.po||e.purchaseOrderNumber||'—';return `<article class="schedule-ticket ${cls}" data-ticket-index="${i}" data-ticket-key="${esc(keyOf(e)||e.id||'')}" tabindex="0" role="button"><div class="time">${esc(timeOf(e,i))}</div><div class="rail"></div><div class="copy"><b>${esc(customer(e))}</b><span class="schedule-service">${esc(service(e))}</span><span class="schedule-address">${esc(address)}</span><span class="schedule-phone">${esc(phone)}</span><span class="schedule-store">${esc(store(e)||'TIENDA NO CARGADA')}</span></div><div class="meta"><span class="pill">${esc(labelOf(e))}</span><span class="po">PO ${esc(po)}</span>${e.isStoreStop||/lowe'?s store/i.test(String(customer(e)))?'':`<button class="schedule-more" type="button" data-open-ticket="1">VER FICHA</button>`}</div></article>`}).join('');
+    box.querySelectorAll('.schedule-ticket').forEach(card=>{
+      const open=ev=>{
+        if(ev){ev.preventDefault();ev.stopPropagation()}
+        const entry=data[Number(card.dataset.ticketIndex)];
+        if(entry)showTicketDetail(entry);
+      };
+      card.querySelector('[data-open-ticket]')?.addEventListener('click',open);
+      card.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){open(ev)}});
+    })
   }
   function renderCalendar(){const grid=$('instara-schedule-grid'),head=$('schedule-month-title');if(!grid)return;const y=cursor.getFullYear(),m=cursor.getMonth();head.textContent=monthNames[m][0].toUpperCase()+monthNames[m].slice(1)+' '+y;const start=new Date(y,m,1,12).getDay(),days=new Date(y,m+1,0).getDate(),prevDays=new Date(y,m,0).getDate(),today=localToday();let html='';for(let cell=0;cell<42;cell++){let d,cm=m,cy=y,out=false;if(cell<start){d=prevDays-start+cell+1;cm=m-1;out=true;if(cm<0){cm=11;cy--}}else if(cell>=start+days){d=cell-start-days+1;cm=m+1;out=true;if(cm>11){cm=0;cy++}}else d=cell-start+1;const date=iso(cy,cm,d),data=dayRows(date),done=data.filter(e=>/COMPLETADO|PAGADO/.test(labelOf(e))).length,cancel=data.filter(e=>/CANCELADO/.test(labelOf(e))).length,observed=data.filter(e=>/OBSERVADO/.test(labelOf(e))).length;html+='<button class="schedule-day '+(out?'out ':'')+(data.length?'has ':'')+(date===today?'today ':'')+(date===selected?'selected':'')+'" data-date="'+date+'" type="button"><span class="num">'+d+'</span>'+(data.length?'<span class="count">'+data.length+'</span><span class="dots">'+(done?'<i class="done"></i>':'')+(cancel?'<i class="warn"></i>':'')+(observed?'<i class="observed"></i>':'')+(data.length-done-cancel-observed>0?'<i></i>':'')+'</span>':'')+'</button>'}grid.innerHTML=html;grid.querySelectorAll('.schedule-day').forEach(b=>b.addEventListener('click',()=>{selected=b.dataset.date;const d=new Date(selected+'T12:00:00');if(d.getMonth()!==cursor.getMonth()||d.getFullYear()!==cursor.getFullYear())cursor=new Date(d.getFullYear(),d.getMonth(),1,12);renderCalendar();setTimeout(()=>document.getElementById('instara-schedule-agenda')?.scrollIntoView({behavior:'smooth',block:'start'}),50)}));renderAgenda()}
   async function syncNow(){const btn=$('instara-mega-sync'),copy=$('instara-sync-copy'),time=$('instara-sync-time');if(!btn)return;btn.disabled=true;btn.textContent='REVISANDO…';copy.textContent=window.InstaraSyncHub?.isConfigured?.()?'Consultando INSTARA Sync Hub…':'Solicitando ventana de 3 meses a INSTARA Mega Bridge…';try{const result=window.InstaraSyncHub?.isConfigured?.()?await window.InstaraSyncHub.syncNow():await window.InstaraMegaBridge?.requestSync?.();if(!result?.ok)copy.textContent=result?.message||'No pude actualizar Mega.'}catch(err){copy.textContent='No pude actualizar: '+(err?.message||'error desconocido')}finally{time.textContent=new Date().toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'});btn.disabled=false;btn.textContent='ACTUALIZAR MEGA';renderCalendar()}}
@@ -7536,7 +7537,7 @@ window.InstaraRC97={cleanupManualRouteCache,moveSelectedDayToToday,install};
 <script id="instara-rc98-runtime-integrity">
 (function(){
 'use strict';
-const VERSION='RC100';
+const VERSION='RC101';
 const $=id=>document.getElementById(id);
 function state(){return window.__INSTARA_STATE__||window.state}
 function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
@@ -7674,18 +7675,7 @@ function findCalendarEntry(card){
   return (key&&rows.find(e=>keyOf(e)===key))||rows[Number(card.dataset.ticketIndex)]||null;
 }
 let detailLock=0;
-function installTicketOpen(){
-  if(document.__rc99TicketOpen)return;document.__rc99TicketOpen=true;
-  const open=ev=>{
-    const target=ev.target.closest?.('.schedule-more,.schedule-ticket');if(!target)return;
-    const card=target.closest('.schedule-ticket');if(!card)return;
-    const now=Date.now();if(now-detailLock<350)return;detailLock=now;
-    const entry=findCalendarEntry(card);if(!entry)return;
-    ev.preventDefault();ev.stopImmediatePropagation();
-    repairDetails();window.InstaraTicketDetail?.open?.(entry);
-  };
-  document.addEventListener('pointerup',open,true);
-}
+function installTicketOpen(){/* RC101: explicit calendar button owns ticket opening. */}
 function durationMinutes(e){
   if(e.isStoreStop)return Number(window.MirutaRouteBrain?.settings?.storeMinutes||10)||10;
   const t=String(e.category||e.service||'').toLowerCase();
@@ -7841,5 +7831,34 @@ window.addEventListener('focus',install);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)install()});
 })();
 </script>
+
+
+<style id="instara-rc101-calendar-ticket-detail-fix">
+#screen-schedule .schedule-more{
+  appearance:none;-webkit-appearance:none;cursor:pointer;
+  background:rgba(255,255,255,.06)!important;color:#fff!important;
+  border:1px solid rgba(255,255,255,.48)!important;border-radius:9px!important;
+  padding:8px 11px!important;font-weight:900!important;line-height:1!important;
+  position:relative!important;z-index:4!important;pointer-events:auto!important;
+}
+#screen-schedule .schedule-more:active{transform:scale(.96)}
+.instara-ticket-detail-modal{
+  position:fixed!important;inset:0!important;z-index:30000!important;
+  display:flex!important;align-items:flex-end!important;justify-content:center!important;
+  padding:12px!important;background:rgba(0,0,0,.72)!important;
+  backdrop-filter:blur(10px)!important;-webkit-backdrop-filter:blur(10px)!important;
+}
+.instara-ticket-detail-modal .instara-ticket-detail{
+  width:min(760px,100%)!important;max-height:88dvh!important;overflow:auto!important;
+  border-radius:24px 24px 18px 18px!important;padding:20px!important;
+  background:#071017!important;border:1px solid rgba(255,255,255,.24)!important;
+  box-shadow:0 24px 80px rgba(0,0,0,.68)!important;color:#fff!important;
+}
+.instara-ticket-detail-modal [data-close]{position:sticky!important;top:0!important;float:right!important;z-index:3!important;background:#fff!important;color:#071017!important}
+.instara-ticket-detail-modal h2{clear:both!important;margin-top:8px!important;color:#ffd05a!important}
+.instara-ticket-detail-modal section{margin-top:16px!important;padding-top:12px!important;border-top:1px solid rgba(255,255,255,.14)!important}
+.instara-ticket-detail-modal .instara-detail-row{display:grid!important;grid-template-columns:minmax(110px,35%) 1fr!important;gap:10px!important;padding:7px 0!important;border-bottom:1px solid rgba(255,255,255,.08)!important}
+.instara-ticket-detail-modal .instara-detail-row b{color:#7ec7ff!important}.instara-ticket-detail-modal .instara-detail-row span{word-break:break-word!important}
+</style>
 
 </body>
