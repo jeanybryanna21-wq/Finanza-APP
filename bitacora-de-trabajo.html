@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC111">
+  <meta name="instara-ai-version" content="RC113">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -4281,7 +4281,8 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     put('map-caption',jobs.length?`${jobs.length} paradas • Ruta optimizada`:'Sin paradas cargadas');
     const fill=document.getElementById('dash-progress-fill'); if(fill) fill.style.width=pct+'%';
     const fg=window.InstaraFinancialGoals?.get?.()||{weekly:1990,monthly:7800,workdays:6}; const dailyGoal=Math.max(1,Number(fg.weekly||1990)/Math.max(1,Number(fg.workdays||6))); const moneyPct=Math.min(100,Math.round(total/dailyGoal*100)); const moneyFill=document.getElementById('money-progress-fill'); if(moneyFill) moneyFill.style.width=moneyPct+'%'; const goalLabel=document.getElementById('daily-goal-label'); if(goalLabel) goalLabel.textContent=`Meta hoy: ${fmt(dailyGoal)}`;
-    const workedMinutes=Math.max(0,Math.round(Number(window.InstaraWorkClock?.todayWorkedMs?.()||0)/60000));
+    const workedMs=Math.max(0,Number(window.InstaraWorkClock?.todayWorkedMs?.()||0));
+    const workedMinutes=Math.max(0,Math.floor(workedMs/60000));
     put('hours-worked',`${Math.floor(workedMinutes/60)}h ${String(workedMinutes%60).padStart(2,'0')}m`); const hp=document.getElementById('hours-progress-fill'); if(hp) hp.style.width=Math.min(100,workedMinutes/480*100)+'%';
     if(active){
       put('live-next-title',active.customerName||'Siguiente cliente');
@@ -6915,9 +6916,59 @@ function status(j){
 }
 function monthRows(y,m){const prefix=`${y}-${String(m+1).padStart(2,'0')}-`;const app=(window.__INSTARA_STATE__?.entries||[]).filter(e=>e.type==='income'&&String(e.date||'').startsWith(prefix));const seen=new Set(),out=[];for(const e of [...app,...bridgeJobs()]){const d=normDate(e.scheduledDate||e.start||e.date);if(!d.startsWith(prefix))continue;const k=jobKey(e)||[d,e.customerName||e.eventCustomer,e.laborCategory||e.eventService].join('|');if(seen.has(k))continue;seen.add(k);out.push(e)}return out}
 function ensureSummary(){const weekdays=document.querySelector('#screen-schedule .schedule-weekdays');if(!weekdays)return null;let box=document.getElementById('instara-month-summary');if(!box){box=document.createElement('section');box.id='instara-month-summary';weekdays.parentNode.insertBefore(box,weekdays)}return box}
-function renderSummary(){const box=ensureSummary(),title=document.getElementById('schedule-month-title');if(!box||!title)return;const txt=title.textContent||'',names=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];const low=txt.toLowerCase(),m=names.findIndex(n=>low.includes(n)),ym=txt.match(/(20\d{2})/);if(m<0||!ym)return;const rows=monthRows(Number(ym[1]),m),counts={total:rows.length,completed:0,cancelled:0,paid:0};for(const r of rows){const st=status(r);if(st==='completed')counts.completed++;if(st==='cancelled')counts.cancelled++;if(st==='paid')counts.paid++}box.innerHTML=`<article data-kind="total"><small>Trabajos del mes</small><b>${counts.total}</b></article><article data-kind="completed"><small>Completados</small><b>${counts.completed}</b></article><article data-kind="cancelled"><small>Cancelados</small><b>${counts.cancelled}</b></article><article data-kind="paid"><small>Pagados</small><b>${counts.paid}</b></article>`}
+function renderSummary(){
+  const box=ensureSummary(),title=document.getElementById('schedule-month-title');
+  if(!box||!title)return;
+
+  const txt=String(title.textContent||'');
+  const names=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const low=txt.toLowerCase();
+  const m=names.findIndex(n=>low.includes(n));
+  const ym=txt.match(/(20\d{2})/);
+  if(m<0||!ym)return;
+
+  const y=Number(ym[1]);
+  const days=new Date(y,m+1,0).getDate();
+  const schedule=window.InstaraSchedule;
+  const all=[];
+  const seen=new Set();
+
+  for(let d=1;d<=days;d++){
+    const isoDate=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const rowsForDay=typeof schedule?.dayRows==='function'?schedule.dayRows(isoDate):monthRows(y,m).filter(r=>normDate(r.date||r.scheduledDate||r.start)===isoDate);
+    for(const r of rowsForDay){
+      const key=jobKey(r)||[isoDate,r.customerName||r.eventCustomer,r.laborCategory||r.eventService,r.id||''].join('|');
+      if(seen.has(key))continue;
+      seen.add(key);
+      all.push(r);
+    }
+  }
+
+  const counts={total:all.length,completed:0,cancelled:0,paid:0};
+  for(const r of all){
+    const st=status(r);
+    if(st==='completed')counts.completed++;
+    if(st==='cancelled')counts.cancelled++;
+    if(st==='paid')counts.paid++;
+  }
+
+  box.dataset.summaryMonth=`${y}-${String(m+1).padStart(2,'0')}`;
+  box.innerHTML=`<article data-kind="total"><small>Trabajos del mes</small><b>${counts.total}</b></article><article data-kind="completed"><small>Completados</small><b>${counts.completed}</b></article><article data-kind="cancelled"><small>Cancelados</small><b>${counts.cancelled}</b></article><article data-kind="paid"><small>Pagados</small><b>${counts.paid}</b></article>`;
+}
 const original=window.InstaraSchedule?.refresh;if(window.InstaraSchedule&&typeof original==='function'){window.InstaraSchedule.refresh=function(){const r=original.apply(this,arguments);setTimeout(renderSummary,0);return r}}
-document.addEventListener('DOMContentLoaded',()=>{renderSummary();document.addEventListener('visibilitychange',()=>{if(!document.hidden)renderSummary()})});
+document.addEventListener('DOMContentLoaded',()=>{
+  setTimeout(renderSummary,40);
+
+  document.getElementById('schedule-prev')?.addEventListener('click',()=>setTimeout(renderSummary,0));
+  document.getElementById('schedule-next')?.addEventListener('click',()=>setTimeout(renderSummary,0));
+
+  const title=document.getElementById('schedule-month-title');
+  if(title){
+    new MutationObserver(()=>setTimeout(renderSummary,0)).observe(title,{childList:true,characterData:true,subtree:true});
+  }
+
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(renderSummary,0)});
+});
 setInterval(()=>{if(document.body.dataset.activeScreen==='schedule')renderSummary()},60000);
 })();
 </script>
@@ -7727,7 +7778,7 @@ window.InstaraRC97={cleanupManualRouteCache,moveSelectedDayToToday,install};
 <script id="instara-rc98-runtime-integrity">
 (function(){
 'use strict';
-const VERSION='RC111';
+const VERSION='RC113';
 const $=id=>document.getElementById(id);
 function state(){return window.__INSTARA_STATE__||window.state}
 function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
@@ -8847,15 +8898,7 @@ function bindMonthNavigation(){
   }
 }
 
-document.addEventListener('DOMContentLoaded',()=>{
-  setTimeout(()=>{
-    bindMonthNavigation();
-    updateVisibleMonthSummary();
-  },700);
-});
-
-window.addEventListener('focus',()=>setTimeout(updateVisibleMonthSummary,120));
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(updateVisibleMonthSummary,120)});
+/* RC113: legacy RC107 summary overlay disabled. RC88/RC113 now owns visible-month summary directly. */
 
 window.InstaraRC107={visibleMonthKey,monthRows,statusOf,updateVisibleMonthSummary};
 })();
@@ -8940,7 +8983,8 @@ const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f}cat
 const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(_e){return false}};
 const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
 const clock=ms=>new Date(ms).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
-const fmtMs=ms=>{const m=Math.max(0,Math.floor(Number(ms||0)/60000));return `${Math.floor(m/60)}h ${String(m%60).padStart(2,'0')}m`};
+const elapsedMinutes=ms=>Math.max(0,Math.floor(Number(ms||0)/60000));
+const fmtMs=ms=>{const m=elapsedMinutes(ms);return `${Math.floor(m/60)}h ${String(m%60).padStart(2,'0')}m`};
 const normalize=(s)=>{
   s=s&&typeof s==='object'?s:{};
   s.sessions=Array.isArray(s.sessions)?s.sessions:[];
@@ -8953,9 +8997,9 @@ let ledger=normalize(load(KEY,{}));
 
 function persist(){save(KEY,ledger)}
 function todaySessions(){return ledger.sessions.filter(s=>s.date===today())}
-function todayWorkedMs(){
+function todayWorkedMs(now=Date.now()){
   let total=todaySessions().reduce((sum,s)=>sum+Math.max(0,Number(s.endedAt||0)-Number(s.startedAt||0)),0);
-  if(ledger.active?.date===today())total+=Math.max(0,Date.now()-Number(ledger.active.startedAt||Date.now()));
+  if(ledger.active?.date===today())total+=Math.max(0,Number(now)-Number(ledger.active.startedAt||now));
   return total;
 }
 function active(){return ledger.active}
@@ -8968,7 +9012,11 @@ function setStatus(text,klass=''){
   if(el){el.textContent=text;el.className='work-clock-auto '+klass}
 }
 function refreshUI(){
+  const now=Date.now();
   const a=active();
+  const totalMs=todayWorkedMs(now);
+  const minutes=elapsedMinutes(totalMs);
+
   const state=document.getElementById('work-clock-state');
   const detail=document.getElementById('work-clock-detail');
   const live=document.getElementById('work-clock-live');
@@ -8981,14 +9029,13 @@ function refreshUI(){
     :todaySessions().length
       ?`${todaySessions().length} jornada${todaySessions().length===1?'':'s'} registrada${todaySessions().length===1?'':'s'} hoy`
       :'El tiempo real no se calcula desde los tickets.';
-  if(live)live.textContent=fmtMs(todayWorkedMs());
+  if(live)live.textContent=fmtMs(totalMs);
   if(inBtn)inBtn.disabled=!!a;
   if(outBtn)outBtn.disabled=!a;
 
-  const minutes=Math.round(todayWorkedMs()/60000);
   const hours=document.getElementById('hours-worked');
   const fill=document.getElementById('hours-progress-fill');
-  if(hours)hours.textContent=`${Math.floor(minutes/60)}h ${String(minutes%60).padStart(2,'0')}m`;
+  if(hours)hours.textContent=fmtMs(totalMs);
   if(fill)fill.style.width=Math.min(100,minutes/480*100)+'%';
 }
 
@@ -9167,7 +9214,7 @@ function install(){
   refreshUI();
   startAuto();
   clearInterval(timer);
-  timer=setInterval(refreshUI,15000);
+  timer=setInterval(refreshUI,1000);
 }
 
 document.addEventListener('DOMContentLoaded',()=>setTimeout(install,650));
@@ -9179,7 +9226,7 @@ window.InstaraWorkClock={
   todayWorkedMs,
   todaySessions:()=>structuredClone(todaySessions()),
   active:()=>ledger.active?structuredClone(ledger.active):null,
-  punchIn,punchOut,adjustToday,refreshUI,startAuto
+  punchIn,punchOut,adjustToday,refreshUI,startAuto,elapsedMinutes
 };
 })();
 </script>
@@ -9256,6 +9303,40 @@ setInterval(()=>{
 },15000);
 
 window.InstaraRC111={refreshTodayKpis};
+})();
+</script>
+
+
+<script id="instara-rc112-work-clock-sync">
+(function(){
+'use strict';
+const VERSION='RC112';
+function syncNow(){
+  try{window.InstaraWorkClock?.refreshUI?.();window.updatePremiumDashboard?.()}catch(_e){}
+}
+window.addEventListener('focus',()=>setTimeout(syncNow,40));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(syncNow,40)});
+window.InstaraRC112={syncNow};
+})();
+</script>
+
+
+<script id="instara-rc113-calendar-visible-month-owner">
+(function(){
+'use strict';
+function visibleMonthSummary(){
+  const title=document.getElementById('schedule-month-title')?.textContent||'';
+  const box=document.getElementById('instara-month-summary');
+  return {
+    title,
+    month:box?.dataset?.summaryMonth||null,
+    total:Number(box?.querySelector('[data-kind="total"] b')?.textContent||0),
+    completed:Number(box?.querySelector('[data-kind="completed"] b')?.textContent||0),
+    cancelled:Number(box?.querySelector('[data-kind="cancelled"] b')?.textContent||0),
+    paid:Number(box?.querySelector('[data-kind="paid"] b')?.textContent||0)
+  };
+}
+window.InstaraRC113={visibleMonthSummary};
 })();
 </script>
 
