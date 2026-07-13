@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC98">
+  <meta name="instara-ai-version" content="RC100">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1243,7 +1243,8 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       <div class="miruta-nav-instruction"><small id="nav-step-label">NAVEGANDO</small><b id="nav-step-text">Preparando ruta…</b><span id="nav-step-street">Calculando instrucciones</span></div>
       <div class="miruta-nav-distance"><b id="nav-step-distance">—</b><small>PRÓXIMO GIRO</small></div><div class="miruta-nav-speed"><b id="nav-speed">0</b><small>MPH</small></div>
       <button id="nav-search-btn" type="button" aria-label="Buscar dirección">🔍</button>
-      <button id="nav-close-btn" type="button" aria-label="Cerrar navegación">✕</button>
+      <button id="nav-background-btn" type="button" aria-label="Dejar GPS en segundo plano" title="Segundo plano">▣</button>
+      <button id="nav-close-btn" type="button" aria-label="Salir del GPS" title="Salir del GPS">✕</button>
     </div>
     <div id="nav-search-bar" hidden>
       <input type="text" id="nav-search-input" placeholder="Escribe una dirección…" autocomplete="off" autocorrect="off" />
@@ -1255,7 +1256,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     <div class="miruta-nav-bottom">
       <div class="miruta-nav-client"><div><small id="nav-client-label">SIGUIENTE PARADA</small><b id="nav-client-name">—</b></div><span class="miruta-nav-progress" id="nav-route-progress">0/0</span></div>
       <div class="miruta-nav-eta"><span>⏱ <b id="nav-eta-time">Llegada —</b></span><span id="nav-eta-remaining">— min restantes</span></div>
-      <div class="miruta-nav-actions"><button id="nav-center-btn" type="button">◎ CENTRAR</button><button id="nav-satellite-btn" type="button">🛰 SATÉLITE</button><button id="nav-voice-btn" type="button" class="voice-on">🔊 VOZ</button><button id="nav-next-btn" type="button">SALTAR</button><button class="primary" id="nav-end-btn" type="button">TERMINAR RUTA</button></div>
+      <div class="miruta-nav-actions"><button id="nav-center-btn" type="button" aria-label="Centrar" title="Centrar">⌖</button><button id="nav-satellite-btn" type="button" aria-label="Satélite" title="Satélite">◉</button><button id="nav-voice-btn" type="button" class="voice-on" aria-label="Voz" title="Voz">🔊</button><button id="nav-complete-btn" type="button" aria-label="Completar parada" title="Completar parada">✓</button><button id="nav-next-btn" type="button" aria-label="Siguiente parada" title="Siguiente parada">⇥</button><button id="nav-end-btn" type="button" aria-label="Terminar ruta" title="Terminar ruta">■</button></div>
     </div>
     <div class="miruta-arrival-toast" id="miruta-arrival-toast"><b>Has llegado</b><span id="arrival-client-name">Preparando siguiente parada…</span></div>
   </div>
@@ -4246,6 +4247,8 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     let lastRouteAt=0,lastRoutePos=null,rerouteBusy=false,currentRoute=null,currentSteps=[],currentRouteDuration=0,currentRouteDistance=0,currentLegDurations=[];
     let arrivalTimer=null,arrivalStopId=null,followMode=true,lastCameraAt=0,lastGpsAt=0,lastHeading=0,lastSpeedMps=0;
     let routeGeom=[],routeCum=[],stepGuide=[],currentGeomIndex=0,currentGuideIndex=0,voiceOn=true,lastSpokenKey='',lastAlertBand='';
+    const navSessionKey='instara-gps-session-v1';
+    let backgrounded=false;
 
     const $=id=>document.getElementById(id);
     const metersToMiles=m=>m/1609.344;
@@ -4304,7 +4307,10 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     function stopIcon(n,isStore=false){return L.divIcon({className:'',html:`<div class="miruta-stop-marker${isStore?' store':''}"><span>${n}</span></div>`,iconSize:[29,29],iconAnchor:[15,27]});}
     function vanIcon(heading=0){return L.divIcon({className:'',html:`<div class="miruta-van-marker" style="transform:rotate(${Number(heading)||0}deg)">➤</div>`,iconSize:[34,34],iconAnchor:[17,17]});}
     function clearMarkers(arr,map,kind='leaflet'){arr.forEach(m=>{try{kind==='maplibre'?m.remove():map.removeLayer(m)}catch(_e){}});arr.length=0;}
-    function todayNavigableStops(){const date=$('route-date')?.value||todayISO();return state.entries.filter(e=>e.type==='income'&&e.date===date&&e.status!=='missing_price'&&e.status!=='cancelled'&&!e.isFinanceOnly&&e.address&&e.address.trim()).sort((a,b)=>(a.order??9999)-(b.order??9999));}
+    function todayNavigableStops(){
+      const date=$('route-date')?.value||todayISO();
+      return state.entries.filter(e=>e.type==='income'&&e.date===date&&!['missing_price','cancelled','completed','paid'].includes(String(e.status||''))&&!e.isFinanceOnly&&e.address&&e.address.trim()).sort((a,b)=>(a.order??e.orderIndex??9999)-(b.order??b.orderIndex??9999));
+    }
     async function geocodeEntry(entry){
       if(Number.isFinite(Number(entry.lat))&&Number.isFinite(Number(entry.lng)))return{lat:Number(entry.lat),lng:Number(entry.lng)};
       const q=entry.address.trim(),key=q.toLowerCase();if(geocodeCache[key])return geocodeCache[key];
@@ -4377,23 +4383,19 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         if(distToStop<=200){ zoom=19.2; pitch=35; }
         else if(distToStop<=400){ zoom=18.2; pitch=45; }
       }
-      fullMap.easeTo({center:[currentPos.lng,currentPos.lat],bearing:lastHeading||fullMap.getBearing(),pitch,zoom,duration:900,easing:t=>1-Math.pow(1-t,3),essential:true});
+      const cameraPos=displayPos||currentPos;fullMap.easeTo({center:[cameraPos.lng,cameraPos.lat],bearing:lastHeading||fullMap.getBearing(),pitch,zoom,duration:900,easing:t=>1-Math.pow(1-t,3),essential:true});
     }
     let wasSnappedToRoute=false;
-    function snappedDisplayPos(pos){
-      if(!routeGeom.length) return pos;
-      const idx=nearestGeomIndex(pos);
-      const onRoute=routeGeom[idx];
-      const d=haversine(pos,onRoute);
-      // Si el GPS crudo está razonablemente cerca de la ruta calculada, se usa el punto
-      // exacto sobre la línea en vez del punto crudo — así el ícono no "salta" a un lado
-      // y otro de la calle por el ruido normal del GPS. Se usa un margen más generoso una
-      // vez que ya estaba pegado a la línea (histéresis), para que no esté oscilando
-      // justo en el borde entre "pegado" y "suelto".
-      const threshold = wasSnappedToRoute ? 45 : 30;
-      const snap = d<=threshold;
-      wasSnappedToRoute = snap;
-      return snap ? onRoute : pos;
+    function snappedDisplayPos(pos,accuracy=0){
+      if(!routeGeom.length)return pos;
+      const idx=nearestGeomIndex(pos),onRoute=routeGeom[idx],d=haversine(pos,onRoute);
+      // RC99: road-lock adapts to iPhone GPS accuracy and uses strong hysteresis.
+      // This keeps the marker on the blue road through normal 20–80 m GPS scatter.
+      const base=Math.max(65,Math.min(135,(Number(accuracy)||35)*1.8));
+      const threshold=wasSnappedToRoute?Math.max(125,base):base;
+      const snap=d<=threshold;
+      wasSnappedToRoute=snap;
+      return snap?onRoute:pos;
     }
     function updateUser(pos){
       // Ignorar lecturas de GPS con muy mala precisión (más de 55 metros de margen de error) —
@@ -4413,18 +4415,38 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         }
       }
       currentPos=rawPos;lastSpeedMps=Number.isFinite(pos.coords.speed)&&pos.coords.speed>=0?pos.coords.speed:lastSpeedMps;const heading=Number.isFinite(pos.coords.heading)?pos.coords.heading:lastHeading;lastHeading=Number.isFinite(heading)?heading:0;
-      const displayTarget=active?snappedDisplayPos(currentPos):currentPos;
+      const displayTarget=active?snappedDisplayPos(currentPos,accuracy):currentPos;
       if(miniMap){if(!userMarkerMini)userMarkerMini=L.marker([displayTarget.lat,displayTarget.lng],{icon:vanIcon(lastHeading)}).addTo(miniMap);else{userMarkerMini.setLatLng([displayTarget.lat,displayTarget.lng]);userMarkerMini.setIcon(vanIcon(lastHeading))}}
       animateVanTo(displayTarget,lastHeading);updateCamera();if(active){checkArrival();if(routeGeom.length)updateInstructionLive();reroute(false)}lastGpsAt=now;
     }
     function showArrival(stop){
-      if(stop && !stop.isStoreStop){
+      if(stop&&!stop.isStoreStop){
         const entry=state.entries.find(e=>String(e.id)===String(stop.id));
-        if(entry && !entry.mirutaArrivedAt){entry.mirutaArrivedAt=Date.now();persistEntries()}
+        if(entry&&!entry.mirutaArrivedAt){entry.mirutaArrivedAt=Date.now();persistEntries()}
       }
-      const toast=$('miruta-arrival-toast');$('arrival-client-name').textContent=`${stop.customerName||stop.category||'Parada'} · pasando a la siguiente en 6 s`;toast.classList.add('show');speak('You have arrived at your destination','arrival:'+stop.id,true);premiumHaptic([30,60,30]);setTimeout(()=>toast.classList.remove('show'),5200)}
-    function checkArrival(){const stop=routeStops[currentIndex];if(!stop||!currentPos)return;const d=haversine(currentPos,stop._coord);if(d<=90&&arrivalStopId!==stop.id){arrivalStopId=stop.id;showArrival(stop);clearTimeout(arrivalTimer);arrivalTimer=setTimeout(()=>advance(),6000)}else if(d>150&&arrivalStopId===stop.id){arrivalStopId=null;clearTimeout(arrivalTimer)}}
-    async function advance(){clearTimeout(arrivalTimer);arrivalStopId=null;currentIndex++;currentGuideIndex=0;lastSpokenKey='';lastAlertBand='';if(currentIndex>=routeStops.length){finish(true);return}updateInstructionLive();await reroute(true)}
+      const toast=$('miruta-arrival-toast');
+      $('arrival-client-name').textContent=`${stop.customerName||stop.category||'Parada'} · confirma completar o toca siguiente`;
+      toast.classList.add('show');speak('You have arrived at your destination','arrival:'+stop.id,true);premiumHaptic([30,60,30]);
+      setTimeout(()=>toast.classList.remove('show'),5200);
+    }
+    function checkArrival(){const stop=routeStops[currentIndex];if(!stop||!currentPos)return;const d=haversine(currentPos,stop._coord);if(d<=90&&arrivalStopId!==stop.id){arrivalStopId=stop.id;showArrival(stop)}else if(d>150&&arrivalStopId===stop.id){arrivalStopId=null}}
+    function currentStop(){return routeStops[currentIndex]||null}
+    async function advance(){
+      clearTimeout(arrivalTimer);arrivalStopId=null;
+      currentIndex++;currentGuideIndex=0;lastSpokenKey='';lastAlertBand='';
+      while(currentIndex<routeStops.length&&['completed','paid','cancelled'].includes(String(routeStops[currentIndex]?.status||'')))currentIndex++;
+      if(currentIndex>=routeStops.length){finish(true);return}
+      saveNavSession();updateInstructionLive();await reroute(true);
+    }
+    async function completeCurrent(){
+      const stop=currentStop();if(!stop)return;
+      const entry=state.entries.find(e=>String(e.id)===String(stop.id));
+      if(entry){
+        entry.status='completed';entry.completedAt=new Date().toISOString();entry.manualCompletion=true;
+        persistEntries();try{window.render?.();window.InstaraSchedule?.refresh?.()}catch(_e){}
+      }
+      await advance();
+    }
     async function ensurePosition(){if(currentPos)return currentPos;if(!navigator.geolocation)throw new Error('GPS unavailable');return await new Promise((resolve,reject)=>navigator.geolocation.getCurrentPosition(p=>{updateUser(p);resolve(currentPos)},reject,{enableHighAccuracy:true,maximumAge:1500,timeout:12000}))}
     async function estimateEntryEta(entryId){await prepareStops();const idx=routeStops.findIndex(s=>s.id===entryId);if(idx<0)return null;const pos=await ensurePosition();const coords=[pos,...routeStops.slice(0,idx+1).map(s=>s._coord)];const route=await osrmRoute(coords,false);return Math.max(1,Math.round((Number(route.duration)||0)/60));}
     async function estimateDayPlan(serviceMinutes=45,durationResolver=null){
@@ -4442,15 +4464,86 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         return {id:stop.id,isStoreStop:!!stop.isStoreStop,customerName:stop.customerName||'',category:stop.category||'',phone:stop.phone||'',timeStart:stop.timeStart||null,timeEnd:stop.timeEnd||null,arrivalOffsetSeconds,departureOffsetSeconds:elapsedSeconds,driveSeconds:Number(legs[idx]?.duration)||0};
       });
     }
+    function saveNavSession(){
+      try{
+        localStorage.setItem(navSessionKey,JSON.stringify({
+          active:!!active,
+          backgrounded:!!backgrounded,
+          currentIndex:Number(currentIndex||0),
+          currentStopId:String(routeStops[currentIndex]?.id||''),
+          routeDate:$('route-date')?.value||'',
+          updatedAt:new Date().toISOString()
+        }));
+      }catch(_e){}
+      updateResumeButton();
+    }
+    function loadNavSession(){try{return JSON.parse(localStorage.getItem(navSessionKey)||'null')}catch(_e){return null}}
+    function clearNavSession(){try{localStorage.removeItem(navSessionKey)}catch(_e){};updateResumeButton()}
+    function updateResumeButton(){
+      const btn=$('instara-gps-resume-btn');
+      if(!btn)return;
+      const session=loadNavSession();
+      const shouldShow=!!(active||session?.active);
+      btn.hidden=!shouldShow;
+      if(shouldShow){
+        const stop=routeStops[currentIndex];
+        btn.querySelector('.gps-resume-name').textContent=stop?.customerName||stop?.category||'GPS activo';
+        btn.querySelector('.gps-resume-meta').textContent=`Parada ${Math.min(currentIndex+1,routeStops.length||1)}/${routeStops.length||session?.routeCount||'—'}`;
+      }
+    }
+    function showNavigation(){
+      const panel=$('miruta-nav-panel');if(!panel)return;
+      panel.hidden=false;backgrounded=false;
+      document.body.style.overflow='hidden';
+      document.body.classList.add('miruta-nav-open');
+      saveNavSession();
+      setTimeout(()=>{try{fullMap?.resize?.();center()}catch(_e){}},90);
+    }
+    function hideNavigation(){
+      const panel=$('miruta-nav-panel');if(!panel)return;
+      panel.hidden=true;backgrounded=true;
+      document.body.style.overflow='';
+      document.body.classList.remove('miruta-nav-open');
+      saveNavSession();
+      updateResumeButton();
+    }
+    async function resumeNavigation(){
+      if(active&&routeStops.length){showNavigation();return}
+      const session=loadNavSession();
+      if(!session?.active){return start()}
+      try{
+        if(!await ensureNavLibraries()||!initMaps())throw new Error('No se pudieron cargar los mapas');
+        await prepareStops();
+        if(!routeStops.length)throw new Error('No quedan paradas navegables');
+        const byId=routeStops.findIndex(s=>String(s.id)===String(session.currentStopId||''));
+        currentIndex=byId>=0?byId:Math.max(0,Math.min(Number(session.currentIndex||0),routeStops.length-1));
+        active=true;backgrounded=false;followMode=true;
+        showNavigation();
+        if(watchId===null&&navigator.geolocation){
+          watchId=navigator.geolocation.watchPosition(updateUser,err=>{
+            $('nav-step-text').textContent='Permite la ubicación';
+            $('nav-step-street').textContent=err.message||'INSTARA necesita tu GPS';
+          },{enableHighAccuracy:true,maximumAge:500,timeout:10000});
+        }
+        updateInstructionLive();
+        await reroute(true);
+      }catch(err){
+        console.error('RC100 resume GPS',err);
+        clearNavSession();
+        return start();
+      }
+    }
+
     async function start(){
+      if(active&&routeStops.length){showNavigation();return}
       const panel=$('miruta-nav-panel');
       try{
         if(!await ensureNavLibraries()||!initMaps())throw new Error('No se pudieron cargar Leaflet/MapLibre');
-        panel.hidden=false;document.body.style.overflow='hidden';
+        showNavigation();
         $('nav-step-text').textContent='Preparando ruta…';$('nav-step-street').textContent='Localizando todas las paradas en tu orden';$('nav-eta-time').textContent='Llegada —';$('nav-eta-remaining').textContent='Calculando…';
         await prepareStops();
         if(!routeStops.length)throw new Error('No hay paradas con una dirección válida para navegar');
-        currentIndex=0;active=true;followMode=true;lastSpokenKey='';lastAlertBand='';
+        currentIndex=0;active=true;backgrounded=false;followMode=true;lastSpokenKey='';lastAlertBand='';saveNavSession();
         if(fullMapReady){drawFullMarkers();setTimeout(()=>fullMap?.resize?.(),80)}else fullMap?.once('load',()=>{drawFullMarkers();setTimeout(()=>fullMap?.resize?.(),80)});
         if(!navigator.geolocation)throw new Error('GPS no disponible');
         if(watchId!==null)navigator.geolocation.clearWatch(watchId);
@@ -4542,7 +4635,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     }
     function openAddressSearch(){
       if(!initMaps()){alert('El mapa todavía no cargó. Recarga Miruta con conexión una vez.');return}
-      $('miruta-nav-panel').hidden=false;document.body.style.overflow='hidden';
+      $('miruta-nav-panel').hidden=false;document.body.style.overflow='hidden';document.body.classList.add('miruta-nav-open');
       $('nav-search-bar').hidden=false;
       $('nav-search-suggest').innerHTML='';
       $('nav-search-input').value='';
@@ -4656,11 +4749,19 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     attachAddressAutocomplete($('knowledge-address'));
 
     function center(){followMode=true;if(fullMap&&currentPos)fullMap.easeTo({center:[currentPos.lng,currentPos.lat],zoom:17,pitch:55,bearing:lastHeading,duration:650,essential:true})}
-    function toggleVoice(){voiceOn=!voiceOn;const b=$('nav-voice-btn');if(b){b.classList.toggle('voice-on',voiceOn);b.textContent=voiceOn?'🔊 VOZ':'🔇 VOZ'}if(!voiceOn&&'speechSynthesis'in window)speechSynthesis.cancel();statusLine.textContent=voiceOn?'guía por voz activada':'guía por voz desactivada'}
-    function finish(completed=false){active=false;clearTimeout(arrivalTimer);if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null}if('speechSynthesis'in window)speechSynthesis.cancel();$('miruta-nav-panel').hidden=true;document.body.style.overflow='';if(completed){statusLine.textContent='ruta completa ✓ llegaste a la última parada';premiumHaptic([30,50,30,50,60])}else statusLine.textContent='navegación detenida';refreshMini()}
-    $('miruta-go-btn')?.addEventListener('click',start);$('miruta-route-reload')?.addEventListener('click',refreshMini);$('nav-center-btn')?.addEventListener('click',center);$('nav-voice-btn')?.addEventListener('click',toggleVoice);$('nav-next-btn')?.addEventListener('click',advance);$('nav-end-btn')?.addEventListener('click',()=>finish(false));$('nav-close-btn')?.addEventListener('click',()=>finish(false));$('miruta-adhoc-btn')?.addEventListener('click',startAdHoc);$('nav-search-btn')?.addEventListener('click',openAddressSearch);$('nav-search-cancel')?.addEventListener('click',closeAddressSearch);$('nav-search-input')?.addEventListener('input',onSearchInput);$('nav-search-go')?.addEventListener('click',async()=>{const q=$('nav-search-input').value.trim();if(!q)return;try{const list=await fetchSuggestions(q);if(list&&list[0])startAdHocFromCoord(list[0].display_name||q,Number(list[0].lat),Number(list[0].lon));else $('nav-search-suggest').innerHTML='<div class="sugg-empty">No se encontró esa dirección</div>'}catch(_e){$('nav-search-suggest').innerHTML='<div class="sugg-empty">Sin conexión para buscar ahora mismo</div>'}});$('nav-satellite-btn')?.addEventListener('click',toggleSatellite);
+    function toggleVoice(){voiceOn=!voiceOn;const b=$('nav-voice-btn');if(b){b.classList.toggle('voice-on',voiceOn);b.textContent=voiceOn?'🔊':'🔇'}if(!voiceOn&&'speechSynthesis'in window)speechSynthesis.cancel();statusLine.textContent=voiceOn?'guía por voz activada':'guía por voz desactivada'}
+    function finish(completed=false){
+      active=false;backgrounded=false;document.body.classList.remove('miruta-nav-open');clearTimeout(arrivalTimer);
+      if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null}
+      if('speechSynthesis'in window)speechSynthesis.cancel();
+      $('miruta-nav-panel').hidden=true;document.body.style.overflow='';clearNavSession();
+      if(completed){statusLine.textContent='ruta completa ✓ llegaste a la última parada';premiumHaptic([30,50,30,50,60])}
+      else statusLine.textContent='navegación terminada';
+      refreshMini();
+    }
+    $('miruta-go-btn')?.addEventListener('click',start);$('miruta-route-reload')?.addEventListener('click',refreshMini);$('nav-center-btn')?.addEventListener('click',center);$('nav-voice-btn')?.addEventListener('click',toggleVoice);$('nav-complete-btn')?.addEventListener('click',completeCurrent);$('nav-next-btn')?.addEventListener('click',advance);$('nav-end-btn')?.addEventListener('click',()=>{if(confirm('¿Terminar completamente esta ruta?'))finish(false)});$('nav-close-btn')?.addEventListener('click',hideNavigation);$('nav-background-btn')?.addEventListener('click',hideNavigation);$('miruta-adhoc-btn')?.addEventListener('click',startAdHoc);$('nav-search-btn')?.addEventListener('click',openAddressSearch);$('nav-search-cancel')?.addEventListener('click',closeAddressSearch);$('nav-search-input')?.addEventListener('input',onSearchInput);$('nav-search-go')?.addEventListener('click',async()=>{const q=$('nav-search-input').value.trim();if(!q)return;try{const list=await fetchSuggestions(q);if(list&&list[0])startAdHocFromCoord(list[0].display_name||q,Number(list[0].lat),Number(list[0].lon));else $('nav-search-suggest').innerHTML='<div class="sugg-empty">No se encontró esa dirección</div>'}catch(_e){$('nav-search-suggest').innerHTML='<div class="sugg-empty">Sin conexión para buscar ahora mismo</div>'}});$('nav-satellite-btn')?.addEventListener('click',toggleSatellite);
     window.addEventListener('online',()=>{refreshMini();if(active)reroute(true)});setTimeout(refreshMini,700);
-    return{start,startAtEntry,finish,refreshRoute:refreshMini,reroute,estimateEntryEta,estimateDayPlan,getCurrentEtaMinutes:()=>Math.max(1,Math.round(currentEtaSeconds()/60))};
+    return{start,resumeNavigation,hideNavigation,showNavigation,startAtEntry,finish,refreshRoute:refreshMini,reroute,advance,completeCurrent,getCurrentStop:currentStop,isActive:()=>active,isBackgrounded:()=>backgrounded,estimateEntryEta,estimateDayPlan,getCurrentEtaMinutes:()=>Math.max(1,Math.round(currentEtaSeconds()/60))};
   })();
   window.MirutaNav = MirutaNav;
 
@@ -5591,7 +5692,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
     const box=$('instara-schedule-agenda'),title=$('schedule-selected-title'),count=$('schedule-selected-count');if(!box)return;
     const data=dayRows(selected);title.textContent=niceDay(selected);count.textContent=data.length+' ticket'+(data.length===1?'':'s');
     if(!data.length){box.innerHTML='<div class="schedule-empty">SIN TICKETS PARA ESTE DÍA</div>';return}
-    box.innerHTML=data.map((e,i)=>{const cls=classOf(e),phone=e.phone||e.customerPhone||'TELÉFONO NO CARGADO',address=e.address||e.customerAddress||'DIRECCIÓN NO CARGADA',po=e.po||e.purchaseOrderNumber||'—';return `<article class="schedule-ticket ${cls}" data-ticket-index="${i}" tabindex="0" role="button"><div class="time">${esc(timeOf(e,i))}</div><div class="rail"></div><div class="copy"><b>${esc(customer(e))}</b><span class="schedule-service">${esc(service(e))}</span><span class="schedule-address">${esc(address)}</span><span class="schedule-phone">${esc(phone)}</span><span class="schedule-store">${esc(store(e)||'TIENDA NO CARGADA')}</span></div><div class="meta"><span class="pill">${esc(labelOf(e))}</span><span class="po">PO ${esc(po)}</span><span class="schedule-more">VER FICHA</span></div></article>`}).join('');
+    box.innerHTML=data.map((e,i)=>{const cls=classOf(e),phone=e.phone||e.customerPhone||'TELÉFONO NO CARGADO',address=e.address||e.customerAddress||'DIRECCIÓN NO CARGADA',po=e.po||e.purchaseOrderNumber||'—';return `<article class="schedule-ticket ${cls}" data-ticket-index="${i}" data-ticket-key="${esc(keyOf(e)||e.id||'')}" tabindex="0" role="button"><div class="time">${esc(timeOf(e,i))}</div><div class="rail"></div><div class="copy"><b>${esc(customer(e))}</b><span class="schedule-service">${esc(service(e))}</span><span class="schedule-address">${esc(address)}</span><span class="schedule-phone">${esc(phone)}</span><span class="schedule-store">${esc(store(e)||'TIENDA NO CARGADA')}</span></div><div class="meta"><span class="pill">${esc(labelOf(e))}</span><span class="po">PO ${esc(po)}</span><span class="schedule-more">VER FICHA</span></div></article>`}).join('');
     box.querySelectorAll('.schedule-ticket').forEach(card=>{const open=()=>showTicketDetail(data[Number(card.dataset.ticketIndex)]);card.addEventListener('click',open);card.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();open()}})})
   }
   function renderCalendar(){const grid=$('instara-schedule-grid'),head=$('schedule-month-title');if(!grid)return;const y=cursor.getFullYear(),m=cursor.getMonth();head.textContent=monthNames[m][0].toUpperCase()+monthNames[m].slice(1)+' '+y;const start=new Date(y,m,1,12).getDay(),days=new Date(y,m+1,0).getDate(),prevDays=new Date(y,m,0).getDate(),today=localToday();let html='';for(let cell=0;cell<42;cell++){let d,cm=m,cy=y,out=false;if(cell<start){d=prevDays-start+cell+1;cm=m-1;out=true;if(cm<0){cm=11;cy--}}else if(cell>=start+days){d=cell-start-days+1;cm=m+1;out=true;if(cm>11){cm=0;cy++}}else d=cell-start+1;const date=iso(cy,cm,d),data=dayRows(date),done=data.filter(e=>/COMPLETADO|PAGADO/.test(labelOf(e))).length,cancel=data.filter(e=>/CANCELADO/.test(labelOf(e))).length,observed=data.filter(e=>/OBSERVADO/.test(labelOf(e))).length;html+='<button class="schedule-day '+(out?'out ':'')+(data.length?'has ':'')+(date===today?'today ':'')+(date===selected?'selected':'')+'" data-date="'+date+'" type="button"><span class="num">'+d+'</span>'+(data.length?'<span class="count">'+data.length+'</span><span class="dots">'+(done?'<i class="done"></i>':'')+(cancel?'<i class="warn"></i>':'')+(observed?'<i class="observed"></i>':'')+(data.length-done-cancel-observed>0?'<i></i>':'')+'</span>':'')+'</button>'}grid.innerHTML=html;grid.querySelectorAll('.schedule-day').forEach(b=>b.addEventListener('click',()=>{selected=b.dataset.date;const d=new Date(selected+'T12:00:00');if(d.getMonth()!==cursor.getMonth()||d.getFullYear()!==cursor.getFullYear())cursor=new Date(d.getFullYear(),d.getMonth(),1,12);renderCalendar();setTimeout(()=>document.getElementById('instara-schedule-agenda')?.scrollIntoView({behavior:'smooth',block:'start'}),50)}));renderAgenda()}
@@ -6703,7 +6804,14 @@ const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f}cat
 const normDate=v=>{const raw=String(v||'');let m=raw.match(/^(\d{4}-\d{2}-\d{2})/);if(m)return m[1];m=raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);return m?`${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`:''};
 function bridgeJobs(){return (load(OBSERVED_KEY,[])||[]).filter(j=>j&&!/(?:1\s*MAN\s*TEAM|MAX\s*\d+\s*JOBS|ONLY\s+\d{3,4})/i.test([j.eventCustomer,j.eventService,j.customerName,j.laborCategory,j.html].filter(Boolean).join(' ')))}
 function jobKey(j){return String(j.orderViewId||j.cioOrderId||j.jobNumber||j.cioJobNumber||j.purchaseOrderNumber||j.po||j.eventId||j.cioEventId||'')}
-function status(j){const t=[j.imsStatus,j.jobStatus,j.status,j.displayStatus,j.laborCategory].filter(Boolean).join(' ').toLowerCase();if(/payment received|past paid|\bpaid\b/.test(t))return'paid';if(/cancel|void|declin/.test(t))return'cancelled';if(/closed|complete|completed|work_complete/.test(t))return'completed';return'active'}
+function status(j){
+  const t=[j.imsStatus,j.jobStatus,j.status,j.displayStatus].filter(Boolean).join(' ').toLowerCase();
+  if(/payment received|past paid|\bpaid\b/.test(t))return'paid';
+  if(/cancel|void|declin/.test(t))return'cancelled';
+  // RC99 law: a remote scheduling/payment snapshot never completes field work.
+  // Completion is local/manual (or paid) so future/current clients cannot be falsely marked done.
+  return'active';
+}
 function monthRows(y,m){const prefix=`${y}-${String(m+1).padStart(2,'0')}-`;const app=(window.__INSTARA_STATE__?.entries||[]).filter(e=>e.type==='income'&&String(e.date||'').startsWith(prefix));const seen=new Set(),out=[];for(const e of [...app,...bridgeJobs()]){const d=normDate(e.scheduledDate||e.start||e.date);if(!d.startsWith(prefix))continue;const k=jobKey(e)||[d,e.customerName||e.eventCustomer,e.laborCategory||e.eventService].join('|');if(seen.has(k))continue;seen.add(k);out.push(e)}return out}
 function ensureSummary(){const weekdays=document.querySelector('#screen-schedule .schedule-weekdays');if(!weekdays)return null;let box=document.getElementById('instara-month-summary');if(!box){box=document.createElement('section');box.id='instara-month-summary';weekdays.parentNode.insertBefore(box,weekdays)}return box}
 function renderSummary(){const box=ensureSummary(),title=document.getElementById('schedule-month-title');if(!box||!title)return;const txt=title.textContent||'',names=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];const low=txt.toLowerCase(),m=names.findIndex(n=>low.includes(n)),ym=txt.match(/(20\d{2})/);if(m<0||!ym)return;const rows=monthRows(Number(ym[1]),m),counts={total:rows.length,completed:0,cancelled:0,paid:0};for(const r of rows){const st=status(r);if(st==='completed')counts.completed++;if(st==='cancelled')counts.cancelled++;if(st==='paid')counts.paid++}box.innerHTML=`<article data-kind="total"><small>Trabajos del mes</small><b>${counts.total}</b></article><article data-kind="completed"><small>Completados</small><b>${counts.completed}</b></article><article data-kind="cancelled"><small>Cancelados</small><b>${counts.cancelled}</b></article><article data-kind="paid"><small>Pagados</small><b>${counts.paid}</b></article>`}
@@ -7428,7 +7536,7 @@ window.InstaraRC97={cleanupManualRouteCache,moveSelectedDayToToday,install};
 <script id="instara-rc98-runtime-integrity">
 (function(){
 'use strict';
-const VERSION='RC98';
+const VERSION='RC100';
 const $=id=>document.getElementById(id);
 function state(){return window.__INSTARA_STATE__||window.state}
 function today(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
@@ -7459,6 +7567,278 @@ function boot(){
 document.addEventListener('DOMContentLoaded',boot);
 window.addEventListener('focus',()=>{repairImportedDetails();setTimeout(forceRecalculate,200)});
 window.InstaraRC98={repairImportedDetails,forceRecalculate};
+})();
+</script>
+
+
+<style id="instara-rc99-navigation-ticket-time-css">
+/* Apple/Google-like floating navigation window. */
+body.miruta-nav-open .bottom-nav{display:none!important}
+body.miruta-nav-open #instara-copilot{display:none!important}
+#miruta-nav-panel{
+  inset:calc(env(safe-area-inset-top) + 8px) 8px calc(env(safe-area-inset-bottom) + 8px)!important;
+  width:auto!important;height:auto!important;border-radius:30px!important;overflow:hidden!important;
+  border:1px solid rgba(255,255,255,.25)!important;box-shadow:0 28px 90px rgba(0,0,0,.72)!important;
+  background:#080d10!important;
+  display:grid!important;grid-template-rows:auto minmax(280px,1fr) auto!important;
+}
+#miruta-nav-panel[hidden]{display:none!important}
+.miruta-nav-top{padding:10px 12px!important;grid-template-columns:minmax(0,1fr) auto auto!important;min-height:76px!important}
+.miruta-nav-top #nav-search-btn{display:none!important}
+.miruta-nav-top #nav-close-btn{display:grid!important;width:42px!important;height:42px!important;grid-column:3!important;grid-row:1!important}
+.miruta-nav-distance{min-width:72px!important;padding:8px!important}.miruta-nav-distance b{font-size:22px!important}.miruta-nav-distance small{display:none!important}
+.miruta-nav-speed{position:absolute!important;left:14px!important;bottom:148px!important;z-index:8!important;width:70px!important;height:70px!important;border-radius:50%!important;background:rgba(5,10,14,.88)!important;box-shadow:0 8px 24px rgba(0,0,0,.4)!important}
+.miruta-nav-speed b{font-size:23px!important}.miruta-nav-speed small{font-size:11px!important}
+#miruta-nav-map{min-height:45vh!important}
+.miruta-nav-bottom{padding:10px 12px 12px!important;background:rgba(5,10,14,.97)!important}
+.miruta-nav-client{margin-bottom:6px!important}.miruta-nav-client small{font-size:12px!important}.miruta-nav-client b{font-size:21px!important}
+.miruta-nav-eta{margin:0 0 8px!important;padding:9px 11px!important;font-size:14px!important}.miruta-nav-eta b{font-size:16px!important}
+.miruta-nav-actions{display:flex!important;justify-content:center!important;gap:9px!important}
+.miruta-nav-actions button{
+  width:48px!important;height:48px!important;min-height:48px!important;flex:0 0 48px!important;border-radius:50%!important;
+  padding:0!important;font-size:23px!important;line-height:1!important;background:rgba(255,255,255,.09)!important;
+  border:1px solid rgba(255,255,255,.22)!important;color:#fff!important;
+}
+#nav-complete-btn{background:#20a65a!important;border-color:#54db8a!important}
+#nav-next-btn{background:#0A84FF!important;border-color:#58a6ff!important}
+#nav-end-btn{background:rgba(255,90,80,.18)!important;border-color:rgba(255,110,100,.5)!important}
+#nav-center-btn,#nav-satellite-btn,#nav-voice-btn{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif!important}
+.instara-ticket-detail-modal{z-index:16000!important;align-items:center!important;padding:12px!important}
+.instara-ticket-detail-modal>div{border-radius:24px!important;background:#071017!important;border:1px solid rgba(255,255,255,.24)!important}
+@media(max-width:520px){
+  #miruta-nav-panel{inset:calc(env(safe-area-inset-top) + 4px) 4px calc(env(safe-area-inset-bottom) + 4px)!important;border-radius:24px!important}
+  #miruta-nav-map{min-height:43vh!important}
+  .miruta-nav-actions{gap:7px!important}.miruta-nav-actions button{width:45px!important;height:45px!important;flex-basis:45px!important}
+}
+</style>
+<script id="instara-rc99-runtime-law">
+(function(){
+'use strict';
+const VERSION='RC99';
+const $=id=>document.getElementById(id);
+const app=()=>window.__INSTARA_STATE__||window.state;
+const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch(_e){return f}};
+const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+const keyOf=x=>String(x?.cioOrderId||x?.orderViewId||x?.cioJobNumber||x?.jobNumber||x?.po||x?.purchaseOrderNumber||x?.cioEventId||x?.eventId||x?.id||'');
+
+function persist(){try{window.persistEntries?.();window.persistentEntries?.()}catch(_e){}}
+function strictCompletionRepair(){
+  const s=app();if(!s?.entries)return 0;
+  let fixed=0;
+  for(const e of s.entries){
+    if(e?.bridgeSource!=='CiO Mega Bridge')continue;
+    if(e.status==='completed'&&!e.manualCompletion&&!e.completedAt&&!e.mirutaCompletedAt){
+      e.status='pending';e.paymentState=e.paymentState==='completed'?'completed':'pending';fixed++;
+    }
+  }
+  if(fixed){persist();try{window.render?.();window.InstaraSchedule?.refresh?.()}catch(_e){}}
+  return fixed;
+}
+function rawFor(entry){
+  const observed=load('instara-cio-observed-jobs-v2',[]);
+  const k=keyOf(entry);
+  return observed.find(x=>keyOf(x)===k)||entry?._cioRaw||{};
+}
+function repairDetails(){
+  const s=app();if(!s?.entries)return 0;let changed=0;
+  for(const e of s.entries){
+    if(e?.bridgeSource!=='CiO Mega Bridge')continue;
+    const r=rawFor(e)||{};
+    const map={
+      customerName:r.customerName||r.eventCustomer||r.clientName,
+      address:r.customerAddress||r.address||r.serviceAddress,
+      phone:r.customerPhone||r.phone,
+      email:r.customerEmail||r.email,
+      po:r.purchaseOrderNumber||r.po,
+      cioJobNumber:r.jobNumber,
+      cioProjectNumber:r.projectNumber,
+      scopeNotes:r.scopeNotes,
+      deliveryNotes:r.deliveryNotes,
+      extendedOrderText:r.extendedOrderText,
+      lineItems:r.lineItems,
+      extendedOrderRows:r.extendedOrderRows,
+      relatedOrders:r.relatedOrders,
+      cioHistory:r.notesHistory||r.cioHistory
+    };
+    e._cioRaw={...r,...(e._cioRaw||{})};
+    for(const [k,v] of Object.entries(map)){
+      if((e[k]===undefined||e[k]===null||e[k]===''||(Array.isArray(e[k])&&!e[k].length))&&v!==undefined&&v!==null&&v!==''){e[k]=v;changed++}
+    }
+  }
+  if(changed)persist();return changed;
+}
+function findCalendarEntry(card){
+  const selected=document.querySelector('#instara-schedule-grid .schedule-day.selected')?.dataset?.date||today();
+  const rows=window.InstaraSchedule?.dayRows?.(selected)||[];
+  const key=card.dataset.ticketKey||'';
+  return (key&&rows.find(e=>keyOf(e)===key))||rows[Number(card.dataset.ticketIndex)]||null;
+}
+let detailLock=0;
+function installTicketOpen(){
+  if(document.__rc99TicketOpen)return;document.__rc99TicketOpen=true;
+  const open=ev=>{
+    const target=ev.target.closest?.('.schedule-more,.schedule-ticket');if(!target)return;
+    const card=target.closest('.schedule-ticket');if(!card)return;
+    const now=Date.now();if(now-detailLock<350)return;detailLock=now;
+    const entry=findCalendarEntry(card);if(!entry)return;
+    ev.preventDefault();ev.stopImmediatePropagation();
+    repairDetails();window.InstaraTicketDetail?.open?.(entry);
+  };
+  document.addEventListener('pointerup',open,true);
+}
+function durationMinutes(e){
+  if(e.isStoreStop)return Number(window.MirutaRouteBrain?.settings?.storeMinutes||10)||10;
+  const t=String(e.category||e.service||'').toLowerCase();
+  if(/dish.?washer/.test(t))return 45;if(/microwave|\botr\b/.test(t))return 30;
+  if(/faucet/.test(t))return 25;if(/toilet/.test(t))return 45;
+  return 45;
+}
+function fmt(d){return d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
+async function recalcClock(){
+  const s=app();if(!s?.entries)return;
+  const jobs=s.entries.filter(e=>e.date===today()&&e.type==='income'&&!e.isFinanceOnly&&!['cancelled','completed','paid','missing_price'].includes(String(e.status||'')));
+  const start=new Date();
+  let totalMin=0, plan=[];
+  try{plan=await window.MirutaNav?.estimateDayPlan?.(45,durationMinutes)||[]}catch(_e){}
+  if(plan.length)totalMin=Math.ceil(Number(plan[plan.length-1].departureOffsetSeconds||0)/60);
+  else totalMin=jobs.reduce((n,e)=>n+durationMinutes(e),0)+Math.max(0,jobs.length-1)*15;
+  const end=new Date(start.getTime()+Math.max(0,totalMin)*60000);
+  const box=$('schedule-intelligence');if(box)box.hidden=false;
+  if($('schedule-start-time'))$('schedule-start-time').textContent=fmt(start);
+  if($('schedule-end-time'))$('schedule-end-time').textContent=jobs.length?fmt(end):'—';
+  if($('schedule-service-time'))$('schedule-service-time').textContent=jobs.length?`${Math.round(jobs.reduce((n,e)=>n+durationMinutes(e),0)/jobs.length)} min / cliente`:'—';
+  if($('schedule-intel-status'))$('schedule-intel-status').textContent=jobs.length?`${jobs.length} parada${jobs.length===1?'':'s'} pendientes · ${totalMin} min totales`:'Sin paradas pendientes';
+  if($('miruta-plan-finish'))$('miruta-plan-finish').textContent=jobs.length?fmt(end):'—';
+}
+function observeStatus(){
+  const s=app();if(!s?.entries)return;
+  // Completion is never inferred from card rendering, arrival, or snapshot.
+  for(const e of s.entries){
+    if(e.bridgeSource==='CiO Mega Bridge'&&e.status==='completed'&&!e.manualCompletion&&!e.completedAt&&!e.mirutaCompletedAt)e.status='pending';
+  }
+}
+function boot(){
+  document.querySelector('meta[name="instara-ai-version"]')?.setAttribute('content',VERSION);
+  strictCompletionRepair();repairDetails();installTicketOpen();recalcClock();
+  setInterval(()=>{observeStatus();repairDetails();recalcClock()},30000);
+  setTimeout(()=>{try{window.MirutaNav?.refreshRoute?.()}catch(_e){};recalcClock()},1200);
+}
+document.addEventListener('DOMContentLoaded',boot);
+window.addEventListener('focus',()=>{strictCompletionRepair();repairDetails();recalcClock()});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){strictCompletionRepair();repairDetails();recalcClock()}});
+window.InstaraRC99={strictCompletionRepair,repairDetails,recalcClock};
+})();
+</script>
+
+
+<button id="instara-gps-resume-btn" type="button" hidden aria-label="Volver al GPS activo">
+  <span class="gps-resume-icon">➤</span>
+  <span class="gps-resume-copy"><b class="gps-resume-name">GPS activo</b><small class="gps-resume-meta">Continuar navegación</small></span>
+</button>
+
+
+<style id="instara-rc100-fullscreen-gps">
+body.miruta-nav-open{overflow:hidden!important}
+body.miruta-nav-open .bottom-nav,
+body.miruta-nav-open #instara-copilot,
+body.miruta-nav-open #instara-gps-resume-btn{display:none!important}
+
+#miruta-nav-panel{
+  position:fixed!important;
+  inset:0!important;
+  width:100vw!important;
+  height:100dvh!important;
+  max-width:none!important;
+  transform:none!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  background:#081014!important;
+  display:grid!important;
+  grid-template-rows:auto minmax(0,1fr) auto!important;
+  overflow:hidden!important;
+  z-index:20000!important;
+}
+#miruta-nav-panel[hidden]{display:none!important}
+#miruta-nav-map{width:100%!important;height:100%!important;min-height:0!important}
+.miruta-nav-top{
+  position:absolute!important;left:0!important;right:0!important;top:0!important;z-index:10!important;
+  padding:calc(10px + env(safe-area-inset-top)) 12px 10px!important;
+  background:linear-gradient(180deg,rgba(3,8,11,.94),rgba(3,8,11,.72),transparent)!important;
+  border:0!important;
+  grid-template-columns:minmax(0,1fr) auto auto auto auto!important;
+  gap:8px!important;
+  pointer-events:none;
+}
+.miruta-nav-top>*{pointer-events:auto}
+.miruta-nav-instruction{
+  background:rgba(5,12,16,.88)!important;border:1px solid rgba(255,255,255,.18)!important;
+  border-radius:20px!important;padding:10px 13px!important;box-shadow:0 12px 34px rgba(0,0,0,.35)!important;
+}
+.miruta-nav-instruction b{font-size:22px!important}
+.miruta-nav-distance,.miruta-nav-speed{
+  background:rgba(5,12,16,.88)!important;border:1px solid rgba(255,255,255,.18)!important;
+  box-shadow:0 12px 34px rgba(0,0,0,.35)!important;
+}
+#nav-search-btn,#nav-background-btn,#nav-close-btn{
+  width:44px!important;height:44px!important;border-radius:50%!important;
+  border:1px solid rgba(255,255,255,.25)!important;background:rgba(5,12,16,.88)!important;
+  color:#fff!important;font-size:19px!important;display:grid!important;place-items:center!important;
+  box-shadow:0 12px 34px rgba(0,0,0,.35)!important;
+}
+#nav-background-btn{font-size:21px!important}
+#nav-close-btn{background:rgba(70,15,16,.82)!important}
+#nav-search-bar{position:absolute!important;left:10px!important;right:10px!important;top:calc(72px + env(safe-area-inset-top))!important;z-index:15!important;border-radius:18px!important}
+.miruta-nav-bottom{
+  position:absolute!important;left:8px!important;right:8px!important;bottom:calc(8px + env(safe-area-inset-bottom))!important;
+  z-index:10!important;border-radius:24px!important;padding:11px!important;
+  background:rgba(5,12,16,.91)!important;border:1px solid rgba(255,255,255,.18)!important;
+  box-shadow:0 18px 46px rgba(0,0,0,.5)!important;backdrop-filter:blur(24px)!important;
+}
+.miruta-nav-client b{font-size:19px!important}
+.miruta-nav-actions{display:flex!important;justify-content:center!important;gap:8px!important}
+.miruta-nav-actions button{width:46px!important;height:46px!important;min-height:46px!important;flex:0 0 46px!important;border-radius:50%!important}
+.miruta-nav-speed{
+  position:absolute!important;left:12px!important;bottom:calc(188px + env(safe-area-inset-bottom))!important;
+  width:68px!important;height:68px!important;border-radius:50%!important;z-index:11!important;
+}
+#instara-gps-resume-btn{
+  position:fixed;right:14px;bottom:calc(92px + env(safe-area-inset-bottom));z-index:9998;
+  display:flex;align-items:center;gap:9px;max-width:min(72vw,320px);
+  border:1px solid rgba(88,166,255,.6);border-radius:999px;padding:8px 13px 8px 8px;
+  background:rgba(4,12,18,.92);color:#fff;box-shadow:0 16px 42px rgba(0,0,0,.45);
+  backdrop-filter:blur(20px);
+}
+#instara-gps-resume-btn[hidden]{display:none!important}
+.gps-resume-icon{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#0A84FF;font-size:20px}
+.gps-resume-copy{min-width:0;text-align:left}.gps-resume-copy b,.gps-resume-copy small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gps-resume-copy b{font-size:13px;color:#fff}.gps-resume-copy small{font-size:10px;color:rgba(255,255,255,.65)}
+@media(max-width:600px){
+  .miruta-nav-top{grid-template-columns:minmax(0,1fr) auto auto!important}
+  .miruta-nav-speed{display:none!important}
+  #nav-search-btn{display:none!important}
+  .miruta-nav-distance{min-width:66px!important}
+  .miruta-nav-instruction b{font-size:19px!important}
+}
+</style>
+<script id="instara-rc100-resume-bootstrap">
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+function install(){
+  const btn=$('instara-gps-resume-btn');
+  if(btn&&!btn.__rc100){
+    btn.__rc100=true;
+    btn.addEventListener('click',()=>window.MirutaNav?.resumeNavigation?.());
+  }
+  try{
+    const session=JSON.parse(localStorage.getItem('instara-gps-session-v1')||'null');
+    if(btn)btn.hidden=!session?.active;
+  }catch(_e){}
+}
+document.addEventListener('DOMContentLoaded',()=>setTimeout(install,600));
+window.addEventListener('focus',install);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)install()});
 })();
 </script>
 
