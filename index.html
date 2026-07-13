@@ -6476,7 +6476,7 @@ function ensureTomorrowCard(){if($('instara-tomorrow-card'))return;const anchor=
 function fmtTime(v){if(!v)return '—';const d=new Date(v);return Number.isNaN(d.getTime())?'—':d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}
 function renderTomorrowCard(){ensureTomorrowCard();const jobs=knownJobsFor(tomorrow()),plan=load(PLAN_KEY,null);const stores=new Set(jobs.map(e=>String(e.storeNumber||'')).filter(Boolean));const put=(id,v)=>{const n=$(id);if(n)n.textContent=v};put('instara-tomorrow-jobs',jobs.length);put('instara-tomorrow-stores',stores.size);put('instara-tomorrow-wake',plan?.date===tomorrow()?fmtTime(plan.wakeAt):'—');put('instara-tomorrow-leave',plan?.date===tomorrow()?fmtTime(plan.leaveAt):'—');const confirmed=jobs.filter(e=>e.cioConfirmed||!e.cioObservedOnly).length;put('instara-tomorrow-state',jobs.length?(plan?.date===tomorrow()?`LISTA · ${confirmed}/${jobs.length} CONF.`:'CALCULANDO'):'SIN TICKETS')}
 async function preplanTomorrow(){const s=appState();ensureTomorrowCard();renderTomorrowCard();if(!s||!window.MirutaRouteBrain?.analyze)return null;const date=tomorrow(),known=knownJobsFor(date);if(!known.length){save(PLAN_KEY,{date,jobs:0,at:new Date().toISOString()});renderTomorrowCard();return null}const permanentIds=new Set((s.entries||[]).map(e=>e.id));const tempJobs=known.filter(e=>!permanentIds.has(e.id)).map((e,i)=>({...e,id:e.id+'_plan',instaraDraftOnly:true,order:100+i,orderIndex:100+i}));const tempStores=tempStoreStops(known,date).filter(st=>!(s.entries||[]).some(e=>e.date===date&&e.isStoreStop&&String(e.storeNumber)===String(st.storeNumber)));const rd=$('route-date'),old=rd?.value||today();try{s.entries.push(...tempStores,...tempJobs);if(rd)rd.value=date;const analysis=await window.MirutaRouteBrain.analyze({autoApply:true,force:true});const plan={date,jobs:known.length,confirmed:known.filter(e=>e.cioConfirmed||!e.cioObservedOnly).length,leaveAt:analysis?.leaveAt||null,wakeAt:analysis?.wakeAt||null,finishAt:analysis?.sim?.finish||analysis?.finishAt||null,order:(analysis?.order||[]).map(e=>String(e.id||'').replace(/_plan$/,'')),at:new Date().toISOString()};save(PLAN_KEY,plan);return plan}catch(err){save(PLAN_KEY,{date,jobs:known.length,error:String(err?.message||err),at:new Date().toISOString()});return null}finally{s.entries=s.entries.filter(e=>!e.instaraDraftOnly);if(rd)rd.value=old;try{render()}catch(_e){};renderTomorrowCard()}}
-function publishKnownDate(date){const s=appState();if(!s)return 0;const observed=stableObserved({jobs:load(OBSERVED_KEY,[])}).filter(j=>jobDate(j)===date);let added=0;for(const j of observed){const key=jobKey(j),exists=(s.entries||[]).some(e=>String(e.cioOrderId||e.cioJobNumber||e.po||e.cioEventId||'')===key);if(exists)continue;const e=draftEntry(j,date);e.instaraPublishedDraft=true;e.order=(s.entries||[]).filter(x=>x.date===date).length+1;e.orderIndex=e.order;s.entries.push(e);added++}if(added){try{persistEntries();render()}catch(_e){}}return added}
+function publishKnownDate(date){const s=appState();if(!s)return 0;const observed=stableObserved({jobs:load(OBSERVED_KEY,[])}).filter(j=>jobDate(j)===date);let added=0;for(const j of observed){const key=jobKey(j),exists=(s.entries||[]).some(e=>String(e.cioOrderId||e.cioJobNumber||e.po||e.cioEventId||'')===key);if(exists)continue;const e=draftEntry(j,date);e.instaraPublishedDraft=true;e.order=(s.entries||[]).filter(x=>x.date===date).length+1;e.orderIndex=e.order;s.entries.push(e);added++}if(added){try{localStorage.setItem('miruta-entries',JSON.stringify(s.entries));window.render?.()}catch(_e){}}return added}
 async function postTomorrow(){const date=tomorrow();publishKnownDate(date);const rd=$('route-date');if(!rd)return;rd.value=date;const force=$('force-route-date');if(force)force.checked=true;rd.dispatchEvent(new Event('change',{bubbles:true}));try{render()}catch(_e){};await window.MirutaRouteBrain?.analyze?.({autoApply:true,force:true});window.MirutaNav?.refreshRoute?.();window.MirutaRC68?.refresh?.();document.querySelector('.nav-btn[data-screen="hoy"]')?.click();window.scrollTo({top:0,behavior:'smooth'});const line=$('status-line');if(line)line.textContent='Ruta de mañana publicada con los tickets conocidos. INSTARA seguirá reemplazando borradores por estados confirmados de CiO. Mensajes bloqueados hasta las 7:30 AM.'}
 function patchBridge(){const bridge=window.InstaraMegaBridge;if(!bridge||bridge.__instaraRC87)return false;bridge.__instaraRC87=true;const original=bridge.applySnapshot?.bind(bridge);if(!original)return false;bridge.applySnapshot=function(payload){const merged=stableObserved(payload);const safe={...(payload||{}),jobs:merged};const result=original(safe);setTimeout(()=>{window.InstaraSchedule?.refresh?.();preplanTomorrow()},120);return result};return true}
 function updateSmsLaw(){document.querySelectorAll('*').forEach(el=>{if(el.children.length)return;const t=el.textContent||'';if(/7:00 AM/.test(t)&&(t.includes('SMS')||t.includes('mensajes')))el.textContent=t.replace(/7:00 AM/g,'7:30 AM')})}
@@ -6606,9 +6606,139 @@ function decorateCalendar(){
   );
 }
 addEventListener('message',ev=>{const d=ev.data;if(d?.source==='INSTARA_BRIDGE'&&d?.type==='INSTARA_BRIDGE_SNAPSHOT'&&d.payload){setTimeout(()=>{enforceObserved();enforceEntries();decorateCalendar();window.InstaraSchedule?.refresh?.();setTimeout(decorateCalendar,40)},80)}});
-document.addEventListener('DOMContentLoaded',()=>{window.state=window.__INSTARA_STATE__;setTimeout(decorateCalendar,300);const box=document.getElementById('instara-schedule-agenda');if(box)new MutationObserver(()=>{clearTimeout(window.__rc89Decor);window.__rc89Decor=setTimeout(decorateCalendar,50)}).observe(box,{childList:true,subtree:true});});
+document.addEventListener('DOMContentLoaded',()=>{window.state=window.__INSTARA_STATE__;setTimeout(decorateCalendar,300);});
 setInterval(()=>{if(document.body.dataset.activeScreen==='schedule')decorateCalendar()},30000);
 window.InstaraPaymentLaw={enforceObserved,enforceEntries,paymentView,createPrExceptionTickets};
+})();
+</script>
+
+
+<style id="instara-rc90-authoritative-finance-css">
+/* RC90: color law + stable finance/ticket display */
+#screen-schedule .schedule-ticket .payment-state,
+#screen-schedule .schedule-ticket .schedule-more,
+#screen-finanzas .count-chip .l,
+#screen-finanzas .stat .label{color:#fff!important}
+#screen-schedule .schedule-ticket .payment-source,
+#screen-schedule .schedule-ticket .schedule-address,
+#screen-schedule .schedule-ticket .schedule-phone,
+#screen-schedule .schedule-ticket .schedule-store,
+#screen-finanzas .summary-caption,
+#screen-finanzas .rc76-goals-kicker,
+#screen-finanzas .rc76-goal-card small{color:#7ec7ff!important}
+#screen-schedule .schedule-ticket .ticket-net,
+#screen-finanzas .count-chip .n,
+#screen-finanzas .stat.system .value,
+#screen-finanzas .stat.expected .value{color:#ffd05a!important}
+#screen-finanzas .stat.net .value,.rc90-positive{color:#78e08f!important}
+#screen-finanzas .stat.expense .value,.rc90-negative{color:#ff6767!important}
+#screen-schedule .schedule-ticket{transform:none!important}
+</style>
+<script id="instara-rc90-authoritative-finance-js">
+(function(){
+'use strict';
+const OBSERVED_KEY='instara-cio-observed-jobs-v2';
+const $=id=>document.getElementById(id);
+const app=()=>window.__INSTARA_STATE__||window.state;
+const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch(_e){return f}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch(_e){}};
+const rate=()=>Number(app()?.rate||90);
+const money=n=>'$'+Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const normDate=v=>{const s=String(v||'');let m=s.match(/^(\d{4}-\d{2}-\d{2})/);if(m)return m[1];m=s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);return m?`${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`:''};
+const keyOf=j=>String(j?.orderViewId||j?.cioOrderId||j?.jobNumber||j?.cioJobNumber||j?.purchaseOrderNumber||j?.po||j?.eventId||j?.cioEventId||'');
+const txt=j=>[j?.imsStatus,j?.cioIMSStatus,j?.jobStatus,j?.cioJobStatus,j?.lowesActivity,j?.cioLowesActivity,j?.paymentState,j?.status].filter(Boolean).join(' ').toLowerCase();
+function strictAmount(j){
+  const raw=j?.purchaseOrderAmount;
+  const n=typeof raw==='number'?raw:Number(String(raw??'').replace(/[$,\s]/g,''));
+  if(!Number.isFinite(n)||n<0||n>5000)return 0;
+  return Math.round(n*100)/100;
+}
+function cioState(j){
+  const t=txt(j);
+  const amount=strictAmount(j);
+  if(/cancel|void|declin|customer request the delay|customer requested delay/.test(t))return 'cancelled';
+  if(j?.crewPaymentComplete===true||j?.paymentState==='completed'||/payment received|past paid po|\bpaid\b/.test(t))return amount>0?'paid':'completed';
+  if(/\bclosed\b|\bcomplete\b|\bcompleted\b|work_complete|work complete/.test(t))return 'completed';
+  return 'pending';
+}
+function normalizeJob(j){
+  if(!j)return j;
+  const amount=strictAmount(j),st=cioState(j),r=rate();
+  j.purchaseOrderAmount=amount;
+  j.amount=amount;
+  j.rate=r;
+  j.net=Math.round(amount*r)/100;
+  j.paymentState=amount<=0?'no_payment':(st==='paid'?'completed':'pending');
+  j.status=st;
+  j.cioDerivedStatus=st;
+  if(amount>0)j.paymentAmountSource='Crew Payment Tracking · Purchase Order Amount';
+  return j;
+}
+function upsertClosedFinance(jobs){
+  const s=app(); if(!s?.entries)return 0;
+  let changed=0;
+  for(const raw of jobs){
+    const j=normalizeJob(raw),st=cioState(j),amount=strictAmount(j);
+    if(!['completed','paid'].includes(st)||amount<=0)continue;
+    const key=keyOf(j); if(!key)continue;
+    let e=s.entries.find(x=>keyOf(x)===key);
+    const patch={date:normDate(j.scheduledDate||j.start||j.date),type:'income',category:j.laborCategory||j.eventService||j.category||'Trabajo Mega',amount,purchaseOrderAmount:amount,rate:rate(),net:Math.round(amount*rate())/100,status:st,paymentState:st==='paid'?'completed':'pending',paymentAmountSource:'Crew Payment Tracking · Purchase Order Amount',customerName:j.customerName||j.eventCustomer||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',storeNumber:String(j.storeNumber||''),store:j.storeNumber?`Store ${String(j.storeNumber).replace(/^0+/,'')}`:(j.sellerName||''),po:j.purchaseOrderNumber||'',cioOrderId:String(j.orderViewId||j.cioOrderId||''),cioEventId:String(j.eventId||j.cioEventId||''),cioJobNumber:j.jobNumber||'',cioProjectNumber:j.projectNumber||'',cioIMSStatus:j.imsStatus||'',cioJobStatus:j.jobStatus||'',cioLowesActivity:j.lowesActivity||'',bridgeSource:'CiO Mega Bridge',haulAway:j.haulAway===true,lineItems:j.lineItems||[],extendedOrderRows:j.extendedOrderRows||[],extendedOrderText:j.extendedOrderText||'',itemNumbers:j.itemNumbers||[]};
+    if(!e){e={id:'cio_fin_'+key.replace(/\W+/g,'_'),...patch,order:9999,orderIndex:9999,clientJournal:[],instaraHistoricalImport:true};s.entries.push(e);changed++;}
+    else {const before=JSON.stringify([e.amount,e.net,e.status,e.paymentState,e.purchaseOrderAmount]);Object.assign(e,patch);if(before!==JSON.stringify([e.amount,e.net,e.status,e.paymentState,e.purchaseOrderAmount]))changed++;}
+  }
+  if(changed)save('miruta-entries',s.entries);
+  return changed;
+}
+function repairAll(){
+  const jobs=(load(OBSERVED_KEY,[])||[]).map(normalizeJob);
+  save(OBSERVED_KEY,jobs);
+  const s=app();
+  if(s?.entries){for(const e of s.entries){if(e.bridgeSource==='CiO Mega Bridge'||e.cioOrderId||e.cioEventId)normalizeJob(e)};upsertClosedFinance(jobs);save('miruta-entries',s.entries)}
+  return jobs;
+}
+function periodBounds(kind){
+  const now=new Date(),iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  if(kind==='day'){const d=iso(now);return[d,d]}
+  if(kind==='week'){const m=new Date(now.getFullYear(),now.getMonth(),now.getDate());m.setDate(m.getDate()-((m.getDay()+6)%7));const s=new Date(m);s.setDate(s.getDate()+5);return[iso(m),iso(s)]}
+  return[`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`,`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-31`]
+}
+function financialAgg(start,end){
+  const s=app(),counts={total:0,completed:0,pending:0,cancelled:0,missing:0,paid:0};let gross=0,expected=0,expense=0;
+  for(const e of (s?.entries||[])){
+    if(!e.date||e.date<start||e.date>end)continue;
+    if(e.type==='expense'){expense+=Number(e.amount||0);continue}
+    if(e.type!=='income')continue;
+    if(e.isFinanceOnly){expected+=Number(e.net??e.amount)||0;continue}
+    counts.total++;
+    const st=e.status||'pending';
+    if(st==='completed'){counts.completed++;const a=strictAmount(e);gross+=a;expected+=Math.round(a*rate())/100}
+    else if(st==='paid'){counts.paid++;const a=strictAmount(e);gross+=a;expected+=Math.round(a*rate())/100}
+    else if(st==='pending')counts.pending++;
+    else if(st==='cancelled')counts.cancelled++;
+    else if(st==='missing_price')counts.missing++;
+  }
+  return {counts,gross,expected,expense,net:expected-expense};
+}
+function countHtml(a){return `<div class="count-chip"><div class="n">${a.counts.total}</div><div class="l">Detectados</div></div><div class="count-chip completed"><div class="n">${a.counts.completed}</div><div class="l">Completados</div></div><div class="count-chip pending"><div class="n">${a.counts.pending}</div><div class="l">Pendientes</div></div><div class="count-chip cancelled"><div class="n">${a.counts.cancelled}</div><div class="l">Cancelados</div></div><div class="count-chip missing"><div class="n">${a.counts.missing}</div><div class="l">Sin precio</div></div><div class="count-chip paid"><div class="n">${a.counts.paid}</div><div class="l">Pagados</div></div>`}
+function amountHtml(a){return `<div class="stat system"><div class="label">Total Crew PO cerrado</div><div class="value">${money(a.gross)}</div></div><div class="stat expected"><div class="label">Pago esperado Mega ${rate()}%</div><div class="value">${money(a.expected)}</div></div><div class="stat expense"><div class="label">Gastos</div><div class="value">${money(a.expense)}</div></div><div class="stat net"><div class="label">Neto</div><div class="value">${money(a.net)}</div></div>`}
+function renderFinance(){
+  repairAll();
+  for(const kind of ['day','week','month']){const [a,b]=periodBounds(kind),x=financialAgg(a,b),c=$(`counts-${kind}`),m=$(`amounts-${kind}`);if(c)c.innerHTML=countHtml(x);if(m)m.innerHTML=amountHtml(x)}
+  const goals=(()=>{try{return {weekly:1990,monthly:7800,...JSON.parse(localStorage.getItem('instara-financial-goals-v1')||'{}')}}catch(_e){return{weekly:1990,monthly:7800}}})();
+  const week=financialAgg(...periodBounds('week')).expected,month=financialAgg(...periodBounds('month')).expected;
+  const wv=$('rc76-week-value'),mv=$('rc76-month-value');if(wv)wv.textContent=`${money(week)} / ${money(goals.weekly)}`;if(mv)mv.textContent=`${money(month)} / ${money(goals.monthly)}`;
+  const wf=$('rc76-week-fill'),mf=$('rc76-month-fill');if(wf)wf.style.width=Math.min(100,goals.weekly?week/goals.weekly*100:100)+'%';if(mf)mf.style.width=Math.min(100,goals.monthly?month/goals.monthly*100:100)+'%';
+  const wc=$('rc76-week-copy'),mc=$('rc76-month-copy');if(wc)wc.textContent=week>=goals.weekly?`Meta cubierta por ${money(week-goals.weekly)}.`:`Faltan ${money(goals.weekly-week)} para la meta semanal.`;if(mc)mc.textContent=month>=goals.monthly?`Meta cubierta por ${money(month-goals.monthly)}.`:`Faltan ${money(goals.monthly-month)} para la meta mensual.`;
+}
+function refreshStable(){
+  repairAll();
+  try{window.InstaraSchedule?.refresh?.()}catch(_e){}
+  setTimeout(()=>{try{window.InstaraPaymentLaw?.paymentView&&document.body.dataset.activeScreen==='schedule'&&window.InstaraPaymentLaw?.enforceEntries?.()}catch(_e){};renderFinance()},80);
+}
+addEventListener('message',ev=>{const d=ev.data;if(d?.source==='INSTARA_BRIDGE'&&d?.type==='INSTARA_BRIDGE_SNAPSHOT'&&d.payload){setTimeout(refreshStable,120)}});
+document.addEventListener('DOMContentLoaded',()=>setTimeout(()=>{refreshStable();renderFinance()},700));
+setInterval(()=>{if(document.body.dataset.activeScreen==='finanzas')renderFinance()},2500);
+window.InstaraRC90={repairAll,renderFinance,financialAgg,strictAmount,cioState};
 })();
 </script>
 
