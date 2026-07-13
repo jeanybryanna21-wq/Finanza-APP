@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC96.1">
+  <meta name="instara-ai-version" content="RC97">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1388,7 +1388,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       <div class="schedule-monthbar"><button id="schedule-prev" type="button" aria-label="Mes anterior">‹</button><h3 id="schedule-month-title">—</h3><button id="schedule-next" type="button" aria-label="Mes siguiente">›</button></div>
       <div class="schedule-weekdays"><span>DOM</span><span>LUN</span><span>MAR</span><span>MIÉ</span><span>JUE</span><span>VIE</span><span>SÁB</span></div>
       <div class="schedule-grid" id="instara-schedule-grid"></div>
-      <div class="schedule-day-panel"><div class="schedule-day-title"><div><small>RUTA DEL DÍA</small><b id="schedule-selected-title">—</b></div><span id="schedule-selected-count">0 tickets</span></div><div class="schedule-agenda" id="instara-schedule-agenda"></div><div class="schedule-legend"><span>Programado</span><span class="l-done">Completado</span><span class="l-cancel">Cancelado</span></div></div>
+      <div class="schedule-day-panel"><div class="schedule-day-title"><div><small>RUTA DEL DÍA</small><b id="schedule-selected-title">—</b></div><span id="schedule-selected-count">0 tickets</span></div><div class="schedule-agenda" id="instara-schedule-agenda"></div><button class="btn-outline" id="instara-add-selected-to-today" type="button" style="width:100%;margin:14px 0 8px;">AGREGAR A RUTA DE HOY</button><div id="instara-add-selected-status" class="schedule-empty" style="display:none;padding:12px;margin:8px 0;"></div><div class="schedule-legend"><span>Programado</span><span class="l-done">Completado</span><span class="l-cancel">Cancelado</span></div></div>
     </section>
   </div>
 
@@ -5500,9 +5500,10 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   function observedStatus(j){const text=[j.imsStatus,j.jobStatus,j.raw?.barColor,j.laborCategory].filter(Boolean).join(' ').toLowerCase();if(j.confirmed)return 'pending';if(/payment received|past paid|paid/.test(text))return 'paid';if(/closed|complete|completed|work_complete/.test(text))return 'completed';if(/cancel|void|declin/.test(text))return 'cancelled';return 'observed'}
   function virtualJob(j){const status=observedStatus(j),fallbackId=String(j.orderViewId||j.eventId||j.text||'').trim();return {_cioObserved:true,_cioRaw:j,cioOrderId:String(j.orderViewId||''),cioEventId:String(j.eventId||''),date:isoDate(j.scheduledDate||j.start),type:'income',status,displayStatus:statusName[status],customerName:j.customerName||j.eventCustomer||(fallbackId?`Ticket Mega #${fallbackId}`:'Ticket Mega sin identidad'),category:j.laborCategory||j.eventService||'Servicio pendiente de detalle',service:j.laborCategory||j.eventService||'Servicio pendiente de detalle',storeNumber:String(j.storeNumber||''),store:j.storeNumber?'Store '+String(j.storeNumber).replace(/^0+/,''):(j.sellerName||''),po:j.purchaseOrderNumber||'',windowStart:j.start||'',scheduledStart:j.start||'',time:j.start||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',jobNumber:j.jobNumber||'',projectNumber:j.projectNumber||'',invoiceNumber:j.invoiceNumber||'',imsStatus:j.imsStatus||'',jobStatus:j.jobStatus||'',purchaseOrderAmount:Number(j.purchaseOrderAmount||0),lineItems:j.lineItems||[],relatedOrders:j.relatedOrders||[],deliveryNotes:j.deliveryNotes||'',scopeNotes:j.scopeNotes||'',notesText:j.notesText||'',notesHistory:j.notesHistory||[],haulAway:j.haulAway===true||/haul\s*away/i.test([j.extendedOrderText,...(j.lineItems||[]).map(x=>x.description||'')].filter(Boolean).join(' | ')),extendedOrderText:j.extendedOrderText||'',extendedOrderRows:j.extendedOrderRows||[],detailError:j.detailError||''}}
   function dayRows(day){
-    const active=rows().filter(e=>e.date===day&&e.type==='income'&&e.status!=='missing_price');
+    const sunday=/^\d{4}-\d{2}-\d{2}$/.test(String(day||''))&&new Date(day+'T12:00:00').getDay()===0;
+    const active=rows().filter(e=>e.date===day&&e.type==='income'&&e.status!=='missing_price'&&(!sunday||e.manualRouteOverride===true));
     const keys=new Set(active.map(keyOf).filter(Boolean));
-    const observed=(load(OBSERVED_KEY,[])||[]).map(virtualJob).filter(e=>e.date===day&&(!keyOf(e)||!keys.has(keyOf(e))));
+    const observed=sunday?[]:(load(OBSERVED_KEY,[])||[]).map(virtualJob).filter(e=>e.date===day&&(!keyOf(e)||!keys.has(keyOf(e))));
     return [...active,...observed].sort((a,b)=>String(a.windowStart||a.scheduledStart||a.time||'99:99').localeCompare(String(b.windowStart||b.scheduledStart||b.time||'99:99')));
   }
   function iso(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
@@ -6904,10 +6905,7 @@ function operational(x){if(!x||x.isFinanceOnly||x.isStoreStop)return false;if(wi
 function knownRows(){const s=app();const entries=(s?.entries||[]).filter(operational);const observed=(load(OBSERVED_KEY,[])||[]).filter(operational);return [...entries,...observed]}
 function pendingDates(){const t=today();const map=new Map();for(const row of knownRows()){const d=dateOf(row);if(!d||d<t||terminal(row))continue;map.set(d,(map.get(d)||0)+1)}return [...map.keys()].sort()}
 function hasPending(date){return knownRows().some(x=>dateOf(x)===date&&!terminal(x)&&operational(x))}
-function resolveActiveDate(){const now=new Date(),t=today();if(now.getDay()===0){const mon=tomorrow();if(hasPending(mon))return mon}
- if(hasPending(t))return t;
- const dates=pendingDates();return dates[0]||t;
-}
+function resolveActiveDate(){return today()}
 let enforcing=false,lastDate='';
 async function enforceActiveRoute(reason){if(enforcing)return;enforcing=true;try{
  const active=resolveActiveDate();
@@ -7058,7 +7056,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <script id="instara-rc96-sync-hub-persistence-merge-guard">
 (function(){
 'use strict';
-const VERSION='RC96.1';
+const VERSION='RC97';
 const CFG_KEY='instara-sync-hub-config-v1';
 const GUARD_KEY='instara-rc96-merge-guard-v1';
 let mounting=false;
@@ -7164,7 +7162,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <script id="instara-rc96-integrity-date-route-law">
 (function(){
 'use strict';
-const VERSION='RC96.1';
+const VERSION='RC97';
 const OBSERVED_KEY='instara-cio-observed-jobs-v2';
 const MIGRATION_KEY='instara-rc96-date-integrity-v1';
 
@@ -7292,6 +7290,95 @@ function boot(){
 document.addEventListener('DOMContentLoaded',boot);
 window.addEventListener('focus',()=>reconcileDates('focus'));
 window.InstaraRC96Integrity={canonicalDate,reconcileDates,normalizePayload,installBridgeIntegrity,installRouteHoldGuard};
+})();
+</script>
+
+
+<script id="instara-rc97-cache-clean-route-today">
+(function(){
+'use strict';
+const VERSION='RC97';
+const CLEAN_KEY='instara-rc97-manual-route-cache-clean-v1';
+const OBSERVED_KEY='instara-cio-observed-jobs-v2';
+const $=id=>document.getElementById(id);
+const app=()=>window.__INSTARA_STATE__||window.state||null;
+const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch(_e){return f}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(_e){return false}};
+const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const today=()=>iso(new Date());
+const keyOf=x=>String(x?.cioOrderId||x?.orderViewId||x?.cioJobNumber||x?.jobNumber||x?.po||x?.purchaseOrderNumber||x?.cioEventId||x?.eventId||x?.id||'');
+function operational(e){
+  if(!e||e.type!=='income'||e.isFinanceOnly||e.isStoreStop)return false;
+  const t=String([e.category,e.service,e.laborCategory,e.eventService,e.jobType].filter(Boolean).join(' ')).toLowerCase();
+  return /(dish\s*washer|dishwasher|microwave|\botr\b|toilet|faucet|disposal|cooktop|range|oven|hood|washer|dryer|installation|trip charge|additional mileage|change order|exception)/.test(t)||!!(e.customerName||e.customer||e.clientName);
+}
+function cleanupManualRouteCache(){
+  if(load(CLEAN_KEY,null))return {removed:0,skipped:true};
+  const s=app();if(!s||!Array.isArray(s.entries))return {removed:0,pending:true};
+  const observed=load(OBSERVED_KEY,[]);
+  const observedKeys=new Set(observed.map(keyOf).filter(Boolean));
+  const before=s.entries.length;
+  s.entries=s.entries.filter(e=>{
+    if(!operational(e))return true;
+    const k=keyOf(e);
+    const isMega=e.bridgeSource==='CiO Mega Bridge'||e.cioOrderId||e.cioEventId||e.cioJobNumber;
+    if(!isMega)return false; // remove manually entered operational jobs only
+    if(e.instaraPublishedDraft&&(!k||!observedKeys.has(k)))return false; // remove orphan draft ghosts
+    return true;
+  });
+  const removed=before-s.entries.length;
+  // Clear only route/draft caches; preserve Hub config, observed CiO jobs, finance, settings and learning.
+  ['instara-next-day-plan-v1','instara-route-active-v1','miruta-route-order-v1','instara-tomorrow-plan-v1'].forEach(k=>{try{localStorage.removeItem(k)}catch(_e){}});
+  save(CLEAN_KEY,{version:VERSION,at:new Date().toISOString(),removed});
+  try{window.persistEntries?.();window.persistentEntries?.();window.render?.();window.InstaraSchedule?.refresh?.();window.MirutaNav?.refreshRoute?.()}catch(_e){}
+  return {removed};
+}
+function moveSelectedDayToToday(){
+  const schedule=window.InstaraSchedule;
+  const selected=document.querySelector('#instara-schedule-grid .schedule-day.selected')?.dataset?.date||today();
+  const rows=schedule?.dayRows?.(selected)||[];
+  const status=$('instara-add-selected-status');
+  if(!rows.length){if(status){status.style.display='block';status.textContent='No hay tickets para agregar en ese día.'}return}
+  // Publish observed-only tickets into persistent entries first.
+  try{window.InstaraNextDay?.publishKnownDate?.(selected)}catch(_e){}
+  const s=app();if(!s||!Array.isArray(s.entries))return;
+  const selectedKeys=new Set(rows.map(keyOf).filter(Boolean));
+  let moved=0;
+  for(const e of s.entries){
+    const k=keyOf(e);
+    const matches=(k&&selectedKeys.has(k))||(!k&&e.date===selected&&operational(e));
+    if(!matches||!operational(e))continue;
+    if(e.date!==today())e.originalScheduledDate=e.originalScheduledDate||e.date||selected;
+    e.date=today();
+    e.manualRouteOverride=true;
+    e.routeForcedAt=new Date().toISOString();
+    e.cioRouteHold=false;
+    e.cioDateReview=false;
+    moved++;
+  }
+  try{
+    window.persistEntries?.();window.persistentEntries?.();
+    const rd=$('route-date');if(rd){rd.value=today();rd.dispatchEvent(new Event('change',{bubbles:true}))}
+    const force=$('force-route-date');if(force)force.checked=true;
+    window.render?.();window.InstaraSchedule?.refresh?.();window.MirutaNav?.refreshRoute?.();
+    window.MirutaRouteBrain?.analyze?.({autoApply:true,force:true}).catch?.(()=>{});
+    document.querySelector('.nav-btn[data-screen="hoy"]')?.click();
+    if(status){status.style.display='block';status.textContent=`${moved} ticket${moved===1?'':'s'} agregado${moved===1?'':'s'} a la ruta de hoy.`}
+  }catch(_e){}
+}
+function install(){
+  cleanupManualRouteCache();
+  const btn=$('instara-add-selected-to-today');if(btn&&!btn.__rc97){btn.__rc97=true;btn.addEventListener('click',moveSelectedDayToToday)}
+  // Force the route selector to the actual local day on every app foreground/boot.
+  const rd=$('route-date');if(rd&&rd.value!==today()){rd.value=today();rd.dispatchEvent(new Event('change',{bubbles:true}))}
+  const force=$('force-route-date');if(force)force.checked=true;
+  try{window.InstaraActiveRouteLaw?.enforceActiveRoute?.('rc97-today')}catch(_e){}
+}
+document.addEventListener('DOMContentLoaded',()=>setTimeout(install,900));
+window.addEventListener('focus',()=>setTimeout(install,120));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)setTimeout(install,120)});
+setTimeout(install,2200);
+window.InstaraRC97={cleanupManualRouteCache,moveSelectedDayToToday,install};
 })();
 </script>
 
