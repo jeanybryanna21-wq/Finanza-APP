@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC125">
+  <meta name="instara-ai-version" content="RC124">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -4419,106 +4419,10 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   },{passive:true});
 
 
-
-  // ---------- RC125: resolvedor geográfico único para Ruta + GPS ----------
-  const InstaraGeoResolver = (()=>{
-    const GEO_KEY='miruta-route-geocache-v3';
-    let cache={};
-    try{cache=JSON.parse(localStorage.getItem(GEO_KEY)||'{}')||{}}catch(_e){cache={}}
-
-    function save(){try{localStorage.setItem(GEO_KEY,JSON.stringify(cache))}catch(_e){}}
-    function normalize(address){return String(address||'').trim().replace(/\s+/g,' ').replace(/\s*,\s*/g,', ')}
-    function parts(address){
-      const q=normalize(address);
-      const house=(q.match(/^\s*(\d+[A-Za-z-]*)\b/)||[])[1]||'';
-      const zip=(q.match(/\b(\d{5})(?:-\d{4})?\b/)||[])[1]||'';
-      const state=(q.match(/,\s*([A-Z]{2})\s+\d{5}\b/i)||[])[1]?.toUpperCase()||'';
-      return {q,house:String(house).toLowerCase(),zip,state};
-    }
-    function score(candidate,p){
-      const a=candidate?.address||{},display=String(candidate?.display_name||'').toLowerCase();
-      let value=0;
-      const cZip=String(a.postcode||'').slice(0,5);
-      const cHouse=String(a.house_number||'').toLowerCase();
-      const cState=String(a['ISO3166-2-lvl4']||a.state_code||'').toUpperCase();
-      if(p.zip)value+=cZip===p.zip?120:-160;
-      if(p.house)value+=cHouse===p.house?90:(display.includes(p.house+' ')?45:-70);
-      if(p.state==='VA')value+=cState.includes('VA')||/virginia/.test(display)?50:-100;
-      if(candidate?.type==='house'||candidate?.addresstype==='building'||candidate?.addresstype==='amenity')value+=18;
-      value+=Math.max(0,30-Number(candidate?.place_rank||30));
-      return value;
-    }
-    function validCoord(lat,lng){
-      return Number.isFinite(Number(lat))&&Number.isFinite(Number(lng))&&Math.abs(Number(lat))<=90&&Math.abs(Number(lng))<=180;
-    }
-    function storeCode(entry){
-      const raw=[entry?.storeNumber,entry?.sellerStoreNumber,entry?.store,entry?.storeName,entry?.category].filter(Boolean).join(' ');
-      const m=raw.match(/(?:store\s*#?|lowe'?s?\s*#?|eln\s*#?|^|\D)(0*\d{3,4})(?:\D|$)/i);
-      return m?String(parseInt(m[1],10)):'';
-    }
-    function entryAddress(entry){
-      const direct=normalize(entry?.address);
-      if(direct)return direct;
-      if(entry?.isStoreStop){
-        const code=storeCode(entry),root=window.state||window.__INSTARA_STATE__;
-        const found=[code&&root?.storeAddresses?.['store:'+code],code&&root?.storeAddresses?.[code]].find(Boolean);
-        if(found)return normalize(found);
-      }
-      return '';
-    }
-    async function resolveAddress(address){
-      const q=normalize(address);
-      if(!q)throw new Error('Dirección vacía');
-      const key=q.toLowerCase(),cached=cache[key];
-      if(cached?.verified===true&&validCoord(cached.lat,cached.lng))return cached;
-      if(!navigator.onLine)throw new Error(`Sin coordenadas verificadas para ${q}`);
-
-      const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=us&addressdetails=1&dedupe=1&q='+encodeURIComponent(q);
-      const res=await fetch(url,{headers:{'Accept-Language':'en-US,en;q=0.9'}});
-      if(!res.ok)throw new Error(`No se pudo localizar ${q}`);
-      const data=await res.json();
-      if(!Array.isArray(data)||!data.length)throw new Error(`Dirección no encontrada: ${q}`);
-
-      const p=parts(q);
-      const ranked=data.map(candidate=>({candidate,score:score(candidate,p)})).sort((a,b)=>b.score-a.score);
-      const winner=ranked[0];
-      if(!winner||winner.score<0)throw new Error(`Dirección ambigua o no coincide con ZIP/número: ${q}`);
-
-      const out={lat:Number(winner.candidate.lat),lng:Number(winner.candidate.lon),display:winner.candidate.display_name||q,verified:true,score:winner.score,query:q,source:'verified-nominatim-v3'};
-      if(!validCoord(out.lat,out.lng))throw new Error(`Coordenadas inválidas para ${q}`);
-      cache[key]=out;save();
-      await new Promise(resolve=>setTimeout(resolve,1050));
-      return out;
-    }
-    async function resolveEntry(entry,{persist=true}={}){
-      if(validCoord(entry?.lat,entry?.lng)){
-        return {lat:Number(entry.lat),lng:Number(entry.lng),display:entryAddress(entry)||entry?.customerName||entry?.category||'',verified:true,source:'ticket'};
-      }
-      const address=entryAddress(entry);
-      if(!address)throw new Error(`Sin dirección para ${entry?.customerName||entry?.category||entry?.id||'parada'}`);
-      const coord=await resolveAddress(address);
-      entry.lat=coord.lat;entry.lng=coord.lng;entry.geoVerified=true;entry.geoSource=coord.source;entry.geoDisplay=coord.display;
-      if(persist){try{persistEntries()}catch(_e){}}
-      return coord;
-    }
-    function inspectEntry(entry){
-      const address=entryAddress(entry),key=normalize(address).toLowerCase(),cached=key?cache[key]:null;
-      return {id:String(entry?.id||''),name:entry?.customerName||entry?.category||'Parada',address,hasTicketCoord:validCoord(entry?.lat,entry?.lng),cachedVerified:cached?.verified===true&&validCoord(cached?.lat,cached?.lng),cacheEntry:cached||null};
-    }
-    return {resolveAddress,resolveEntry,inspectEntry,normalize};
-  })();
-  window.InstaraGeoResolver=InstaraGeoResolver;
-  window.InstaraGeoDiagnostics={
-    inspectToday(){
-      const date=document.getElementById('route-date')?.value||todayISO();
-      const stops=typeof routeDayStops==='function'?routeDayStops(date):[];
-      return stops.map(stop=>window.InstaraGeoResolver.inspectEntry(stop));
-    },
-    failed(){return window.__INSTARA_GEO_FAILED_STOPS__||[]}
-  };
-
   // ---------- RC59: motor GPS Pro — MapLibre GPU + guía predictiva ----------
   const MirutaNav = (()=>{
+    const memKey='miruta:geocode-cache:v2';
+    let geocodeCache={}; try{geocodeCache=JSON.parse(localStorage.getItem(memKey)||'{}')||{}}catch(_e){}
     let miniMap=null, miniRoute=null, miniMarkers=[], userMarkerMini=null;
     let fullMap=null, fullMapReady=false, fullMarkers=[], userMarkerFull=null;
     let watchId=null, active=false, currentIndex=0, routeStops=[], currentPos=null, displayPos=null;
@@ -4624,20 +4528,19 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       return routeDayStops(date);
     }
     async function geocodeEntry(entry){
-      return window.InstaraGeoResolver.resolveEntry(entry,{persist:true});
+      if(Number.isFinite(Number(entry.lat))&&Number.isFinite(Number(entry.lng)))return{lat:Number(entry.lat),lng:Number(entry.lng)};
+      const q=entry.address.trim(),key=q.toLowerCase();if(geocodeCache[key])return geocodeCache[key];
+      const r=await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&addressdetails=1&q='+encodeURIComponent(q),{headers:{'Accept-Language':'en-US,en;q=0.9'}});if(!r.ok)throw new Error('geocode '+r.status);
+      const data=await r.json();if(!data[0])throw new Error('address not found: '+q);
+      const coord={lat:Number(data[0].lat),lng:Number(data[0].lon)};geocodeCache[key]=coord;localStorage.setItem(memKey,JSON.stringify(geocodeCache));entry.lat=coord.lat;entry.lng=coord.lng;persistEntries();await new Promise(res=>setTimeout(res,1050));return coord;
     }
     async function prepareStops(){
       routeStops=todayNavigableStops();
-      $('miruta-map-status').textContent=routeStops.length?`Verificando ${routeStops.length} direcciones…`:'Sin direcciones';
-      const failed=[];
+      $('miruta-map-status').textContent=routeStops.length?`Localizando ${routeStops.length} paradas…`:'Sin direcciones';
       for(const stop of routeStops){
-        try{stop._coord=await geocodeEntry(stop);stop._geoError=''}
-        catch(err){
-          stop._coord=null;stop._geoError=err?.message||String(err);failed.push(stop);
-          console.warn('INSTARA GEO unresolved',{id:stop.id,name:stop.customerName||stop.category,address:stop.address,error:stop._geoError});
-        }
+        try{stop._coord=await geocodeEntry(stop)}
+        catch(err){stop._coord=null;console.warn('Miruta geocode:',stop.address,err)}
       }
-      window.__INSTARA_GEO_FAILED_STOPS__=failed.map(stop=>({id:String(stop.id||''),name:stop.customerName||stop.category||'Parada',address:stop.address||'',error:stop._geoError||''}));
       return routeStops;
     }
     function drawMiniMarkers(){if(!miniMap)return;clearMarkers(miniMarkers,miniMap);routeStops.forEach((s,i)=>{if(!s._coord)return;const m=L.marker([s._coord.lat,s._coord.lng],{icon:stopIcon(i+1,!!s.isStoreStop)}).addTo(miniMap).bindPopup(`<b>${escapeHtml(s.customerName||s.category||'Parada')}</b><br>${escapeHtml(s.address||'')}`);miniMarkers.push(m)});if(miniMarkers.length){const group=L.featureGroup(miniMarkers);try{miniMap.fitBounds(group.getBounds().pad(.18),{animate:true,duration:.35,maxZoom:14})}catch(_e){}}}
@@ -4755,16 +4658,11 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         else renderStopList();
 
         const routedStops=routeStops.filter(s=>s._coord);
-        const failedStops=routeStops.filter(s=>!s._coord);
-        if(failedStops.length){
-          if(miniRoute){try{miniMap?.removeLayer(miniRoute)}catch(_e){};miniRoute=null}
-          $('map-caption').textContent=`${routeStops.length} paradas • ${routedStops.length}/${routeStops.length} verificadas`;
-          $('miruta-map-status').textContent=`Faltan: ${failedStops.map(s=>s.customerName||s.category||'Parada').join(' · ')}`;
-        }else if(routedStops.length>=2){
+        if(routedStops.length>=2){
           const route=await osrmRoute(routedStops.map(s=>s._coord),false);
           drawMiniRoute(route);
           $('map-caption').textContent=`${routeStops.length} paradas • ${metersToMiles(route.distance).toFixed(1)} mi`;
-          $('miruta-map-status').textContent=`${Math.round(route.duration/60)} min estimados`;
+          $('miruta-map-status').textContent=routedStops.length===routeStops.length?`${Math.round(route.duration/60)} min estimados`:`${Math.round(route.duration/60)} min · ${routedStops.length}/${routeStops.length} ubicadas`;
         }else if(routeStops.length===1){
           $('map-caption').textContent='1 parada preparada';
           $('miruta-map-status').textContent='GPS interno';
@@ -5022,8 +4920,6 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         $('nav-step-text').textContent='Preparando ruta…';$('nav-step-street').textContent='Localizando todas las paradas en tu orden';$('nav-eta-time').textContent='—';if($('nav-eta-remaining-min'))$('nav-eta-remaining-min').textContent='—';if($('nav-eta-remaining-mi'))$('nav-eta-remaining-mi').textContent='—';
         await prepareStops();
         if(!routeStops.length)throw new Error('No hay paradas con una dirección válida para navegar');
-        const unresolved=routeStops.filter(stop=>!stop._coord);
-        if(unresolved.length)throw new Error(`INSTARA no iniciará una ruta incompleta. No pudo verificar: ${unresolved.map(stop=>`${stop.customerName||stop.category||'Parada'} — ${stop.address||'SIN DIRECCIÓN'}`).join(' | ')}`);
         currentIndex=0;active=true;backgrounded=false;followMode=true;lastSpokenKey='';lastAlertBand='';saveNavSession();
         if(fullMapReady){drawFullMarkers();setTimeout(()=>fullMap?.resize?.(),80)}else fullMap?.once('load',()=>{drawFullMarkers();setTimeout(()=>fullMap?.resize?.(),80)});
         if(!navigator.geolocation)throw new Error('GPS no disponible');
@@ -5828,7 +5724,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     const labels={dishwasher:'Dishwasher',microwave:'OTR Microwave',toilet:'Toilet',faucet:'Faucet',disposal:'Garbage Disposal',cooktop:'Cooktop',range:'Range',oven:'Oven',washer:'Washer',dryer:'Dryer',refrigerator:'Refrigerator',other:'Otros'};
     let settings=loadJSON(SETTINGS_KEY,{baseAddress:DEFAULT_BASE,prepMinutes:60,bufferMinutes:15,storeMinutes:10,pickupOpen:'07:30',receivingClose:'16:00',returnSafetyMinutes:20,saturdayStoreMinutes:75,saturdayExtraBuffer:35,serviceDefaults:{...DEFAULTS}});
     settings={baseAddress:DEFAULT_BASE,prepMinutes:60,bufferMinutes:15,storeMinutes:10,pickupOpen:'07:30',receivingClose:'16:00',returnSafetyMinutes:20,saturdayStoreMinutes:75,saturdayExtraBuffer:35,serviceDefaults:{...DEFAULTS},...settings,serviceDefaults:{...DEFAULTS,...(settings.serviceDefaults||{})}};
-    let learning=loadJSON(LEARNING_KEY,{}), recommendedPlan=[], lastAnalysis=null, alarmTimer=null, alarmAudio=null, planning=false, debounceTimer=null;
+    let learning=loadJSON(LEARNING_KEY,{}), geocache=loadJSON(GEO_KEY,{}), recommendedPlan=[], lastAnalysis=null, alarmTimer=null, alarmAudio=null, planning=false, debounceTimer=null;
     function loadJSON(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')||fallback}catch(_e){return fallback}}
     function saveJSON(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch(_e){}}
     function routeDate(){return document.getElementById('route-date')?.value||todayISO()}
@@ -5854,11 +5750,49 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       if(!dateIso||!value)return null;const m=String(value).trim().match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);if(!m)return null;
       let h=Number(m[1])%12;if(m[3].toUpperCase()==='PM')h+=12;const [y,mo,d]=dateIso.split('-').map(Number);return new Date(y,mo-1,d,h,Number(m[2]),0,0).getTime();
     }
+    function normalizedRouteAddress(address){
+      return String(address||'').trim().replace(/\s+/g,' ').replace(/\s*,\s*/g,', ');
+    }
+    function routeAddressParts(address){
+      const q=normalizedRouteAddress(address), house=(q.match(/^\s*(\d+[A-Za-z-]*)\b/)||[])[1]||'', zip=(q.match(/\b(\d{5})(?:-\d{4})?\b/)||[])[1]||'';
+      const state=(q.match(/,\s*([A-Z]{2})\s+\d{5}\b/i)||[])[1]?.toUpperCase()||'';
+      return {q,house:String(house).toLowerCase(),zip,state};
+    }
+    function scoreGeocodeCandidate(candidate,parts){
+      const a=candidate?.address||{}, display=String(candidate?.display_name||'').toLowerCase();
+      let score=0;
+      const candidateZip=String(a.postcode||'').slice(0,5), candidateHouse=String(a.house_number||'').toLowerCase(), candidateState=String(a['ISO3166-2-lvl4']||a.state_code||'').toUpperCase();
+      if(parts.zip)score += candidateZip===parts.zip?120:-160;
+      if(parts.house)score += candidateHouse===parts.house?90:(display.includes(parts.house+' ')?45:-70);
+      if(parts.state==='VA')score += candidateState.includes('VA')||/virginia/.test(display)?50:-100;
+      if(candidate?.type==='house'||candidate?.addresstype==='building'||candidate?.addresstype==='amenity')score+=18;
+      score += Math.max(0,30-Number(candidate?.place_rank||30));
+      return score;
+    }
     async function geocode(address){
-      return window.InstaraGeoResolver.resolveAddress(address);
+      const q=normalizedRouteAddress(address);if(!q)return null;
+      const parts=routeAddressParts(q),key=q.toLowerCase();
+      const cached=geocache[key];
+      if(cached?.lat&&cached?.lng&&cached?.verified===true)return cached;
+      if(!navigator.onLine)throw new Error(`Sin coordenadas verificadas para ${q}`);
+      const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=us&addressdetails=1&dedupe=1&q='+encodeURIComponent(q);
+      const res=await fetch(url,{headers:{'Accept-Language':'en-US,en;q=0.9'}});
+      if(!res.ok)throw new Error('No se pudo localizar '+q);
+      const data=await res.json();if(!Array.isArray(data)||!data.length)throw new Error('Dirección no encontrada: '+q);
+      const ranked=data.map(c=>({c,score:scoreGeocodeCandidate(c,parts)})).sort((a,b)=>b.score-a.score);
+      const winner=ranked[0];
+      if(!winner||winner.score<0)throw new Error('Dirección ambigua o no coincide con ZIP/número: '+q);
+      const out={lat:Number(winner.c.lat),lng:Number(winner.c.lon),display:winner.c.display_name||q,verified:true,score:winner.score,query:q};
+      geocache[key]=out;saveJSON(GEO_KEY,geocache);await new Promise(r=>setTimeout(r,1050));return out;
     }
     async function geocodeRouteEntry(entry){
-      return window.InstaraGeoResolver.resolveEntry(entry,{persist:true});
+      const lat=Number(entry?.lat),lng=Number(entry?.lng);
+      if(Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180)return {lat,lng,display:entry.address||entry.customerName||'',verified:true,source:'ticket'};
+      const address=entry?.address||(entry?.isStoreStop?state.storeAddresses?.[storeKey(entry)]:'');
+      if(!address)return null;
+      const coord=await geocode(address);
+      if(entry&&!entry.isStoreStop&&coord){entry.lat=coord.lat;entry.lng=coord.lng;}
+      return coord;
     }
     async function table(coords){
       const str=coords.map(c=>`${c.lng},${c.lat}`).join(';');const res=await fetch(`https://router.project-osrm.org/table/v1/driving/${str}?annotations=duration,distance`);
@@ -5995,11 +5929,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         if(valid.some(e=>!e.isStoreStop)&&valid.some(e=>e.isStoreStop)===false){
           // No synthetic behavior here: if tickets require stores, RC71/bridge must create them before planning.
         }
-        if(rejected.length){
-          console.warn('INSTARA RC125 route geocode rejected',rejected.map(e=>({id:e.id,address:e.address,customer:e.customerName})));
-          window.__INSTARA_GEO_FAILED_STOPS__=rejected.map(e=>({id:String(e.id||''),name:e.customerName||e.category||'Parada',address:e.address||'',error:e._geoError||'Dirección no verificada'}));
-          throw new Error(`Ruta incompleta: ${rejected.map(e=>e.customerName||e.category||'Parada').join(', ')}`);
-        }
+        if(rejected.length)console.warn('INSTARA RC115 route geocode rejected',rejected.map(e=>({id:e.id,address:e.address,customer:e.customerName})));
         try{persistEntries()}catch(_e){}
         if(!valid.length)throw new Error('No hay paradas con dirección localizable');const matrix=await table(coords),indexMap=new Map([['__base__',0]]);valid.forEach((e,i)=>indexMap.set(String(e.id),i+1));
         let roughStart=new Date(`${dateIso}T${dateFromIso(dateIso).getDay()===6?'08:00:00':'07:30:00'}`).getTime();if(dateIso===todayISO())roughStart=Math.max(roughStart,Date.now());const greedy=greedyOrder(valid,matrix,indexMap,roughStart,dateIso),improved=improve(greedy,matrix,indexMap,roughStart,dateIso);let leaveAt=recommendedDeparture(improved.order,matrix,indexMap,dateIso);if(dateIso===todayISO())leaveAt=Math.max(leaveAt,Date.now());const finalSim=simulate(improved.order,matrix,indexMap,leaveAt,dateIso),wakeAt=leaveAt-(Number(settings.prepMinutes)||60)*60000,currentValid=list.filter(e=>indexMap.has(String(e.id))),currentSim=precedenceOK(currentValid)?simulate(currentValid,matrix,indexMap,leaveAt,dateIso):null;
