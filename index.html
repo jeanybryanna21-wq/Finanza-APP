@@ -1185,7 +1185,12 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
 
     <div class="route-map-card" id="mini-map-card" aria-label="Mapa de la ruta de hoy">
       <div id="miruta-map" aria-label="Mapa integrado de Miruta"></div>
-      <div class="route-map-copy"><b>Tu ruta de hoy</b><span id="map-caption">Sin paradas cargadas</span><small id="miruta-map-status">GPS interno</small><button id="miruta-go-btn" type="button">▶ GO — INICIAR RUTA</button><button id="miruta-route-reload" type="button">RECALCULAR</button><button id="miruta-adhoc-btn" type="button">📍 IR A OTRA DIRECCIÓN</button><button id="miruta-favorites-btn" type="button">⭐ FAVORITOS</button></div>
+      <div class="route-map-copy"><b>Tu ruta de hoy</b><span id="map-caption">Sin paradas cargadas</span><small id="miruta-map-status">GPS interno</small><button id="miruta-go-btn" type="button">▶ GO — INICIAR RUTA</button><button id="miruta-route-reload" type="button">RECALCULAR</button>
+        <div id="hoy-search-bar">
+          <input type="text" id="hoy-search-input" placeholder="📍 Ir a otra dirección…" autocomplete="off" autocorrect="off" />
+          <div id="hoy-search-suggest"></div>
+        </div>
+        <button id="miruta-favorites-btn" type="button">⭐ FAVORITOS</button></div>
     </div>
 
 
@@ -1279,15 +1284,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       <button id="nav-report-btn" type="button" aria-label="Reportar incidente" title="Reportar incidente">⚠️</button>
       <button id="nav-satellite-btn" type="button" aria-label="Satélite" title="Satélite">🛰️</button>
       <button id="nav-center-btn" type="button" aria-label="Centrar" title="Centrar">⌖</button>
-      <button id="nav-search-btn" type="button" aria-label="Buscar dirección" title="Buscar dirección">🔍</button>
       <button id="nav-background-btn" type="button" aria-label="Dejar GPS en segundo plano" title="Segundo plano">▣</button>
-    </div>
-
-    <div id="nav-search-bar" hidden>
-      <input type="text" id="nav-search-input" placeholder="Escribe una dirección…" autocomplete="off" autocorrect="off" />
-      <button id="nav-search-go" type="button">IR</button>
-      <button id="nav-search-cancel" type="button">✕</button>
-      <div id="nav-search-suggest"></div>
     </div>
 
     <div id="miruta-nav-map"></div>
@@ -1306,6 +1303,14 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         <span id="nav-client-name">—</span>
         <span class="miruta-nav-progress" id="nav-route-progress">0/0</span>
       </button>
+
+      <div class="miruta-nav-stoplist" id="nav-stoplist"></div>
+
+      <div id="nav-inline-search" hidden>
+        <input type="text" id="nav-search-input" placeholder="Escribe una dirección…" autocomplete="off" autocorrect="off" />
+        <button id="nav-search-cancel" type="button">✕</button>
+        <div id="nav-search-suggest"></div>
+      </div>
 
       <div class="miruta-nav-menu">
         <button id="nav-add-stop-btn" type="button"><span class="mi">➕</span>Agregar parada</button>
@@ -4463,7 +4468,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     }
     async function prepareStops(){routeStops=todayNavigableStops();$('miruta-map-status').textContent=routeStops.length?'Localizando direcciones…':'Sin direcciones';for(const stop of routeStops){try{stop._coord=await geocodeEntry(stop)}catch(err){stop._coord=null;console.warn('Miruta geocode:',stop.address,err)}}routeStops=routeStops.filter(s=>s._coord);return routeStops;}
     function drawMiniMarkers(){if(!miniMap)return;clearMarkers(miniMarkers,miniMap);routeStops.forEach((s,i)=>{const m=L.marker([s._coord.lat,s._coord.lng],{icon:stopIcon(i+1,!!s.isStoreStop)}).addTo(miniMap).bindPopup(`<b>${escapeHtml(s.customerName||s.category||'Parada')}</b><br>${escapeHtml(s.address||'')}`);miniMarkers.push(m)});if(routeStops.length){const group=L.featureGroup(miniMarkers);try{miniMap.fitBounds(group.getBounds().pad(.18),{animate:true,duration:.35,maxZoom:14})}catch(_e){}}}
-    function drawFullMarkers(){if(!fullMap||!fullMapReady)return;clearMarkers(fullMarkers,fullMap,'maplibre');routeStops.forEach((s,i)=>{const el=document.createElement('div');el.className='miruta-ml-stop'+(s.isStoreStop?' store':'');el.innerHTML=`<span>${i+1}</span>`;const m=new maplibregl.Marker({element:el,anchor:'bottom'}).setLngLat([s._coord.lng,s._coord.lat]).addTo(fullMap);fullMarkers.push(m)});}
+    function drawFullMarkers(){if(!fullMap||!fullMapReady)return;clearMarkers(fullMarkers,fullMap,'maplibre');routeStops.forEach((s,i)=>{const el=document.createElement('div');el.className='miruta-ml-stop'+(s.isStoreStop?' store':'');el.innerHTML=`<span>${i+1}</span>`;const m=new maplibregl.Marker({element:el,anchor:'bottom'}).setLngLat([s._coord.lng,s._coord.lat]).addTo(fullMap);fullMarkers.push(m)});renderStopList();}
     async function osrmRoute(coords,steps=true){if(coords.length<2)return null;const points=coords.map(c=>`${c.lng},${c.lat}`).join(';');const url=`https://router.project-osrm.org/route/v1/driving/${points}?overview=full&geometries=geojson&steps=${steps?'true':'false'}&continue_straight=false&annotations=false`;const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw new Error('route '+r.status);const d=await r.json();if(d.code!=='Ok'||!d.routes?.[0])throw new Error(d.code||'no route');return d.routes[0];}
     function drawMiniRoute(route){if(!miniMap)return;if(miniRoute){try{miniMap.removeLayer(miniRoute)}catch(_e){}}if(!route?.geometry?.coordinates)return;const group=L.layerGroup().addTo(miniMap);L.geoJSON(route.geometry,{style:{color:'rgba(0,0,0,.72)',weight:10,opacity:.72,lineCap:'round',lineJoin:'round'}}).addTo(group);L.geoJSON(route.geometry,{style:{color:'#0A84FF',weight:6,opacity:1,lineCap:'round',lineJoin:'round'}}).addTo(group);miniRoute=group;}
     function ensureRouteLayers(){if(!fullMap||!fullMapReady)return;if(!fullMap.getSource('miruta-route'))fullMap.addSource('miruta-route',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:[]},properties:{}}});if(!fullMap.getLayer('miruta-route-casing'))fullMap.addLayer({id:'miruta-route-casing',type:'line',source:'miruta-route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'rgba(0,0,0,.72)','line-width':12,'line-opacity':.78}});if(!fullMap.getLayer('miruta-route-blue'))fullMap.addLayer({id:'miruta-route-blue',type:'line',source:'miruta-route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#0A84FF','line-width':7,'line-opacity':1}});}
@@ -4808,18 +4813,24 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     async function openAddressSearch(){
       if(!await ensureNavLibraries()||!initMaps()){alert('El mapa todavía no cargó. Revisa tu conexión e inténtalo de nuevo.');return}
       $('miruta-nav-panel').hidden=false;document.body.style.overflow='hidden';document.body.classList.add('miruta-nav-open');
-      $('nav-search-bar').hidden=false;
+      setSheetState('expanded');
+      $('nav-inline-search').hidden=false;
+      const menuToHide=$('nav-add-stop-btn')?.closest('.miruta-nav-menu');if(menuToHide)menuToHide.hidden=true;
       $('nav-search-suggest').innerHTML='';
       $('nav-search-input').value='';
-      setTimeout(()=>$('nav-search-input')?.focus(),80);
+      setTimeout(()=>$('nav-search-input')?.focus(),150);
     }
     function closeAddressSearch(){
-      $('nav-search-bar').hidden=true;$('nav-search-suggest').innerHTML='';
+      $('nav-inline-search').hidden=true;$('nav-search-suggest').innerHTML='';
+      const menu=$('nav-add-stop-btn')?.closest('.miruta-nav-menu');if(menu)menu.hidden=false;
       if(!active){$('miruta-nav-panel').hidden=true;document.body.style.overflow=''}
     }
     async function startAdHocFromCoord(label,lat,lng){
       if(!await ensureNavLibraries()||!initMaps()){statusLine.textContent='No se pudo cargar el mapa — revisa tu conexión';return}
-      $('nav-search-bar').hidden=true;$('nav-search-suggest').innerHTML='';
+      showNavigation();
+      const inlineSearch=$('nav-inline-search');if(inlineSearch)inlineSearch.hidden=true;
+      const menuToRestore=$('nav-add-stop-btn')?.closest('.miruta-nav-menu');if(menuToRestore)menuToRestore.hidden=false;
+      $('nav-search-suggest').innerHTML='';
       $('nav-step-text').textContent='Calculando ruta…';$('nav-step-street').textContent=label;
       $('nav-eta-time').textContent='—';if($('nav-eta-remaining-min'))$('nav-eta-remaining-min').textContent='—';if($('nav-eta-remaining-mi'))$('nav-eta-remaining-mi').textContent='—';
       routeStops=[{id:'adhoc-'+Date.now(),customerName:label,address:label,_coord:{lat,lng},isStoreStop:false}];
@@ -4847,8 +4858,8 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
 
     // ---------- ubicaciones favoritas (con sobrenombre, fijas en el mapa) ----------
     const FAV_KEY='wl:gps_favorites';
-    function loadFavorites(){return loadJSON(FAV_KEY,[])}
-    function saveFavorites(list){saveJSON(FAV_KEY,list)}
+    function loadFavorites(){try{return JSON.parse(localStorage.getItem(FAV_KEY)||'null')||[]}catch(_e){return []}}
+    function saveFavorites(list){try{localStorage.setItem(FAV_KEY,JSON.stringify(list))}catch(_e){}}
     let favMarkers=[];
     function drawFavoriteMarkers(){
       if(!fullMap||!fullMapReady)return;
@@ -4944,9 +4955,9 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     function reportIncident(){
       const note=prompt('¿Qué quieres anotar? (ej. obra en la vía, accidente, calle cerrada) — queda guardado solo para ti, no se comparte con nadie más');
       if(!note||!note.trim())return;
-      const log=loadJSON('wl:gps_incident_log',[]);
+      let log=[];try{log=JSON.parse(localStorage.getItem('wl:gps_incident_log')||'null')||[]}catch(_e){log=[]}
       log.unshift({at:Date.now(),note:note.trim(),lat:currentPos?.lat,lng:currentPos?.lng});
-      saveJSON('wl:gps_incident_log',log.slice(0,200));
+      try{localStorage.setItem('wl:gps_incident_log',JSON.stringify(log.slice(0,200)))}catch(_e){}
       statusLine.textContent='Nota guardada ✓ (queda solo en tu Miruta, no se comparte con otros conductores)';
     }
     function setSheetState(state){
@@ -4964,7 +4975,122 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     $('nav-report-btn')?.addEventListener('click',reportIncident);
     $('nav-report-menu-btn')?.addEventListener('click',reportIncident);
     $('nav-voice-menu-btn')?.addEventListener('click',toggleVoice);
-    $('nav-add-stop-btn')?.addEventListener('click',()=>{setSheetState('collapsed');openAddressSearch();});
+    // ---------- buscador de "otra dirección" en la pantalla Hoy (fuera del mapa) ----------
+    let hoySearchDebounce=null,hoySearchLastAt=0,hoySearchSeq=0;
+    function renderHoySuggestions(list){
+      const box=$('hoy-search-suggest');if(!box)return;
+      if(!list||!list.length){box.innerHTML='<div class="sugg-empty">Sigue escribiendo o revisa la dirección…</div>';box.hidden=false;return}
+      box.hidden=false;
+      box.innerHTML=list.map((it,i)=>`<div class="sugg-item" data-idx="${i}">${(it.display_name||'').replace(/</g,'&lt;')}</div>`).join('');
+      box.querySelectorAll('.sugg-item').forEach(el=>{
+        el.addEventListener('click',()=>{
+          const it=list[Number(el.dataset.idx)];if(!it)return;
+          box.hidden=true;box.innerHTML='';
+          $('hoy-search-input').value='';
+          startAdHocFromCoord(it.display_name||'',Number(it.lat),Number(it.lon));
+        });
+      });
+    }
+    $('hoy-search-input')?.addEventListener('input',()=>{
+      const input=$('hoy-search-input'),q=input.value.trim();
+      clearTimeout(hoySearchDebounce);
+      if(q.length<4){const box=$('hoy-search-suggest');if(box){box.hidden=true;box.innerHTML=''}return}
+      hoySearchDebounce=setTimeout(async()=>{
+        const now=Date.now();
+        if(now-hoySearchLastAt<1000){hoySearchDebounce=setTimeout(()=>input.dispatchEvent(new Event('input')),1000-(now-hoySearchLastAt));return}
+        hoySearchLastAt=now;const mySeq=++hoySearchSeq;
+        try{ const list=await fetchSuggestions(q); if(mySeq===hoySearchSeq)renderHoySuggestions(list); }
+        catch(_e){ if(mySeq===hoySearchSeq)renderHoySuggestions(null); }
+      },550);
+    });
+    document.addEventListener('click',e=>{
+      const bar=$('hoy-search-bar'),box=$('hoy-search-suggest');
+      if(bar&&box&&!bar.contains(e.target))box.hidden=true;
+    });
+
+    // ---------- lista de paradas reordenable dentro del GPS (numeradas, con X) ----------
+    let stopDragEl=null,stopDragStartY=0,stopDragOrigIndex=-1,stopDragCardUnit=0,stopDragSnapshot=[];
+    function renderStopList(){
+      const box=$('nav-stoplist');if(!box)return;
+      if(!routeStops.length){box.innerHTML='';return}
+      box.innerHTML=routeStops.map((s,i)=>`
+        <div class="nav-stop-row${i===currentIndex?' current':''}" data-idx="${i}">
+          <span class="nav-stop-handle">⠿</span>
+          <span class="nav-stop-order">${i+1}</span>
+          <span class="nav-stop-name">${(s.customerName||s.category||'Parada').toString().replace(/</g,'&lt;')}</span>
+          <button class="nav-stop-remove" data-idx="${i}" type="button" aria-label="Quitar esta parada">✕</button>
+        </div>`).join('');
+      box.querySelectorAll('.nav-stop-remove').forEach(btn=>{
+        btn.addEventListener('click',ev=>{
+          ev.stopPropagation();
+          const idx=Number(btn.dataset.idx);
+          if(!Number.isFinite(idx)||idx<0||idx>=routeStops.length)return;
+          const currentStopId=routeStops[currentIndex]?.id;
+          routeStops.splice(idx,1);
+          if(currentStopId){
+            const newIdx=routeStops.findIndex(s=>s.id===currentStopId);
+            currentIndex=newIdx>=0?newIdx:Math.min(currentIndex,Math.max(0,routeStops.length-1));
+          }else{
+            currentIndex=Math.min(currentIndex,Math.max(0,routeStops.length-1));
+          }
+          renderStopList();updateInstructionLive();
+          if(routeStops.length)reroute(true);
+        });
+      });
+      box.querySelectorAll('.nav-stop-handle').forEach(handle=>{
+        handle.addEventListener('touchstart',e=>stopDragStart(e.touches[0].clientY,handle),{passive:true});
+        handle.addEventListener('mousedown',e=>{
+          stopDragStart(e.clientY,handle);
+          const mm=ev=>stopDragMove(ev.clientY),mu=()=>{stopDragEnd();document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu)};
+          document.addEventListener('mousemove',mm);document.addEventListener('mouseup',mu);
+        });
+      });
+      box.querySelectorAll('.nav-stop-handle').forEach(handle=>{
+        handle.addEventListener('touchmove',e=>stopDragMove(e.touches[0].clientY),{passive:true});
+        handle.addEventListener('touchend',stopDragEnd);
+      });
+    }
+    function stopDragStart(clientY,handle){
+      const row=handle.closest('.nav-stop-row');if(!row)return;
+      const box=$('nav-stoplist');
+      stopDragSnapshot=Array.from(box.querySelectorAll('.nav-stop-row'));
+      stopDragEl=row;stopDragStartY=clientY;stopDragOrigIndex=stopDragSnapshot.indexOf(row);
+      stopDragCardUnit=row.getBoundingClientRect().height+8;
+      row.classList.add('dragging');
+      stopDragSnapshot.forEach(r=>{ if(r!==row) r.style.transition='transform .18s ease'; });
+    }
+    function stopDragMove(clientY){
+      if(!stopDragEl)return;
+      const delta=clientY-stopDragStartY;
+      stopDragEl.style.transform=`translateY(${delta}px)`;stopDragEl.style.zIndex='5';
+      const shiftUnits=Math.round(delta/stopDragCardUnit);
+      const target=Math.max(0,Math.min(stopDragSnapshot.length-1,stopDragOrigIndex+shiftUnits));
+      stopDragSnapshot.forEach((r,i)=>{
+        if(r===stopDragEl)return;
+        let shift=0;
+        if(target<stopDragOrigIndex&&i>=target&&i<stopDragOrigIndex)shift=stopDragCardUnit;
+        else if(target>stopDragOrigIndex&&i>stopDragOrigIndex&&i<=target)shift=-stopDragCardUnit;
+        r.style.transform=shift?`translateY(${shift}px)`:'';
+      });
+      stopDragEl.dataset.targetIdx=String(target);
+    }
+    function stopDragEnd(){
+      if(!stopDragEl)return;
+      const target=Number(stopDragEl.dataset.targetIdx||stopDragOrigIndex);
+      stopDragSnapshot.forEach(r=>{r.style.transition='';r.style.transform='';});
+      stopDragEl.classList.remove('dragging');stopDragEl.style.zIndex='';
+      const finishedIdx=stopDragOrigIndex;stopDragEl=null;
+      const currentStopId=routeStops[currentIndex]?.id;
+      if(target!==finishedIdx&&target>=0&&target<routeStops.length){
+        const [moved]=routeStops.splice(finishedIdx,1);
+        routeStops.splice(target,0,moved);
+      }
+      if(currentStopId){const newIdx=routeStops.findIndex(s=>s.id===currentStopId);if(newIdx>=0)currentIndex=newIdx;}
+      renderStopList();updateInstructionLive();
+      if(routeStops.length>1)reroute(true);
+    }
+
+    $('nav-add-stop-btn')?.addEventListener('click',openAddressSearch);
 
     // arrastre real de la hoja con el dedo, con física de "cae a la posición más cercana"
     (function setupSheetDrag(){
@@ -9244,6 +9370,35 @@ window.InstaraRC108={refreshFinance,install};
   .miruta-nav-eta-row b{font-size:22px}
   .miruta-nav-float-rail button{width:42px;height:42px;font-size:17px}
 }
+
+/* --- buscador de "otra dirección" en la pantalla Hoy --- */
+#hoy-search-bar{position:relative;margin:8px 0}
+#hoy-search-input{width:100%;box-sizing:border-box;border-radius:14px;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.07);color:#fff;padding:13px 14px;font-size:16px}
+#hoy-search-suggest{position:absolute;left:0;right:0;top:100%;margin-top:6px;background:rgba(18,20,22,.98);border:1px solid rgba(255,255,255,.18);border-radius:14px;max-height:280px;overflow-y:auto;z-index:40}
+#hoy-search-suggest .sugg-item{padding:13px 14px;border-bottom:1px solid rgba(255,255,255,.1);color:#fff;font-size:15px}
+#hoy-search-suggest .sugg-item:last-child{border-bottom:none}
+#hoy-search-suggest .sugg-item:active{background:rgba(10,132,255,.2)}
+#hoy-search-suggest .sugg-empty{padding:13px 14px;color:rgba(255,255,255,.55);font-size:14px}
+
+/* --- buscador dentro de la hoja del GPS (ya no flota encima del mapa) --- */
+#nav-inline-search{position:relative;margin-bottom:10px}
+#nav-inline-search input{width:100%;box-sizing:border-box;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;padding:12px 40px 12px 12px;font-size:16px}
+#nav-inline-search #nav-search-cancel{position:absolute;right:6px;top:6px;width:32px;height:32px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.12);color:#fff}
+#nav-inline-search #nav-search-suggest{margin-top:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:12px;max-height:240px;overflow-y:auto}
+#nav-inline-search .sugg-item{padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.09);color:#fff;font-size:15px}
+#nav-inline-search .sugg-item:last-child{border-bottom:none}
+#nav-inline-search .sugg-empty{padding:12px 14px;color:rgba(255,255,255,.55);font-size:14px}
+
+/* --- lista de paradas numeradas y reordenables, dentro del GPS --- */
+.miruta-nav-stoplist{display:flex;flex-direction:column;gap:6px;margin-bottom:10px;max-height:0;opacity:0;overflow:hidden;transition:max-height .3s ease,opacity .25s ease}
+.miruta-nav-sheet[data-state="expanded"] .miruta-nav-stoplist{max-height:260px;opacity:1;overflow-y:auto}
+.nav-stop-row{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:9px 10px;touch-action:none}
+.nav-stop-row.current{border-color:rgba(255,208,90,.55);background:rgba(255,208,90,.1)}
+.nav-stop-row.dragging{opacity:.5;box-shadow:0 10px 24px rgba(0,0,0,.4)}
+.nav-stop-handle{font-size:17px;color:rgba(255,255,255,.5);flex:0 0 auto;padding:2px 4px;cursor:grab}
+.nav-stop-order{width:24px;height:24px;border-radius:50%;background:rgba(88,166,255,.28);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.nav-stop-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;font-size:14px;font-weight:600}
+.nav-stop-remove{width:26px;height:26px;border-radius:50%;border:none;background:rgba(255,80,80,.22);color:#ff9a92;font-size:13px;flex:0 0 auto}
 </style>
 <script id="instara-rc109-work-clock">
 (function(){
