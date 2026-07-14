@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC133">
+  <meta name="instara-ai-version" content="RC134">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -8730,7 +8730,15 @@ function injectSettings(){
     btn.textContent='PURGANDO FIREBASE…';
 
     try{
-      const keep=dedupeMegaRecords((state.entries||[]).filter(entry=>!isMegaEntry(entry)));
+      if(
+        !window.InstaraMegaCanonical?.dedupe ||
+        !window.InstaraMegaCanonical?.isMega ||
+        !window.InstaraMegaCanonical?.canonicalizeStateEntries
+      ){
+        throw new Error('Motor canónico Mega no disponible. Recarga INSTARA e inténtalo otra vez.');
+      }
+
+      const keep=window.InstaraMegaCanonical.dedupe((state.entries||[]).filter(entry=>!window.InstaraMegaCanonical.isMega(entry)));
       state.entries=keep;
 
       const purgeKeys=[
@@ -8756,14 +8764,14 @@ function injectSettings(){
 
       await window.InstaraCloudMemory.forcePull();
       await loadState();
-      canonicalizeStateEntries();
+      window.InstaraMegaCanonical.canonicalizeStateEntries();
 
       btn.textContent='DESCARGANDO HUB FRESCO…';
 
       const result=await fetchLatest({manual:true,force:true});
       if(!result?.ok)throw new Error(result?.message||'El Hub no respondió.');
 
-      canonicalizeStateEntries();
+      window.InstaraMegaCanonical.canonicalizeStateEntries();
       await persistEntries();
 
       await window.InstaraCloudMemory.replaceSharedValueAtomic(
@@ -8781,11 +8789,11 @@ function injectSettings(){
       const todayCount=viewAudit?.counts?.calendar ?? window.InstaraSchedule?.dayRows?.(todayIso)?.length ?? 0;
       const workCount=viewAudit?.counts?.work ?? 0;
       setStatus(
-        `Firebase Mega purgado ✓ ${state.entries.filter(isMegaEntry).length} registros canónicos · hoy ${workCount} trabajos · calendario ${todayCount}`,
+        `Firebase Mega purgado ✓ ${state.entries.filter(entry=>window.InstaraMegaCanonical.isMega(entry)).length} registros canónicos · hoy ${workCount} trabajos · calendario ${todayCount}`,
         'ok'
       );
     }catch(err){
-      console.error('RC132 atomic Firebase Mega purge',err);
+      console.error('RC134 atomic Firebase Mega purge',err);
       setStatus('Purga Firebase falló: '+(err?.message||'error desconocido'),'error');
       alert(
         'INSTARA NO TERMINÓ LA PURGA DE FIREBASE\n\n'+
@@ -11213,6 +11221,23 @@ window.InstaraCanonicalViewAudit=function(dateIso=isoToday()){
     work:work.map(signature),
     route:route.map(signature),
     calendar:calendar.map(signature)
+  };
+};
+})();
+</script>
+
+<script id="instara-rc134-purge-scope-audit">
+(function(){
+'use strict';
+window.InstaraRC134PurgeAudit=function(){
+  const api=window.InstaraMegaCanonical;
+  const entries=window.state?.entries||window.__INSTARA_STATE__?.entries||[];
+  return {
+    canonicalApiReady:!!(api?.dedupe&&api?.isMega&&api?.canonicalizeStateEntries),
+    totalEntries:Array.isArray(entries)?entries.length:null,
+    megaEntries:Array.isArray(entries)&&api?.isMega
+      ? entries.filter(entry=>api.isMega(entry)).length
+      : null
   };
 };
 })();
