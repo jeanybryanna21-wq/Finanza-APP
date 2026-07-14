@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC127">
+  <meta name="instara-ai-version" content="RC129">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1353,8 +1353,11 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   <div class="screen active" id="screen-hoy">
 
   <div class="today-route-maintenance">
-    <button class="btn-outline today-route-clear" id="clear-today-route-btn" type="button">BORRAR RUTA DE HOY</button>
-    <div class="section-hint">Vacía únicamente la ruta visible de hoy. Los tickets de Mega siguen guardados en Calendario y puedes volver a agregarlos desde allí.</div>
+    <div class="today-route-maintenance-actions">
+      <button class="btn-outline today-route-recover" id="recover-today-route-btn" type="button">RECUPERAR RUTA</button>
+      <button class="btn-outline today-route-clear" id="clear-today-route-btn" type="button">BORRAR RUTA DE HOY</button>
+    </div>
+    <div class="section-hint">Recuperar Ruta reconstruye hoy desde la fuente Mega/CiO más reciente y limpia el estado manual de ruta. Borrar Ruta solo vacía la ruta visible.</div>
   </div>
 
   <div id="route-list"></div>
@@ -2705,6 +2708,36 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   }
 
 
+  // ---------- RC128: recuperar exclusiones heredadas creadas por la X vieja del GPS ----------
+  function recoverLegacyGpsRemovals(){
+    const dateIso=todayISO();
+    const recovered=[];
+    state.entries.forEach(entry=>{
+      if(
+        entry?.type==='income' &&
+        entry?.date===dateIso &&
+        entry?.routeExcluded===true &&
+        !String(entry?.routeExcludedReason||'').trim()
+      ){
+        entry.routeExcluded=false;
+        entry.routeExcludedAt=null;
+        entry.routeExcludedReason='';
+        entry.gpsRecoveredFromLegacyRemove=true;
+        entry.gpsRecoveredAt=new Date().toISOString();
+        recovered.push(entry);
+      }
+    });
+    if(recovered.length){
+      persistEntries();
+      console.info('INSTARA RC128 recovered legacy GPS removals',recovered.map(entry=>({
+        id:entry.id,
+        name:entry.customerName||entry.category
+      })));
+    }
+    return recovered;
+  }
+  recoverLegacyGpsRemovals();
+
   // ---------- RC119: una sola fuente de verdad para el orden Ruta ↔ GPS ----------
   function routeDayStops(dateIso){
     return state.entries
@@ -2746,7 +2779,24 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
 
   window.InstaraRouteOrderSync={
     commit:commitRouteOrder,
-    ids(dateIso){return routeDayStops(dateIso).map(e=>String(e.id))}
+    ids(dateIso){return routeDayStops(dateIso).map(e=>String(e.id))},
+    gpsHidden(dateIso){
+      return routeDayStops(dateIso).filter(entry=>entry.gpsHidden===true).map(entry=>({
+        id:String(entry.id),
+        name:entry.customerName||entry.category||'Parada'
+      }));
+    },
+    restoreGpsStop(id){
+      const entry=state.entries.find(e=>String(e.id)===String(id));
+      if(!entry)return false;
+      entry.gpsHidden=false;
+      entry.gpsHiddenAt=null;
+      persistEntries();
+      window.dispatchEvent(new CustomEvent('instara:route-order-changed',{
+        detail:{dateIso:entry.date,source:'gps-restore',ids:[],changedAt:Date.now()}
+      }));
+      return true;
+    }
   };
 
   // ---------- arrastrar y soltar para reordenar (estilo mover apps en iPhone) ----------
@@ -4592,8 +4642,8 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     function clearMarkers(arr,map,kind='leaflet'){arr.forEach(m=>{try{kind==='maplibre'?m.remove():map.removeLayer(m)}catch(_e){}});arr.length=0;}
     function todayNavigableStops(){
       const date=$('route-date')?.value||todayISO();
-      // RC124 parity law: GPS uses the exact same route-day source/order as Ruta de Hoy.
-      return routeDayStops(date);
+      // RC128: order still comes from Ruta de Hoy, but the GPS X may hide a stop ONLY from GPS.
+      return routeDayStops(date).filter(entry=>entry.gpsHidden!==true);
     }
     async function geocodeEntry(entry){
       return window.InstaraGeoResolver.resolveEntry(entry,{persist:true});
@@ -5369,7 +5419,8 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
           // Update GPS UI first, synchronously, so the headline/current stop changes now.
           applyGpsOrderImmediately(ids);
 
-          // Persist the same order for Ruta de Hoy.
+          // Placement is shared with Ruta de Hoy. Visibility is NOT:
+          // gpsHidden affects only GPS and never sets routeExcluded.
           commitRouteOrder(ids,dateIso,'gps-stoplist');
           try{renderRoute()}catch(_e){}
           try{window.MirutaSchedule?.recalculate?.(true)}catch(_e){}
@@ -5398,17 +5449,29 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         </div>`).join('');
 
       box.querySelectorAll('.nav-stop-remove').forEach(btn=>{
-        btn.addEventListener('click',ev=>{
+        btn.addEventListener('click',async ev=>{
           ev.stopPropagation();
           const id=String(btn.dataset.id||'');
           const entry=state.entries.find(e=>String(e.id)===id);
           if(!entry)return;
-          entry.routeExcluded=true;
+
+          // RC128 law: GPS X never changes Ruta de Hoy.
+          entry.gpsHidden=true;
+          entry.gpsHiddenAt=new Date().toISOString();
           persistEntries();
-          window.dispatchEvent(new CustomEvent('instara:route-order-changed',{
-            detail:{dateIso:$('route-date')?.value||todayISO(),source:'gps-remove',ids:[],changedAt:Date.now()}
+
+          routeOrderRevision++;
+          await refreshMini({retargetFirst:true});
+
+          window.dispatchEvent(new CustomEvent('instara:gps-stops-changed',{
+            detail:{
+              dateIso:$('route-date')?.value||todayISO(),
+              source:'gps-hide',
+              hiddenId:id,
+              changedAt:Date.now()
+            }
           }));
-          render();
+          premiumHaptic?.([8,18,8]);
         });
       });
 
@@ -9194,8 +9257,14 @@ window.InstaraRC103={
   margin:8px 0 14px;padding:12px;border:1px solid rgba(255,255,255,.16);
   border-radius:18px;background:rgba(8,14,18,.72)
 }
+.today-route-maintenance-actions{
+  display:grid;grid-template-columns:1fr 1fr;gap:9px
+}
 .today-route-maintenance .today-route-clear{
   width:100%;border-color:rgba(255,112,102,.72)!important;color:#ff9a92!important
+}
+.today-route-maintenance .today-route-recover{
+  width:100%;border-color:rgba(72,167,255,.72)!important;color:#8ec8ff!important
 }
 .today-route-maintenance .section-hint{margin-top:8px;text-align:center}
 #screen-hoy .route-del{
@@ -9276,6 +9345,255 @@ function install(){
 document.addEventListener('DOMContentLoaded',install);
 window.addEventListener('focus',install);
 window.InstaraRC104={clearTodayRoute,install};
+})();
+</script>
+
+<script id="instara-rc129-route-factory-recovery">
+(function(){
+'use strict';
+const VERSION='RC129';
+const ROUTE_CACHE_KEYS=[
+  'instara-route-active-v1',
+  'miruta-route-order-v1',
+  'instara-tomorrow-plan-v1',
+  'instara-next-day-plan-v1',
+  'instara-gps-session-v1',
+  'instara-route-manual-impact-v1',
+  'miruta-route-current-plan-v1',
+  'miruta-route-plan-v1'
+];
+
+const app=()=>window.__INSTARA_STATE__||window.state;
+const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+const dateOf=value=>{
+  if(!value)return '';
+  const raw=String(value).trim();
+  const direct=raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if(direct)return direct[1];
+  const d=new Date(raw);
+  if(Number.isNaN(d.getTime()))return '';
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+};
+const sourceKey=job=>String(
+  job?.orderViewId||job?.cioOrderId||
+  job?.jobNumber||job?.cioJobNumber||
+  job?.purchaseOrderNumber||job?.po||
+  job?.eventId||job?.cioEventId||''
+);
+const entryKey=entry=>String(
+  entry?.cioOrderId||entry?.orderViewId||
+  entry?.cioJobNumber||entry?.jobNumber||
+  entry?.po||entry?.purchaseOrderNumber||
+  entry?.cioEventId||entry?.eventId||''
+);
+
+function sourceStatus(job){
+  const raw=job?._cioRaw||{};
+  const text=[
+    job?.imsStatus,job?.jobStatus,job?.displayStatus,job?.lowesActivity,
+    job?.statusText,job?.notesText,
+    raw?.imsStatus,raw?.jobStatus,raw?.displayStatus,raw?.lowesActivity,
+    raw?.statusText,raw?.notesText
+  ].filter(Boolean).join(' | ').toLowerCase();
+
+  if(/(?:^|\W)(?:cancelled|canceled|void|declined)(?:\W|$)/.test(text))return 'cancelled';
+  if(/(?:^|\W)past\s+paid\s+po(?:\W|$)|(?:^|\W)payment\s+receiv(?:ed|ing)(?:\W|$)|(?:^|\W)payment\s+posted(?:\W|$)/.test(text))return 'paid';
+  if(/(?:^|\W)job\s+completed(?:\W|$)|(?:^|\W)work\s+completed(?:\W|$)|(?:^|\W)installation\s+completed(?:\W|$)|(?:^|\W)closed(?:\W|$)/.test(text))return 'completed';
+  return 'pending';
+}
+
+function clearRouteCaches(){
+  ROUTE_CACHE_KEYS.forEach(key=>{
+    try{localStorage.removeItem(key)}catch(_e){}
+  });
+}
+
+function persist(){
+  try{window.persistEntries?.();window.persistentEntries?.()}catch(_e){}
+}
+
+function sourceJobsForToday(payload,dateIso){
+  return (Array.isArray(payload?.jobs)?payload.jobs:[])
+    .filter(job=>dateOf(job?.scheduledDate||job?.start||job?.date)===dateIso);
+}
+
+async function fetchFreshSource(){
+  let result=null;
+  if(window.InstaraSyncHub?.isConfigured?.()){
+    result=await window.InstaraSyncHub.syncNow();
+  }else if(window.InstaraMegaBridge?.requestSync){
+    result=await window.InstaraMegaBridge.requestSync();
+  }else{
+    throw new Error('No hay Sync Hub ni Mega Bridge disponible.');
+  }
+
+  if(!result?.ok)throw new Error(result?.message||'No pude obtener una fuente Mega/CiO fresca.');
+
+  const payload=result?.payload||window.InstaraMegaBridge?.getLastPayload?.();
+  if(!payload||!Array.isArray(payload.jobs)){
+    throw new Error('La sincronización respondió, pero no entregó un snapshot actual de tickets.');
+  }
+  return payload;
+}
+
+function resetEntryFromSource(entry,job,index){
+  const status=sourceStatus(job);
+
+  entry.routeExcluded=false;
+  entry.routeExcludedAt=null;
+  entry.routeExcludedReason='';
+  entry.gpsHidden=false;
+  entry.gpsHiddenAt=null;
+
+  entry.manualCompletion=false;
+  entry.completedAt=null;
+  entry.mirutaCompletedAt=null;
+  entry.manualRouteOverride=false;
+
+  entry.status=status;
+  entry.paymentState=status==='paid'?'completed':'pending';
+
+  entry.order=index+1;
+  entry.orderIndex=index+1;
+
+  entry.gpsRecoveredFromLegacyRemove=false;
+  entry.routeRecoveredAt=new Date().toISOString();
+  entry.routeRecoveredFrom='fresh_cio_snapshot';
+
+  // Source truth fields are refreshed directly from the current snapshot.
+  if(job.customerName||job.eventCustomer)entry.customerName=job.customerName||job.eventCustomer;
+  if(job.customerAddress)entry.address=job.customerAddress;
+  if(job.customerPhone)entry.phone=job.customerPhone;
+  if(job.customerEmail)entry.email=job.customerEmail;
+  if(job.laborCategory||job.eventService)entry.category=job.laborCategory||job.eventService;
+  if(job.storeNumber!==undefined&&job.storeNumber!==null)entry.storeNumber=String(job.storeNumber||'');
+  if(job.purchaseOrderNumber)entry.po=job.purchaseOrderNumber;
+  if(job.imsStatus!==undefined)entry.cioIMSStatus=job.imsStatus||'';
+  if(job.jobStatus!==undefined)entry.cioJobStatus=job.jobStatus||'';
+  if(job.lowesActivity!==undefined)entry.cioLowesActivity=job.lowesActivity||'';
+
+  return entry;
+}
+
+async function recoverTodayRoute(){
+  const button=document.getElementById('recover-today-route-btn');
+  const statusLine=document.getElementById('status-line');
+  if(button?.disabled)return;
+
+  const confirmed=confirm(
+    '¿RECUPERAR LA RUTA DE HOY?\n\n'+
+    'INSTARA consultará Mega/CiO otra vez y reconstruirá la ruta desde la fuente actual.\n\n'+
+    'Se perderán cambios manuales de ruta de hoy: eliminados, ocultos del GPS, orden manual y completados manualmente por error.\n\n'+
+    'Los estados que CiO realmente marque como Completed / Paid / Cancelled se conservarán.'
+  );
+  if(!confirmed)return;
+
+  const originalText=button?.textContent||'RECUPERAR RUTA';
+  if(button){button.disabled=true;button.textContent='RECUPERANDO…'}
+  if(statusLine)statusLine.textContent='consultando Mega/CiO antes de reconstruir la ruta…';
+
+  try{
+    const dateIso=today();
+    const payload=await fetchFreshSource();
+    const sourceJobs=sourceJobsForToday(payload,dateIso);
+
+    if(!sourceJobs.length){
+      throw new Error('El snapshot fresco no contiene tickets para hoy. No voy a reconstruir desde caché vieja.');
+    }
+
+    const s=app();
+    if(!s?.entries)throw new Error('No encontré el estado operativo de INSTARA.');
+
+    // Remove synthetic Lowe's rows for today. They are regenerated from the fresh
+    // customer/store truth instead of recycling an old route copy.
+    s.entries=s.entries.filter(entry=>!(
+      entry?.date===dateIso &&
+      (entry?.isStoreStop===true||entry?.instaraAutoStore===true||/^instara_store_/i.test(String(entry?.id||'')))
+    ));
+    if(window.state&&window.state!==s)window.state.entries=s.entries;
+    if(window.__INSTARA_STATE__&&window.__INSTARA_STATE__!==s)window.__INSTARA_STATE__.entries=s.entries;
+
+    clearRouteCaches();
+
+    // First re-apply the latest snapshot so a ticket missing from state can be recreated.
+    window.InstaraMegaBridge?.applySnapshot?.({
+      ...payload,
+      source:'RC129_ROUTE_FACTORY_RECOVERY',
+      syncedAt:payload.syncedAt||new Date().toISOString()
+    });
+
+    const live=app();
+    const bySource=new Map(sourceJobs.map(job=>[sourceKey(job),job]).filter(([key])=>key));
+    let recovered=0;
+
+    sourceJobs
+      .slice()
+      .sort((a,b)=>String(a?.start||a?.scheduledDate||'').localeCompare(String(b?.start||b?.scheduledDate||'')))
+      .forEach((job,index)=>{
+        const key=sourceKey(job);
+        let entry=(live.entries||[]).find(item=>entryKey(item)===key);
+
+        if(!entry){
+          // applySnapshot normally recreates confirmed jobs. If an unusual current
+          // snapshot row is observed-only, leave it to Schedule rather than inventing a route ticket.
+          return;
+        }
+
+        resetEntryFromSource(entry,job,index);
+        recovered++;
+      });
+
+    // Any current Mega entry for today that is absent from the fresh route source is
+    // not silently resurrected into the route.
+    (live.entries||[]).forEach(entry=>{
+      if(
+        entry?.date===dateIso &&
+        entry?.type==='income' &&
+        entry?.bridgeSource==='CiO Mega Bridge' &&
+        !bySource.has(entryKey(entry))
+      ){
+        entry.routeExcluded=true;
+        entry.routeExcludedReason='not_in_fresh_recovery_snapshot';
+        entry.routeExcludedAt=new Date().toISOString();
+      }
+    });
+
+    persist();
+
+    // Route Brain wrapper regenerates only the Lowe's stores required by the fresh
+    // customer tickets and applies current precedence / On Site / learned-time rules.
+    await window.MirutaRouteBrain?.analyze?.({autoApply:true,force:true});
+
+    try{window.MirutaSchedule?.recalculate?.(true)}catch(_e){}
+    try{await window.MirutaNav?.refreshRoute?.({retargetFirst:true})}catch(_e){}
+    try{window.MirutaAI?.refresh?.()}catch(_e){}
+    try{window.InstaraSchedule?.refresh?.()}catch(_e){}
+    try{window.updatePremiumDashboard?.()}catch(_e){}
+    try{window.render?.()}catch(_e){}
+
+    if(statusLine){
+      statusLine.textContent=`ruta recuperada desde Mega/CiO fresco ✓ ${recovered} tickets reconstruidos`;
+    }
+    premiumHaptic?.([12,24,12]);
+  }catch(err){
+    console.error('RC129 route recovery',err);
+    if(statusLine)statusLine.textContent='no recuperé la ruta: '+(err?.message||'error desconocido');
+    alert('INSTARA NO RECUPERÓ LA RUTA\n\n'+(err?.message||'Error desconocido')+'\n\nNo usé una copia vieja como reemplazo.');
+  }finally{
+    if(button){button.disabled=false;button.textContent=originalText}
+  }
+}
+
+function install(){
+  const button=document.getElementById('recover-today-route-btn');
+  if(button&&!button.__rc129){
+    button.__rc129=true;
+    button.addEventListener('click',recoverTodayRoute);
+  }
+}
+document.addEventListener('DOMContentLoaded',install);
+window.addEventListener('focus',install);
+window.InstaraRC129={recoverTodayRoute,clearRouteCaches,sourceStatus,install};
 })();
 </script>
 
@@ -10116,7 +10434,7 @@ function refreshTodayKpis(){
 }
 
 document.addEventListener('click',event=>{
-  if(event.target.closest?.('#screen-hoy .status-btn,#screen-hoy .route-del,#clear-today-route-btn')){
+  if(event.target.closest?.('#screen-hoy .status-btn,#screen-hoy .route-del,#clear-today-route-btn,#recover-today-route-btn')){
     setTimeout(refreshTodayKpis,80);
     setTimeout(refreshTodayKpis,240);
   }
