@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC123">
+  <meta name="instara-ai-version" content="RC124">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -765,6 +765,8 @@ button{min-height:44px}
 
 .miruta-nav-panel{position:fixed;inset:0;z-index:10000;background:#101415;color:#fff;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);font-family:'Jost',sans-serif}
 .miruta-nav-panel[hidden]{display:none!important}
+body.miruta-nav-open .bottom-nav{display:none!important}
+body.miruta-nav-open #instara-copilot{display:none!important}
 .miruta-nav-top{padding:12px 14px 10px;background:linear-gradient(180deg,rgba(15,18,19,.98),rgba(15,18,19,.90));border-bottom:1px solid rgba(255,255,255,.12);display:grid;grid-template-columns:minmax(0,1fr) auto auto auto auto;gap:10px;align-items:center;z-index:4}
 #nav-search-btn{width:38px;height:38px;border-radius:50%;border:1px solid rgba(10,132,255,.4);background:rgba(10,132,255,.16);color:#fff;font-size:16px;line-height:1;display:grid;place-items:center;flex:0 0 auto}
 #nav-search-bar{position:relative;display:flex;gap:8px;padding:10px 14px;background:rgba(15,18,19,.97);border-bottom:1px solid rgba(255,255,255,.12);z-index:5}
@@ -4522,7 +4524,8 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     function clearMarkers(arr,map,kind='leaflet'){arr.forEach(m=>{try{kind==='maplibre'?m.remove():map.removeLayer(m)}catch(_e){}});arr.length=0;}
     function todayNavigableStops(){
       const date=$('route-date')?.value||todayISO();
-      return state.entries.filter(e=>e.type==='income'&&e.date===date&&!['missing_price','cancelled','completed','paid'].includes(String(e.status||''))&&!e.isFinanceOnly&&e.routeExcluded!==true&&e.address&&e.address.trim()).sort((a,b)=>(a.order??a.orderIndex??9999)-(b.order??b.orderIndex??9999));
+      // RC124 parity law: GPS uses the exact same route-day source/order as Ruta de Hoy.
+      return routeDayStops(date);
     }
     async function geocodeEntry(entry){
       if(Number.isFinite(Number(entry.lat))&&Number.isFinite(Number(entry.lng)))return{lat:Number(entry.lat),lng:Number(entry.lng)};
@@ -4531,9 +4534,17 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       const data=await r.json();if(!data[0])throw new Error('address not found: '+q);
       const coord={lat:Number(data[0].lat),lng:Number(data[0].lon)};geocodeCache[key]=coord;localStorage.setItem(memKey,JSON.stringify(geocodeCache));entry.lat=coord.lat;entry.lng=coord.lng;persistEntries();await new Promise(res=>setTimeout(res,1050));return coord;
     }
-    async function prepareStops(){routeStops=todayNavigableStops();$('miruta-map-status').textContent=routeStops.length?'Localizando direcciones…':'Sin direcciones';for(const stop of routeStops){try{stop._coord=await geocodeEntry(stop)}catch(err){stop._coord=null;console.warn('Miruta geocode:',stop.address,err)}}routeStops=routeStops.filter(s=>s._coord);return routeStops;}
-    function drawMiniMarkers(){if(!miniMap)return;clearMarkers(miniMarkers,miniMap);routeStops.forEach((s,i)=>{const m=L.marker([s._coord.lat,s._coord.lng],{icon:stopIcon(i+1,!!s.isStoreStop)}).addTo(miniMap).bindPopup(`<b>${escapeHtml(s.customerName||s.category||'Parada')}</b><br>${escapeHtml(s.address||'')}`);miniMarkers.push(m)});if(routeStops.length){const group=L.featureGroup(miniMarkers);try{miniMap.fitBounds(group.getBounds().pad(.18),{animate:true,duration:.35,maxZoom:14})}catch(_e){}}}
-    function drawFullMarkers(){if(!fullMap||!fullMapReady)return;clearMarkers(fullMarkers,fullMap,'maplibre');routeStops.forEach((s,i)=>{const el=document.createElement('div');el.className='miruta-ml-stop'+(s.isStoreStop?' store':'');el.innerHTML=`<span>${i+1}</span>`;const m=new maplibregl.Marker({element:el,anchor:'bottom'}).setLngLat([s._coord.lng,s._coord.lat]).addTo(fullMap);fullMarkers.push(m)});renderStopList();}
+    async function prepareStops(){
+      routeStops=todayNavigableStops();
+      $('miruta-map-status').textContent=routeStops.length?`Localizando ${routeStops.length} paradas…`:'Sin direcciones';
+      for(const stop of routeStops){
+        try{stop._coord=await geocodeEntry(stop)}
+        catch(err){stop._coord=null;console.warn('Miruta geocode:',stop.address,err)}
+      }
+      return routeStops;
+    }
+    function drawMiniMarkers(){if(!miniMap)return;clearMarkers(miniMarkers,miniMap);routeStops.forEach((s,i)=>{if(!s._coord)return;const m=L.marker([s._coord.lat,s._coord.lng],{icon:stopIcon(i+1,!!s.isStoreStop)}).addTo(miniMap).bindPopup(`<b>${escapeHtml(s.customerName||s.category||'Parada')}</b><br>${escapeHtml(s.address||'')}`);miniMarkers.push(m)});if(miniMarkers.length){const group=L.featureGroup(miniMarkers);try{miniMap.fitBounds(group.getBounds().pad(.18),{animate:true,duration:.35,maxZoom:14})}catch(_e){}}}
+    function drawFullMarkers(){if(!fullMap||!fullMapReady)return;clearMarkers(fullMarkers,fullMap,'maplibre');routeStops.forEach((s,i)=>{if(!s._coord)return;const el=document.createElement('div');el.className='miruta-ml-stop'+(s.isStoreStop?' store':'');el.innerHTML=`<span>${i+1}</span>`;const m=new maplibregl.Marker({element:el,anchor:'bottom'}).setLngLat([s._coord.lng,s._coord.lat]).addTo(fullMap);fullMarkers.push(m)});renderStopList();}
     async function osrmRoute(coords,steps=true){if(coords.length<2)return null;const points=coords.map(c=>`${c.lng},${c.lat}`).join(';');const url=`https://router.project-osrm.org/route/v1/driving/${points}?overview=full&geometries=geojson&steps=${steps?'true':'false'}&continue_straight=false&annotations=false`;const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw new Error('route '+r.status);const d=await r.json();if(d.code!=='Ok'||!d.routes?.[0])throw new Error(d.code||'no route');return d.routes[0];}
     function drawMiniRoute(route){if(!miniMap)return;if(miniRoute){try{miniMap.removeLayer(miniRoute)}catch(_e){}}if(!route?.geometry?.coordinates)return;const group=L.layerGroup().addTo(miniMap);L.geoJSON(route.geometry,{style:{color:'rgba(0,0,0,.72)',weight:10,opacity:.72,lineCap:'round',lineJoin:'round'}}).addTo(group);L.geoJSON(route.geometry,{style:{color:'#0A84FF',weight:6,opacity:1,lineCap:'round',lineJoin:'round'}}).addTo(group);miniRoute=group;}
     function ensureRouteLayers(){if(!fullMap||!fullMapReady)return;if(!fullMap.getSource('miruta-route'))fullMap.addSource('miruta-route',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:[]},properties:{}}});if(!fullMap.getLayer('miruta-route-casing'))fullMap.addLayer({id:'miruta-route-casing',type:'line',source:'miruta-route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'rgba(0,0,0,.72)','line-width':12,'line-opacity':.78}});if(!fullMap.getLayer('miruta-route-blue'))fullMap.addLayer({id:'miruta-route-blue',type:'line',source:'miruta-route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#0A84FF','line-width':7,'line-opacity':1}});}
@@ -4646,11 +4657,12 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         if(fullMapReady)drawFullMarkers();
         else renderStopList();
 
-        if(routeStops.length>=2){
-          const route=await osrmRoute(routeStops.map(s=>s._coord),false);
+        const routedStops=routeStops.filter(s=>s._coord);
+        if(routedStops.length>=2){
+          const route=await osrmRoute(routedStops.map(s=>s._coord),false);
           drawMiniRoute(route);
           $('map-caption').textContent=`${routeStops.length} paradas • ${metersToMiles(route.distance).toFixed(1)} mi`;
-          $('miruta-map-status').textContent=`${Math.round(route.duration/60)} min estimados`;
+          $('miruta-map-status').textContent=routedStops.length===routeStops.length?`${Math.round(route.duration/60)} min estimados`:`${Math.round(route.duration/60)} min · ${routedStops.length}/${routeStops.length} ubicadas`;
         }else if(routeStops.length===1){
           $('map-caption').textContent='1 parada preparada';
           $('miruta-map-status').textContent='GPS interno';
@@ -4674,6 +4686,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     }
     async function reroute(force=false){
       if(!active||!currentPos||currentIndex>=routeStops.length)return;
+      if(!routeStops[currentIndex]?._coord){rerouteQueuedForce=true;return;}
       if(rerouteBusy){
         if(force)rerouteQueuedForce=true;
         return;
@@ -4685,7 +4698,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       if(!force&&now-lastRouteAt<6500)return;
       rerouteBusy=true;
       try{
-        const remaining=[currentPos,...routeStops.slice(currentIndex).map(s=>s._coord)];
+        const remaining=[currentPos,...routeStops.slice(currentIndex).filter(s=>s._coord).map(s=>s._coord)];
         const route=await osrmRoute(remaining,true);
         if(requestedRevision!==routeOrderRevision){
           rerouteQueuedForce=true;
@@ -5240,7 +5253,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       if(!box||typeof Sortable==='undefined')return;
       if(navStopSortable){try{navStopSortable.destroy()}catch(_e){}}
       navStopSortable=Sortable.create(box,{
-        animation:185,
+        animation:140,
         easing:'cubic-bezier(.22,1,.36,1)',
         handle:'.nav-stop-row',
         draggable:'.nav-stop-row',
@@ -5250,19 +5263,18 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         dragClass:'sortable-drag',
         ghostClass:'sortable-ghost',
         direction:'vertical',
-        swapThreshold:.38,
-        invertSwap:true,
-        invertedSwapThreshold:.62,
-        delay:45,
+        swapThreshold:.58,
+        invertSwap:false,
+        delay:120,
         delayOnTouchOnly:true,
-        touchStartThreshold:7,
-        fallbackTolerance:3,
+        touchStartThreshold:9,
+        fallbackTolerance:5,
         fallbackOnBody:true,
         forceFallback:true,
         scroll:true,
         forceAutoScrollFallback:true,
-        scrollSensitivity:170,
-        scrollSpeed:38,
+        scrollSensitivity:190,
+        scrollSpeed:44,
         bubbleScroll:true,
         onChoose(){
           box.classList.add('is-sorting');
@@ -9558,8 +9570,8 @@ window.InstaraRC108={refreshFinance,install};
   grid-template-columns:68px minmax(0,1fr);
   align-items:center;
   gap:14px;
-  min-height:152px;
-  padding:calc(env(safe-area-inset-top) + 18px) 24px 20px;
+  min-height:112px;
+  padding:calc(env(safe-area-inset-top) + 8px) 24px 12px;
 }
 .miruta-nav-turn-icon{
   font-size:52px;
@@ -9592,8 +9604,8 @@ window.InstaraRC108={refreshFinance,install};
   display:flex;
   align-items:center;
   gap:14px;
-  min-height:82px;
-  padding:15px 24px 18px;
+  min-height:58px;
+  padding:9px 24px 11px;
   border-top:1px solid rgba(255,255,255,.14);
   background:rgba(40,40,39,.22);
   color:rgba(255,255,255,.72);
@@ -9603,7 +9615,7 @@ window.InstaraRC108={refreshFinance,install};
 .miruta-nav-instruction-next[hidden]{display:none!important}
 
 .miruta-nav-float-rail{
-  position:absolute;top:calc(env(safe-area-inset-top) + 252px);right:14px;z-index:14;display:flex;flex-direction:column;gap:10px;
+  position:absolute;top:calc(env(safe-area-inset-top) + 188px);right:14px;z-index:14;display:flex;flex-direction:column;gap:10px;
 }
 .miruta-nav-float-rail button{
   width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.22);
@@ -9724,7 +9736,7 @@ window.InstaraRC108={refreshFinance,install};
   border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:9px 9px;
   touch-action:pan-y;will-change:transform;cursor:grab;
   -webkit-user-select:none;user-select:none;
-  transition:transform .18s cubic-bezier(.22,1,.36,1),box-shadow .18s ease,opacity .16s ease
+  transition:transform .12s cubic-bezier(.22,1,.36,1),box-shadow .14s ease,opacity .12s ease
 }
 .nav-stop-row:active{cursor:grabbing}
 .nav-stop-row .nav-stop-name,.nav-stop-row .nav-stop-order,.nav-stop-row .nav-stop-handle{pointer-events:none}
@@ -9737,7 +9749,7 @@ window.InstaraRC108={refreshFinance,install};
 .nav-stop-order{width:28px;height:28px;border-radius:50%;background:#0A84FF;color:#fff;font-size:12px;font-weight:850;display:flex;align-items:center;justify-content:center}
 .nav-stop-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;font-size:14px;font-weight:720}
 .nav-stop-remove{width:30px;height:30px;border-radius:50%;border:none;background:rgba(255,80,80,.17);color:#ff9a92;font-size:13px}
-#nav-stoplist.is-sorting .nav-stop-row:not(.sortable-chosen){transition:transform .16s cubic-bezier(.22,1,.36,1)!important}
+#nav-stoplist.is-sorting .nav-stop-row:not(.sortable-chosen){transition:transform .11s cubic-bezier(.22,1,.36,1)!important}
 .nav-stop-row.sortable-chosen{
   z-index:50;transform:scale(1.025) rotate(-.25deg)!important;
   box-shadow:0 24px 60px rgba(0,0,0,.52),0 0 0 2px rgba(10,132,255,.50)!important
