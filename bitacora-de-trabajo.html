@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC114">
+  <meta name="instara-ai-version" content="RC123">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -744,7 +744,7 @@ button{min-height:44px}
 <style id="rc55-miruta-nav">
 /* RC55 — navegación integrada + orden iPhone */
 .route-map-card{cursor:default!important;grid-template-columns:1.35fr .65fr!important;min-height:180px!important}
-#miruta-map{min-height:156px;border-radius:17px;overflow:hidden;border:1px solid rgba(255,255,255,.18);background:#20272a;z-index:1}
+#miruta-map{min-height:156px;border-radius:17px;overflow:hidden;border:1px solid rgba(255,255,255,.18);background:#20272a;z-index:1;cursor:pointer;touch-action:manipulation}
 #miruta-map .leaflet-control-attribution{font-size:7px;background:rgba(10,10,10,.54);color:#ddd}
 #miruta-map .leaflet-control-attribution a{color:#0A84FF}
 .route-map-copy button#miruta-go-btn{background:var(--gold)!important;color:#171717!important;font-weight:900!important;letter-spacing:.8px!important}
@@ -766,7 +766,6 @@ button{min-height:44px}
 .miruta-nav-panel{position:fixed;inset:0;z-index:10000;background:#101415;color:#fff;display:flex;flex-direction:column;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);font-family:'Jost',sans-serif}
 .miruta-nav-panel[hidden]{display:none!important}
 .miruta-nav-top{padding:12px 14px 10px;background:linear-gradient(180deg,rgba(15,18,19,.98),rgba(15,18,19,.90));border-bottom:1px solid rgba(255,255,255,.12);display:grid;grid-template-columns:minmax(0,1fr) auto auto auto auto;gap:10px;align-items:center;z-index:4}
-#nav-close-btn{width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.12);color:#fff;font-size:17px;line-height:1;display:grid;place-items:center;flex:0 0 auto}
 #nav-search-btn{width:38px;height:38px;border-radius:50%;border:1px solid rgba(10,132,255,.4);background:rgba(10,132,255,.16);color:#fff;font-size:16px;line-height:1;display:grid;place-items:center;flex:0 0 auto}
 #nav-search-bar{position:relative;display:flex;gap:8px;padding:10px 14px;background:rgba(15,18,19,.97);border-bottom:1px solid rgba(255,255,255,.12);z-index:5}
 #nav-search-bar input{flex:1;min-width:0;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;padding:10px 12px;font-size:16px}
@@ -1261,8 +1260,6 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   </section>
 
   <div class="miruta-nav-panel" id="miruta-nav-panel" hidden>
-    <button id="nav-close-btn" type="button" aria-label="Salir del GPS" title="Salir del GPS">✕</button>
-
     <div class="miruta-nav-instruction-card">
       <div class="miruta-nav-instruction-main">
         <span class="miruta-nav-turn-icon" id="nav-turn-icon">➜</span>
@@ -2705,6 +2702,51 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     persistEntries();
   }
 
+
+  // ---------- RC119: una sola fuente de verdad para el orden Ruta ↔ GPS ----------
+  function routeDayStops(dateIso){
+    return state.entries
+      .filter(e=> e.type==='income' && e.date===dateIso && e.status !== 'missing_price' && !e.isFinanceOnly && e.routeExcluded!==true)
+      .sort((a,b)=> (a.order ?? 9999) - (b.order ?? 9999));
+  }
+
+  function commitRouteOrder(orderedIds, dateIso, source='manual'){
+    const ids=(orderedIds||[]).map(String);
+    const dayStops=routeDayStops(dateIso);
+    if(!dayStops.length||!ids.length)return dayStops;
+
+    const byId=new Map(dayStops.map(e=>[String(e.id),e]));
+    const selected=ids.map(id=>byId.get(id)).filter(Boolean);
+    const selectedSet=new Set(selected.map(e=>String(e.id)));
+
+    let finalOrder;
+    if(selected.length===dayStops.length){
+      finalOrder=selected;
+    }else{
+      // GPS only shows navigable pending stops. Replace only those slots and preserve
+      // completed/non-address rows in their current relative position.
+      let cursor=0;
+      finalOrder=dayStops.map(entry=>{
+        if(!selectedSet.has(String(entry.id)))return entry;
+        return selected[cursor++]||entry;
+      });
+    }
+
+    finalOrder.forEach((entry,index)=>{entry.order=index+1});
+    persistEntries();
+
+    const finalIds=finalOrder.map(e=>String(e.id));
+    window.dispatchEvent(new CustomEvent('instara:route-order-changed',{
+      detail:{dateIso,source,ids:finalIds,changedAt:Date.now()}
+    }));
+    return finalOrder;
+  }
+
+  window.InstaraRouteOrderSync={
+    commit:commitRouteOrder,
+    ids(dateIso){return routeDayStops(dateIso).map(e=>String(e.id))}
+  };
+
   // ---------- arrastrar y soltar para reordenar (estilo mover apps en iPhone) ----------
   function attachDragHandlers(wrap, dateIso){
     if(!wrap || typeof Sortable === 'undefined') return;
@@ -2751,19 +2793,14 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       onEnd(){
         wrap.classList.remove('is-sorting');
         document.documentElement.classList.remove('miruta-sorting');
-        const ids = Array.from(wrap.querySelectorAll('.route-stop')).map(el=>el.dataset.id);
-        ids.forEach((id, index)=>{
-          const entry = state.entries.find(e=>String(e.id)===String(id) && e.date===dateIso);
-          if(entry) entry.order = index + 1;
-        });
-        persistEntries();
+        const ids = Array.from(wrap.querySelectorAll('.route-stop')).map(el=>String(el.dataset.id));
+        commitRouteOrder(ids,dateIso,'today-route');
         premiumHaptic?.([10,25,10]);
         render();
         setTimeout(()=>{
-          try{ window.MirutaNav?.refreshRoute(); }catch(_e){}
           try{ window.MirutaAI?.refresh(); }catch(_e){}
           try{ window.MirutaRouteBrain?.analyzeManualChange(); }catch(_e){}
-        }, 60);
+        }, 40);
       }
     });
   }
@@ -4345,6 +4382,28 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     });
   }
   const premiumMap=document.getElementById('mini-map-card');
+  const premiumMapCanvas=document.getElementById('miruta-map');
+  let miniGpsOpenLock=false;
+  async function openTodayMiniGps(){
+    if(miniGpsOpenLock)return;
+    miniGpsOpenLock=true;
+    try{
+      premiumHaptic(10);
+      await window.MirutaNav?.openFullMap?.();
+    }finally{
+      setTimeout(()=>{miniGpsOpenLock=false},350);
+    }
+  }
+  premiumMap?.addEventListener('click',event=>{
+    if(event.target.closest('button,input,a,.leaflet-control'))return;
+    openTodayMiniGps();
+  });
+  premiumMapCanvas?.addEventListener('click',event=>{
+    if(event.target.closest('.leaflet-control,a,button,input'))return;
+    event.preventDefault();
+    event.stopPropagation();
+    openTodayMiniGps();
+  },true);
   document.getElementById('gps-next-btn')?.addEventListener('click',()=>{ premiumHaptic(12); window.MirutaNav?.start(); });
   document.addEventListener('click',e=>{
     const status=e.target.closest('.status-btn');
@@ -4365,7 +4424,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     let miniMap=null, miniRoute=null, miniMarkers=[], userMarkerMini=null;
     let fullMap=null, fullMapReady=false, fullMarkers=[], userMarkerFull=null;
     let watchId=null, active=false, currentIndex=0, routeStops=[], currentPos=null, displayPos=null;
-    let lastRouteAt=0,lastRoutePos=null,rerouteBusy=false,currentRoute=null,currentSteps=[],currentRouteDuration=0,currentRouteDistance=0,currentLegDurations=[];
+    let lastRouteAt=0,lastRoutePos=null,rerouteBusy=false,rerouteQueuedForce=false,routeOrderRevision=0,currentRoute=null,currentSteps=[],currentRouteDuration=0,currentRouteDistance=0,currentLegDurations=[];
     let arrivalTimer=null,arrivalStopId=null,followMode=true,lastCameraAt=0,lastGpsAt=0,lastHeading=0,lastSpeedMps=0;
     let routeGeom=[],routeCum=[],stepGuide=[],currentGeomIndex=0,currentGuideIndex=0,voiceOn=true,lastSpokenKey='',lastAlertBand='';
     const navSessionKey='instara-gps-session-v1';
@@ -4450,6 +4509,12 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         fullMap.on('dragstart',userBreak);fullMap.on('zoomstart',e=>{if(e.originalEvent)userBreak();});fullMap.on('rotatestart',e=>{if(e.originalEvent)userBreak();});fullMap.on('pitchstart',e=>{if(e.originalEvent)userBreak();});
         fullOk=true;
       }
+      if(miniMap&&!miniMap.__instaraOpenFullGpsBound){
+        miniMap.__instaraOpenFullGpsBound=true;
+        miniMap.on('click',()=>{
+          openTodayMiniGps();
+        });
+      }
       return !!miniMap && (fullOk || !$('miruta-nav-map'));
     }
     function stopIcon(n,isStore=false){return L.divIcon({className:'',html:`<div class="miruta-stop-marker${isStore?' store':''}"><span>${n}</span></div>`,iconSize:[29,29],iconAnchor:[15,27]});}
@@ -4457,7 +4522,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     function clearMarkers(arr,map,kind='leaflet'){arr.forEach(m=>{try{kind==='maplibre'?m.remove():map.removeLayer(m)}catch(_e){}});arr.length=0;}
     function todayNavigableStops(){
       const date=$('route-date')?.value||todayISO();
-      return state.entries.filter(e=>e.type==='income'&&e.date===date&&!['missing_price','cancelled','completed','paid'].includes(String(e.status||''))&&!e.isFinanceOnly&&e.routeExcluded!==true&&e.address&&e.address.trim()).sort((a,b)=>(a.order??e.orderIndex??9999)-(b.order??b.orderIndex??9999));
+      return state.entries.filter(e=>e.type==='income'&&e.date===date&&!['missing_price','cancelled','completed','paid'].includes(String(e.status||''))&&!e.isFinanceOnly&&e.routeExcluded!==true&&e.address&&e.address.trim()).sort((a,b)=>(a.order??a.orderIndex??9999)-(b.order??b.orderIndex??9999));
     }
     async function geocodeEntry(entry){
       if(Number.isFinite(Number(entry.lat))&&Number.isFinite(Number(entry.lng)))return{lat:Number(entry.lat),lng:Number(entry.lng)};
@@ -4527,10 +4592,31 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       if(miEl)miEl.textContent=miles.toFixed(miles<10?1:0);
     }
     function updateInstructionLive(){
-      const g=guidanceState(),step=g.step;let text=maneuverText(step);if(g.band==='prepare'&&step)text=`Prepárate: ${text}`;else if(g.band==='soon'&&step)text=`En ${fmtDistance(g.distance)}, ${text.toLowerCase()}`;else if(g.band==='now'&&step)text=maneuverText(step);
+      const g=guidanceState(),step=g.step;
+      let text=maneuverText(step);
+      if(g.band==='prepare'&&step)text=`Prepárate: ${text}`;
+      else if(g.band==='soon'&&step)text=`En ${fmtDistance(g.distance)}, ${text.toLowerCase()}`;
+      else if(g.band==='now'&&step)text=maneuverText(step);
+
       $('nav-step-text').textContent=text;
-      const streetEl=$('nav-step-street');if(streetEl)streetEl.textContent=step?fmtDistance(g.distance):'Sigue la línea azul';
-      const turnIconEl=$('nav-turn-icon');if(turnIconEl)turnIconEl.textContent=maneuverIcon(step);
+      const streetEl=$('nav-step-street');
+      if(streetEl)streetEl.textContent=step?fmtDistance(g.distance):'Sigue la línea azul';
+
+      const turnIconEl=$('nav-turn-icon');
+      if(turnIconEl)turnIconEl.textContent=maneuverIcon(step);
+
+      const nextGuide=stepGuide[currentGuideIndex+1];
+      const nextRow=$('nav-instruction-next');
+      const nextText=$('nav-step-next-text');
+      const nextIcon=nextRow?.querySelector('.miruta-nav-turn-icon.sm');
+      if(nextGuide?.step){
+        if(nextRow)nextRow.hidden=false;
+        if(nextText)nextText.textContent=maneuverText(nextGuide.step);
+        if(nextIcon)nextIcon.textContent=maneuverIcon(nextGuide.step);
+      }else if(nextRow){
+        nextRow.hidden=true;
+      }
+
       updateEta();
       const stop=routeStops[currentIndex];
       const nameEl=$('nav-client-name');if(nameEl)nameEl.textContent=stop?.customerName||stop?.category||'Ruta completada';
@@ -4538,12 +4624,95 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       const iconEl=$('nav-dest-icon');if(iconEl)iconEl.textContent=stop?.isStoreStop?'🏬':'🏠';
       if(step&&g.band!==lastAlertBand){const key=`${g.key}:${g.band}`;if(g.band==='prepare')speak(`In ${Math.max(1,Math.round(g.distance/1609.344*10)/10)} miles. ${maneuverText(step)}`,key);else if(g.band==='soon')speak(`In ${fmtDistance(g.distance)}. ${maneuverText(step)}`,key);else if(g.band==='now')speak(maneuverText(step),key,true);lastAlertBand=g.band;premiumHaptic(g.band==='now'?[25,45,25]:8)}
     }
-    async function refreshMini(){if(!await ensureNavLibraries()||!initMaps()){const s=$('miruta-map-status');if(s)s.textContent='Mapa no disponible — revisa conexión';return}try{await prepareStops();drawMiniMarkers();if(routeStops.length>=2){const route=await osrmRoute(routeStops.map(s=>s._coord),false);drawMiniRoute(route);$('map-caption').textContent=`${routeStops.length} paradas • ${metersToMiles(route.distance).toFixed(1)} mi`;$('miruta-map-status').textContent=`${Math.round(route.duration/60)} min estimados`}else if(routeStops.length===1){$('map-caption').textContent='1 parada preparada';$('miruta-map-status').textContent='GPS interno'}}catch(err){console.warn(err);$('miruta-map-status').textContent='No se pudo calcular ahora'}setTimeout(()=>miniMap?.invalidateSize(),50)}
+    async function refreshMini(options={}){
+      if(!await ensureNavLibraries()||!initMaps()){
+        const s=$('miruta-map-status');if(s)s.textContent='Mapa no disponible — revisa conexión';
+        return;
+      }
+      const previousTargetId=String(routeStops[currentIndex]?.id||'');
+      const retargetFirst=options?.retargetFirst===true;
+      try{
+        await prepareStops();
+        if(retargetFirst){
+          currentIndex=0;
+        }else if(previousTargetId){
+          const nextIndex=routeStops.findIndex(s=>String(s.id)===previousTargetId);
+          currentIndex=nextIndex>=0?nextIndex:Math.min(currentIndex,Math.max(0,routeStops.length-1));
+        }else{
+          currentIndex=Math.min(currentIndex,Math.max(0,routeStops.length-1));
+        }
+
+        drawMiniMarkers();
+        if(fullMapReady)drawFullMarkers();
+        else renderStopList();
+
+        if(routeStops.length>=2){
+          const route=await osrmRoute(routeStops.map(s=>s._coord),false);
+          drawMiniRoute(route);
+          $('map-caption').textContent=`${routeStops.length} paradas • ${metersToMiles(route.distance).toFixed(1)} mi`;
+          $('miruta-map-status').textContent=`${Math.round(route.duration/60)} min estimados`;
+        }else if(routeStops.length===1){
+          $('map-caption').textContent='1 parada preparada';
+          $('miruta-map-status').textContent='GPS interno';
+        }else{
+          $('map-caption').textContent='Sin paradas cargadas';
+          $('miruta-map-status').textContent='GPS interno';
+        }
+
+        updateInstructionLive();
+        saveNavSession();
+
+        // A manual/AI order change changes the active destination immediately.
+        if(active&&retargetFirst&&currentPos&&routeStops.length){
+          await reroute(true);
+        }
+      }catch(err){
+        console.warn(err);
+        $('miruta-map-status').textContent='No se pudo calcular ahora';
+      }
+      setTimeout(()=>miniMap?.invalidateSize(),50);
+    }
     async function reroute(force=false){
-      if(!active||!currentPos||rerouteBusy||currentIndex>=routeStops.length)return;const now=Date.now(),moved=lastRoutePos?haversine(currentPos,lastRoutePos):Infinity;const offRoute=routeGeom.length?haversine(currentPos,routeGeom[nearestGeomIndex(currentPos)]):Infinity;
-      if(!force&&offRoute<35&&now-lastRouteAt<18000&&moved<120)return;if(!force&&now-lastRouteAt<6500)return;rerouteBusy=true;
-      try{const remaining=[currentPos,...routeStops.slice(currentIndex).map(s=>s._coord)],route=await osrmRoute(remaining,true);currentRoute=route;drawFullRoute(route);buildRouteGuidance(route);currentRouteDuration=Number(route.legs?.[0]?.duration)||Number(route.duration)||0;currentRouteDistance=Number(route.legs?.[0]?.distance)||Number(route.distance)||0;currentLegDurations=(route.legs||[]).map(l=>Number(l.duration)||0);lastRouteAt=now;lastRoutePos={...currentPos};updateInstructionLive();const current=routeStops[currentIndex],dist=haversine(currentPos,current._coord);$('next-distance').textContent=`📍 ${fmtDistance(dist)} al siguiente`}
-      catch(err){console.warn('Miruta reroute',err);$('nav-step-text').textContent='Sin conexión de ruta';$('nav-step-street').textContent='La guía local sigue activa; Miruta reintentará'}finally{rerouteBusy=false}
+      if(!active||!currentPos||currentIndex>=routeStops.length)return;
+      if(rerouteBusy){
+        if(force)rerouteQueuedForce=true;
+        return;
+      }
+      const requestedRevision=routeOrderRevision;
+      const now=Date.now(),moved=lastRoutePos?haversine(currentPos,lastRoutePos):Infinity;
+      const offRoute=routeGeom.length?haversine(currentPos,routeGeom[nearestGeomIndex(currentPos)]):Infinity;
+      if(!force&&offRoute<35&&now-lastRouteAt<18000&&moved<120)return;
+      if(!force&&now-lastRouteAt<6500)return;
+      rerouteBusy=true;
+      try{
+        const remaining=[currentPos,...routeStops.slice(currentIndex).map(s=>s._coord)];
+        const route=await osrmRoute(remaining,true);
+        if(requestedRevision!==routeOrderRevision){
+          rerouteQueuedForce=true;
+          return;
+        }
+        currentRoute=route;
+        drawFullRoute(route);
+        buildRouteGuidance(route);
+        currentRouteDuration=Number(route.legs?.[0]?.duration)||Number(route.duration)||0;
+        currentRouteDistance=Number(route.legs?.[0]?.distance)||Number(route.distance)||0;
+        currentLegDurations=(route.legs||[]).map(l=>Number(l.duration)||0);
+        lastRouteAt=Date.now();
+        lastRoutePos={...currentPos};
+        updateInstructionLive();
+        const current=routeStops[currentIndex],dist=haversine(currentPos,current._coord);
+        $('next-distance').textContent=`📍 ${fmtDistance(dist)} al siguiente`;
+      }catch(err){
+        console.warn('Miruta reroute',err);
+        $('nav-step-text').textContent='Sin conexión de ruta';
+        $('nav-step-street').textContent='La guía local sigue activa; Miruta reintentará';
+      }finally{
+        rerouteBusy=false;
+        if(rerouteQueuedForce){
+          rerouteQueuedForce=false;
+          setTimeout(()=>reroute(true),0);
+        }
+      }
     }
     function animateVanTo(target,heading){
       if(!fullMap||!fullMapReady)return;if(!userMarkerFull){const el=document.createElement('div');el.className='miruta-ml-van';el.textContent='➤';userMarkerFull=new maplibregl.Marker({element:el,anchor:'center'}).setLngLat([target.lng,target.lat]).addTo(fullMap);displayPos={...target};}
@@ -4676,6 +4845,19 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       saveNavSession();
       setTimeout(()=>{try{fullMap?.resize?.();center()}catch(_e){}},90);
     }
+    function removeLegacyGpsClose(){
+      const panel=$('miruta-nav-panel');
+      if(!panel)return;
+      panel.querySelectorAll('#nav-close-btn').forEach(node=>node.remove());
+      panel.querySelectorAll('button').forEach(button=>{
+        const label=String(button.getAttribute('aria-label')||button.title||'').toLowerCase();
+        const glyph=String(button.textContent||'').trim();
+        const rect=button.getBoundingClientRect();
+        if((glyph==='✕'||glyph==='×')&&/salir del gps|cerrar gps|close gps/.test(label)&&rect.top<220){
+          button.remove();
+        }
+      });
+    }
     function hideNavigation(){
       const panel=$('miruta-nav-panel');if(!panel)return;
       panel.hidden=true;backgrounded=true;
@@ -4683,6 +4865,11 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       document.body.classList.remove('miruta-nav-open');
       saveNavSession();
       updateResumeButton();
+    }
+    async function openFullMap(){
+      const session=loadNavSession();
+      if(active||session?.active)return resumeNavigation();
+      return start();
     }
     async function resumeNavigation(){
       if(active&&routeStops.length){showNavigation();return}
@@ -4812,7 +4999,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     }
     async function openAddressSearch(){
       if(!await ensureNavLibraries()||!initMaps()){alert('El mapa todavía no cargó. Revisa tu conexión e inténtalo de nuevo.');return}
-      $('miruta-nav-panel').hidden=false;document.body.style.overflow='hidden';document.body.classList.add('miruta-nav-open');
+      $('miruta-nav-panel').hidden=false;removeLegacyGpsClose();document.body.style.overflow='hidden';document.body.classList.add('miruta-nav-open');
       setSheetState('expanded');
       $('nav-inline-search').hidden=false;
       const menuToHide=$('nav-add-stop-btn')?.closest('.miruta-nav-menu');if(menuToHide)menuToHide.hidden=true;
@@ -4942,7 +5129,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       else statusLine.textContent='navegación terminada';
       refreshMini();
     }
-    $('miruta-go-btn')?.addEventListener('click',start);$('miruta-route-reload')?.addEventListener('click',refreshMini);$('nav-center-btn')?.addEventListener('click',center);$('nav-voice-btn')?.addEventListener('click',toggleVoice);$('nav-complete-btn')?.addEventListener('click',completeCurrent);$('nav-next-btn')?.addEventListener('click',advance);$('nav-end-btn')?.addEventListener('click',()=>{if(confirm('¿Terminar completamente esta ruta?'))finish(false)});$('nav-close-btn')?.addEventListener('click',hideNavigation);$('nav-background-btn')?.addEventListener('click',hideNavigation);$('miruta-adhoc-btn')?.addEventListener('click',startAdHoc);$('nav-search-btn')?.addEventListener('click',openAddressSearch);$('nav-search-cancel')?.addEventListener('click',closeAddressSearch);$('nav-search-input')?.addEventListener('input',onSearchInput);$('nav-search-go')?.addEventListener('click',async()=>{const q=$('nav-search-input').value.trim();if(!q)return;try{const list=await fetchSuggestions(q);if(list&&list[0])startAdHocFromCoord(list[0].display_name||q,Number(list[0].lat),Number(list[0].lon));else $('nav-search-suggest').innerHTML='<div class="sugg-empty">No se encontró esa dirección</div>'}catch(_e){$('nav-search-suggest').innerHTML='<div class="sugg-empty">Sin conexión para buscar ahora mismo</div>'}});$('nav-satellite-btn')?.addEventListener('click',toggleSatellite);
+    $('miruta-go-btn')?.addEventListener('click',start);$('miruta-route-reload')?.addEventListener('click',refreshMini);$('nav-center-btn')?.addEventListener('click',center);$('nav-voice-btn')?.addEventListener('click',toggleVoice);$('nav-complete-btn')?.addEventListener('click',completeCurrent);$('nav-next-btn')?.addEventListener('click',advance);$('nav-end-btn')?.addEventListener('click',()=>{if(confirm('¿Terminar completamente esta ruta?'))finish(false)});$('nav-background-btn')?.addEventListener('click',hideNavigation);$('miruta-adhoc-btn')?.addEventListener('click',startAdHoc);$('nav-search-btn')?.addEventListener('click',openAddressSearch);$('nav-search-cancel')?.addEventListener('click',closeAddressSearch);$('nav-search-input')?.addEventListener('input',onSearchInput);$('nav-search-go')?.addEventListener('click',async()=>{const q=$('nav-search-input').value.trim();if(!q)return;try{const list=await fetchSuggestions(q);if(list&&list[0])startAdHocFromCoord(list[0].display_name||q,Number(list[0].lat),Number(list[0].lon));else $('nav-search-suggest').innerHTML='<div class="sugg-empty">No se encontró esa dirección</div>'}catch(_e){$('nav-search-suggest').innerHTML='<div class="sugg-empty">Sin conexión para buscar ahora mismo</div>'}});$('nav-satellite-btn')?.addEventListener('click',toggleSatellite);
 
     // ---------- hoja inferior deslizable (estilo Apple Maps) ----------
     function shareArrival(){
@@ -5008,87 +5195,152 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       if(bar&&box&&!bar.contains(e.target))box.hidden=true;
     });
 
-    // ---------- lista de paradas reordenable dentro del GPS (numeradas, con X) ----------
-    let stopDragEl=null,stopDragStartY=0,stopDragOrigIndex=-1,stopDragCardUnit=0,stopDragSnapshot=[];
+    // ---------- RC119: paradas GPS reordenables con el mismo Sortable de Ruta ----------
+    let navStopSortable=null;
+
+    function applyGpsOrderImmediately(ids){
+      const byId=new Map(routeStops.map(stop=>[String(stop.id),stop]));
+      const ordered=(ids||[]).map(String).map(id=>byId.get(id)).filter(Boolean);
+      if(ordered.length!==routeStops.length)return false;
+      routeStops=ordered;
+      currentIndex=0;
+      routeOrderRevision++;
+      currentRoute=null;
+      currentSteps=[];
+      currentRouteDuration=0;
+      currentRouteDistance=0;
+      currentLegDurations=[];
+      routeGeom=[];
+      routeCum=[];
+      stepGuide=[];
+      currentGeomIndex=0;
+      currentGuideIndex=0;
+      lastRouteAt=0;
+      lastRoutePos=null;
+      lastSpokenKey='';
+      lastAlertBand='';
+      drawMiniMarkers();
+      if(fullMapReady)drawFullMarkers();
+      else renderStopList();
+      const first=routeStops[0];
+      const nameEl=$('nav-client-name');
+      const progEl=$('nav-route-progress');
+      const iconEl=$('nav-dest-icon');
+      if(nameEl)nameEl.textContent=first?.customerName||first?.category||'Ruta completada';
+      if(progEl)progEl.textContent=routeStops.length?`1/${routeStops.length}`:'0/0';
+      if(iconEl)iconEl.textContent=first?.isStoreStop?'🏬':'🏠';
+      if($('nav-step-text'))$('nav-step-text').textContent='Recalculando ruta…';
+      if($('nav-step-street'))$('nav-step-street').textContent=first?`Nuevo destino: ${first.customerName||first.category||'Parada 1'}`:'Sin paradas';
+      saveNavSession();
+      return true;
+    }
+
+    function installNavStopSortable(){
+      const box=$('nav-stoplist');
+      if(!box||typeof Sortable==='undefined')return;
+      if(navStopSortable){try{navStopSortable.destroy()}catch(_e){}}
+      navStopSortable=Sortable.create(box,{
+        animation:185,
+        easing:'cubic-bezier(.22,1,.36,1)',
+        handle:'.nav-stop-row',
+        draggable:'.nav-stop-row',
+        filter:'.nav-stop-remove',
+        preventOnFilter:false,
+        chosenClass:'sortable-chosen',
+        dragClass:'sortable-drag',
+        ghostClass:'sortable-ghost',
+        direction:'vertical',
+        swapThreshold:.38,
+        invertSwap:true,
+        invertedSwapThreshold:.62,
+        delay:45,
+        delayOnTouchOnly:true,
+        touchStartThreshold:7,
+        fallbackTolerance:3,
+        fallbackOnBody:true,
+        forceFallback:true,
+        scroll:true,
+        forceAutoScrollFallback:true,
+        scrollSensitivity:170,
+        scrollSpeed:38,
+        bubbleScroll:true,
+        onChoose(){
+          box.classList.add('is-sorting');
+          premiumHaptic?.(8);
+        },
+        onStart(){
+          box.classList.add('is-sorting');
+          premiumHaptic?.(10);
+        },
+        onUnchoose(){box.classList.remove('is-sorting')},
+        async onEnd(){
+          box.classList.remove('is-sorting');
+          const ids=Array.from(box.querySelectorAll('.nav-stop-row')).map(row=>String(row.dataset.id));
+          const dateIso=$('route-date')?.value||todayISO();
+
+          // Update GPS UI first, synchronously, so the headline/current stop changes now.
+          applyGpsOrderImmediately(ids);
+
+          // Persist the same order for Ruta de Hoy.
+          commitRouteOrder(ids,dateIso,'gps-stoplist');
+          try{renderRoute()}catch(_e){}
+          try{window.MirutaSchedule?.recalculate?.(true)}catch(_e){}
+          try{window.MirutaAI?.refresh?.()}catch(_e){}
+          premiumHaptic?.([8,18,8]);
+
+          // Rebuild markers/route and force the active navigator to target new stop #1.
+          await refreshMini({retargetFirst:true});
+        }
+      });
+    }
+
     function renderStopList(){
       const box=$('nav-stoplist');if(!box)return;
-      if(!routeStops.length){box.innerHTML='';return}
+      if(!routeStops.length){
+        if(navStopSortable){try{navStopSortable.destroy()}catch(_e){};navStopSortable=null}
+        box.innerHTML='';
+        return;
+      }
       box.innerHTML=routeStops.map((s,i)=>`
-        <div class="nav-stop-row${i===currentIndex?' current':''}" data-idx="${i}">
-          <span class="nav-stop-handle">⠿</span>
+        <div class="nav-stop-row${i===currentIndex?' current':''}" data-id="${String(s.id).replace(/"/g,'&quot;')}">
+          <span class="nav-stop-handle" aria-label="Mover parada">≡</span>
           <span class="nav-stop-order">${i+1}</span>
           <span class="nav-stop-name">${(s.customerName||s.category||'Parada').toString().replace(/</g,'&lt;')}</span>
-          <button class="nav-stop-remove" data-idx="${i}" type="button" aria-label="Quitar esta parada">✕</button>
+          <button class="nav-stop-remove" data-id="${String(s.id).replace(/"/g,'&quot;')}" type="button" aria-label="Quitar esta parada">✕</button>
         </div>`).join('');
+
       box.querySelectorAll('.nav-stop-remove').forEach(btn=>{
         btn.addEventListener('click',ev=>{
           ev.stopPropagation();
-          const idx=Number(btn.dataset.idx);
-          if(!Number.isFinite(idx)||idx<0||idx>=routeStops.length)return;
-          const currentStopId=routeStops[currentIndex]?.id;
-          routeStops.splice(idx,1);
-          if(currentStopId){
-            const newIdx=routeStops.findIndex(s=>s.id===currentStopId);
-            currentIndex=newIdx>=0?newIdx:Math.min(currentIndex,Math.max(0,routeStops.length-1));
-          }else{
-            currentIndex=Math.min(currentIndex,Math.max(0,routeStops.length-1));
-          }
-          renderStopList();updateInstructionLive();
-          if(routeStops.length)reroute(true);
+          const id=String(btn.dataset.id||'');
+          const entry=state.entries.find(e=>String(e.id)===id);
+          if(!entry)return;
+          entry.routeExcluded=true;
+          persistEntries();
+          window.dispatchEvent(new CustomEvent('instara:route-order-changed',{
+            detail:{dateIso:$('route-date')?.value||todayISO(),source:'gps-remove',ids:[],changedAt:Date.now()}
+          }));
+          render();
         });
       });
-      box.querySelectorAll('.nav-stop-handle').forEach(handle=>{
-        handle.addEventListener('touchstart',e=>stopDragStart(e.touches[0].clientY,handle),{passive:true});
-        handle.addEventListener('mousedown',e=>{
-          stopDragStart(e.clientY,handle);
-          const mm=ev=>stopDragMove(ev.clientY),mu=()=>{stopDragEnd();document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu)};
-          document.addEventListener('mousemove',mm);document.addEventListener('mouseup',mu);
-        });
-      });
-      box.querySelectorAll('.nav-stop-handle').forEach(handle=>{
-        handle.addEventListener('touchmove',e=>stopDragMove(e.touches[0].clientY),{passive:true});
-        handle.addEventListener('touchend',stopDragEnd);
-      });
+
+      installNavStopSortable();
     }
-    function stopDragStart(clientY,handle){
-      const row=handle.closest('.nav-stop-row');if(!row)return;
-      const box=$('nav-stoplist');
-      stopDragSnapshot=Array.from(box.querySelectorAll('.nav-stop-row'));
-      stopDragEl=row;stopDragStartY=clientY;stopDragOrigIndex=stopDragSnapshot.indexOf(row);
-      stopDragCardUnit=row.getBoundingClientRect().height+8;
-      row.classList.add('dragging');
-      stopDragSnapshot.forEach(r=>{ if(r!==row) r.style.transition='transform .18s ease'; });
+
+    let routeOrderSyncTimer=null;
+    async function syncLiveRouteOrder(detail={}){
+      const activeDate=$('route-date')?.value||todayISO();
+      if(detail?.dateIso&&String(detail.dateIso)!==String(activeDate))return;
+      if(detail?.source==='gps-stoplist')return;
+      clearTimeout(routeOrderSyncTimer);
+      routeOrderSyncTimer=setTimeout(async()=>{
+        routeOrderRevision++;
+        await refreshMini({retargetFirst:true});
+        try{window.MirutaSchedule?.recalculate?.(true)}catch(_e){}
+        try{window.MirutaAI?.refresh?.()}catch(_e){}
+      },25);
     }
-    function stopDragMove(clientY){
-      if(!stopDragEl)return;
-      const delta=clientY-stopDragStartY;
-      stopDragEl.style.transform=`translateY(${delta}px)`;stopDragEl.style.zIndex='5';
-      const shiftUnits=Math.round(delta/stopDragCardUnit);
-      const target=Math.max(0,Math.min(stopDragSnapshot.length-1,stopDragOrigIndex+shiftUnits));
-      stopDragSnapshot.forEach((r,i)=>{
-        if(r===stopDragEl)return;
-        let shift=0;
-        if(target<stopDragOrigIndex&&i>=target&&i<stopDragOrigIndex)shift=stopDragCardUnit;
-        else if(target>stopDragOrigIndex&&i>stopDragOrigIndex&&i<=target)shift=-stopDragCardUnit;
-        r.style.transform=shift?`translateY(${shift}px)`:'';
-      });
-      stopDragEl.dataset.targetIdx=String(target);
-    }
-    function stopDragEnd(){
-      if(!stopDragEl)return;
-      const target=Number(stopDragEl.dataset.targetIdx||stopDragOrigIndex);
-      stopDragSnapshot.forEach(r=>{r.style.transition='';r.style.transform='';});
-      stopDragEl.classList.remove('dragging');stopDragEl.style.zIndex='';
-      const finishedIdx=stopDragOrigIndex;stopDragEl=null;
-      const currentStopId=routeStops[currentIndex]?.id;
-      if(target!==finishedIdx&&target>=0&&target<routeStops.length){
-        const [moved]=routeStops.splice(finishedIdx,1);
-        routeStops.splice(target,0,moved);
-      }
-      if(currentStopId){const newIdx=routeStops.findIndex(s=>s.id===currentStopId);if(newIdx>=0)currentIndex=newIdx;}
-      renderStopList();updateInstructionLive();
-      if(routeStops.length>1)reroute(true);
-    }
+    window.addEventListener('instara:route-order-changed',event=>syncLiveRouteOrder(event.detail||{}));
 
     $('nav-add-stop-btn')?.addEventListener('click',openAddressSearch);
 
@@ -5126,7 +5378,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     })();
 
     window.addEventListener('online',()=>{refreshMini();if(active)reroute(true)});setTimeout(refreshMini,700);
-    return{start,resumeNavigation,hideNavigation,showNavigation,startAtEntry,finish,refreshRoute:refreshMini,reroute,advance,completeCurrent,getCurrentStop:currentStop,isActive:()=>active,isBackgrounded:()=>backgrounded,estimateEntryEta,estimateDayPlan,getCurrentEtaMinutes:()=>Math.max(1,Math.round(currentEtaSeconds()/60))};
+    return{start,openFullMap,resumeNavigation,hideNavigation,showNavigation,startAtEntry,finish,refreshRoute:refreshMini,reroute,advance,completeCurrent,getCurrentStop:currentStop,isActive:()=>active,isBackgrounded:()=>backgrounded,estimateEntryEta,estimateDayPlan,getCurrentEtaMinutes:()=>Math.max(1,Math.round(currentEtaSeconds()/60))};
   })();
   window.MirutaNav = MirutaNav;
 
@@ -5454,7 +5706,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   // ---------- RC62: Auto Route Intelligence ----------
   const MirutaRouteBrain = (()=>{
     const DEFAULT_BASE='6451 Archcrest Dr, Roanoke, VA 24019';
-    const SETTINGS_KEY='miruta-route-brain-settings-v1', LEARNING_KEY='miruta-service-learning-v1', GEO_KEY='miruta-route-geocache-v2';
+    const SETTINGS_KEY='miruta-route-brain-settings-v1', LEARNING_KEY='miruta-service-learning-v1', GEO_KEY='miruta-route-geocache-v3';
     const PLAN_KEY_PREFIX='miruta-recommended-plan-', AUTO_SIG_PREFIX='miruta-auto-plan-signature-';
     const DEFAULTS={dishwasher:45,microwave:30,toilet:35,faucet:25,disposal:35,cooktop:45,range:45,oven:50,washer:35,dryer:35,refrigerator:45,other:45};
     const labels={dishwasher:'Dishwasher',microwave:'OTR Microwave',toilet:'Toilet',faucet:'Faucet',disposal:'Garbage Disposal',cooktop:'Cooktop',range:'Range',oven:'Oven',washer:'Washer',dryer:'Dryer',refrigerator:'Refrigerator',other:'Otros'};
@@ -5486,20 +5738,91 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       if(!dateIso||!value)return null;const m=String(value).trim().match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);if(!m)return null;
       let h=Number(m[1])%12;if(m[3].toUpperCase()==='PM')h+=12;const [y,mo,d]=dateIso.split('-').map(Number);return new Date(y,mo-1,d,h,Number(m[2]),0,0).getTime();
     }
+    function normalizedRouteAddress(address){
+      return String(address||'').trim().replace(/\s+/g,' ').replace(/\s*,\s*/g,', ');
+    }
+    function routeAddressParts(address){
+      const q=normalizedRouteAddress(address), house=(q.match(/^\s*(\d+[A-Za-z-]*)\b/)||[])[1]||'', zip=(q.match(/\b(\d{5})(?:-\d{4})?\b/)||[])[1]||'';
+      const state=(q.match(/,\s*([A-Z]{2})\s+\d{5}\b/i)||[])[1]?.toUpperCase()||'';
+      return {q,house:String(house).toLowerCase(),zip,state};
+    }
+    function scoreGeocodeCandidate(candidate,parts){
+      const a=candidate?.address||{}, display=String(candidate?.display_name||'').toLowerCase();
+      let score=0;
+      const candidateZip=String(a.postcode||'').slice(0,5), candidateHouse=String(a.house_number||'').toLowerCase(), candidateState=String(a['ISO3166-2-lvl4']||a.state_code||'').toUpperCase();
+      if(parts.zip)score += candidateZip===parts.zip?120:-160;
+      if(parts.house)score += candidateHouse===parts.house?90:(display.includes(parts.house+' ')?45:-70);
+      if(parts.state==='VA')score += candidateState.includes('VA')||/virginia/.test(display)?50:-100;
+      if(candidate?.type==='house'||candidate?.addresstype==='building'||candidate?.addresstype==='amenity')score+=18;
+      score += Math.max(0,30-Number(candidate?.place_rank||30));
+      return score;
+    }
     async function geocode(address){
-      const q=String(address||'').trim().replace(/\s+/g,' ');if(!q)return null;const key=q.toLowerCase();if(geocache[key]?.lat&&geocache[key]?.lng)return geocache[key];
-      if(!navigator.onLine)throw new Error(`Sin coordenadas guardadas para ${q}`);
-      const res=await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&q='+encodeURIComponent(q),{headers:{'Accept-Language':'en-US'}});
-      if(!res.ok)throw new Error('No se pudo localizar '+q);const data=await res.json();if(!data?.[0])throw new Error('Dirección no encontrada: '+q);
-      const out={lat:Number(data[0].lat),lng:Number(data[0].lon),display:data[0].display_name||q};geocache[key]=out;saveJSON(GEO_KEY,geocache);await new Promise(r=>setTimeout(r,1050));return out;
+      const q=normalizedRouteAddress(address);if(!q)return null;
+      const parts=routeAddressParts(q),key=q.toLowerCase();
+      const cached=geocache[key];
+      if(cached?.lat&&cached?.lng&&cached?.verified===true)return cached;
+      if(!navigator.onLine)throw new Error(`Sin coordenadas verificadas para ${q}`);
+      const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=us&addressdetails=1&dedupe=1&q='+encodeURIComponent(q);
+      const res=await fetch(url,{headers:{'Accept-Language':'en-US,en;q=0.9'}});
+      if(!res.ok)throw new Error('No se pudo localizar '+q);
+      const data=await res.json();if(!Array.isArray(data)||!data.length)throw new Error('Dirección no encontrada: '+q);
+      const ranked=data.map(c=>({c,score:scoreGeocodeCandidate(c,parts)})).sort((a,b)=>b.score-a.score);
+      const winner=ranked[0];
+      if(!winner||winner.score<0)throw new Error('Dirección ambigua o no coincide con ZIP/número: '+q);
+      const out={lat:Number(winner.c.lat),lng:Number(winner.c.lon),display:winner.c.display_name||q,verified:true,score:winner.score,query:q};
+      geocache[key]=out;saveJSON(GEO_KEY,geocache);await new Promise(r=>setTimeout(r,1050));return out;
+    }
+    async function geocodeRouteEntry(entry){
+      const lat=Number(entry?.lat),lng=Number(entry?.lng);
+      if(Number.isFinite(lat)&&Number.isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180)return {lat,lng,display:entry.address||entry.customerName||'',verified:true,source:'ticket'};
+      const address=entry?.address||(entry?.isStoreStop?state.storeAddresses?.[storeKey(entry)]:'');
+      if(!address)return null;
+      const coord=await geocode(address);
+      if(entry&&!entry.isStoreStop&&coord){entry.lat=coord.lat;entry.lng=coord.lng;}
+      return coord;
     }
     async function table(coords){
       const str=coords.map(c=>`${c.lng},${c.lat}`).join(';');const res=await fetch(`https://router.project-osrm.org/table/v1/driving/${str}?annotations=duration,distance`);
       if(!res.ok)throw new Error('No se pudo calcular la matriz de ruta');const d=await res.json();if(d.code!=='Ok')throw new Error('Matriz de ruta no disponible');return d;
     }
-    function storeKey(e){const raw=e?.store||e?.storeName||(e?.isStoreStop?e?.category:'');return raw?storeMemoryKey(raw):''}
+    function routeStoreCode(e){
+      const raw=[e?.storeNumber,e?.sellerStoreNumber,e?.store,e?.storeName,e?.category,e?._cioRaw?.storeNumber,e?._cioRaw?.sellerStoreNumber,e?._cioRaw?.store,e?._cioRaw?.storeName]
+        .filter(v=>v!==undefined&&v!==null&&String(v).trim()).join(' ');
+      const m=raw.match(/(?:store\s*#?|lowe'?s?\s*#?|eln\s*#?|^|\D)(0*\d{3,4})(?:\D|$)/i);
+      return m?String(parseInt(m[1],10)):'';
+    }
+    function routeOnSite(entry){
+      const deep=[
+        entry?.scopeNotes,entry?.notes,entry?.notesText,entry?.deliveryNotes,entry?.cioRawOperationalNotes,
+        entry?.extendedOrderText,entry?.description,entry?.specialInstructions,
+        entry?.cioHistory,entry?.notesHistory,entry?.lineItems,entry?.extendedOrderRows,entry?.relatedOrders,
+        entry?._cioRaw
+      ];
+      const text=deep.map(v=>{
+        if(v===undefined||v===null)return '';
+        if(typeof v==='string')return v;
+        try{return JSON.stringify(v)}catch(_e){return String(v)}
+      }).join(' ').toLowerCase();
+      return /\bproduct\s+on\s+site\b|\bon\s*site\b|\bonsite\b|unit\s+(?:is\s+)?(?:at|in)\s+(?:the\s+)?(?:customer|home|house)|customer\s+(?:has|already\s+has)\s+(?:the\s+)?(?:unit|product|appliance)|product\s+(?:is\s+)?at\s+(?:the\s+)?(?:customer|home|house)/.test(text);
+    }
+    function storeKey(e){
+      const code=routeStoreCode(e);
+      if(code)return 'store:'+code;
+      const raw=e?.store||e?.storeName||(e?.isStoreStop?e?.category:'');
+      return raw?storeMemoryKey(raw):'';
+    }
     function precedenceOK(order){
-      const seen=new Set();for(const e of order){const sk=storeKey(e);if(e.isStoreStop){if(sk)seen.add(sk);continue}const hasStore=sk&&order.some(x=>x.isStoreStop&&storeKey(x)===sk);if(hasStore&&!seen.has(sk))return false}return true;
+      // RC118 law: each customer waits only for ITS Lowe's store, unless the ticket says On Site.
+      const allStoreKeys=new Set(order.filter(e=>e.isStoreStop).map(storeKey).filter(Boolean));
+      const visitedStores=new Set();
+      for(const e of order){
+        const sk=storeKey(e);
+        if(e.isStoreStop){if(sk)visitedStores.add(sk);continue}
+        if(routeOnSite(e))continue;
+        if(sk&&allStoreKeys.has(sk)&&!visitedStores.has(sk))return false;
+      }
+      return true;
     }
     function simulate(order,matrix,indexMap,startMs,dateIso){
       let t=startMs,drive=0,late=0,early=0,operationalPenalty=0,prev='__base__';const rows=[];
@@ -5514,20 +5837,41 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         const service=durationForEntry({...e,date:dateIso});t+=service*60000;rows.push({id:e.id,arrival,depart:t,driveSeconds:sec,distanceMeters:dist,durationMinutes:service,waitMinutes,storeRisk,lateMinutes:we?Math.max(0,Math.round((arrival-we)/60000)):0,earlyMinutes:ws?Math.max(0,Math.round((ws-arrival)/60000)):0});prev=String(e.id)
       }
       const saturdayPenalty=saturday?(late*60*12+operationalPenalty*60*8):0;
-      return {rows,drive,late,early,operationalPenalty,cost:drive+late*60*18+early*60*.18+operationalPenalty*60*10+saturdayPenalty,finish:t};
+      const precedencePenalty=precedenceOK(order)?0:1000000000;
+      return {rows,drive,late,early,operationalPenalty,cost:drive+late*60*18+early*60*.18+operationalPenalty*60*10+saturdayPenalty+precedencePenalty,finish:t};
     }
     function greedyOrder(list,matrix,indexMap,startMs,dateIso){
-      const remaining=[...list],order=[],visitedStores=new Set();let prev='__base__',t=startMs;
+      const remaining=[...list],order=[],visitedStores=new Set();
+      const allStoreKeys=new Set(list.filter(e=>e.isStoreStop).map(storeKey).filter(Boolean));
+      let prev='__base__',t=startMs;
       while(remaining.length){
-        const available=remaining.filter(e=>{if(e.isStoreStop)return true;const sk=storeKey(e),hasStop=sk&&list.some(x=>x.isStoreStop&&storeKey(x)===sk);return !hasStop||visitedStores.has(sk)});
-        const pool=available.length?available:remaining;let best=null,bestScore=Infinity;
+        const available=remaining.filter(e=>{
+          if(e.isStoreStop)return true;
+          if(routeOnSite(e))return true;
+          const sk=storeKey(e);
+          return !sk||!allStoreKeys.has(sk)||visitedStores.has(sk);
+        });
+        const pool=available.length?available:remaining.filter(e=>e.isStoreStop);
+        let best=null,bestScore=Infinity;
         for(const e of pool){
-          const sec=Number(matrix.durations?.[indexMap.get(prev)]?.[indexMap.get(String(e.id))]||0),arrival=t+sec*1000,ws=parseWindow(dateIso,e.timeStart),we=parseWindow(dateIso,e.timeEnd);
-          const late=we?Math.max(0,(arrival-we)/60000):0,early=ws?Math.max(0,(ws-arrival)/60000):0;let score=sec+late*60*22+early*60*.12;if(e.isStoreStop)score-=180;
+          const sec=Number(matrix.durations?.[indexMap.get(prev)]?.[indexMap.get(String(e.id))]||0);
+          const arrival=t+sec*1000,ws=parseWindow(dateIso,e.timeStart),we=parseWindow(dateIso,e.timeEnd);
+          const late=we?Math.max(0,(arrival-we)/60000):0,early=ws?Math.max(0,(ws-arrival)/60000):0;
+          const installMin=durationForEntry({...e,date:dateIso});
+          let score=sec+late*60*24+early*60*.10;
+          // Store gets a mild pickup preference, but not enough to force a second unrelated store before a nearer valid customer.
+          if(e.isStoreStop)score-=90;
+          // Prefer real customer work when equally efficient, because install duration and windows already advance the timeline.
+          if(!e.isStoreStop)score-=Math.min(45,installMin)*2;
           if(score<bestScore){bestScore=score;best=e}
         }
-        order.push(best);remaining.splice(remaining.indexOf(best),1);const sec=Number(matrix.durations?.[indexMap.get(prev)]?.[indexMap.get(String(best.id))]||0);
-        t+=sec*1000+durationForEntry(best)*60000;if(best.isStoreStop){const sk=storeKey(best);if(sk)visitedStores.add(sk)}prev=String(best.id)
+        if(!best)break;
+        order.push(best);
+        remaining.splice(remaining.indexOf(best),1);
+        const sec=Number(matrix.durations?.[indexMap.get(prev)]?.[indexMap.get(String(best.id))]||0);
+        t+=sec*1000+durationForEntry({...best,date:dateIso})*60000;
+        if(best.isStoreStop){const sk=storeKey(best);if(sk)visitedStores.add(sk)}
+        prev=String(best.id)
       }
       return order;
     }
@@ -5546,7 +5890,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       return leave;
     }
     function reasons(order,sim){
-      return order.slice(0,8).map((e,i)=>{const row=sim.rows[i];let why=e.isStoreStop?(i===0?'Es la primera tienda más conveniente desde Base de Jean y libera los trabajos asociados.':'Esta tienda queda antes de sus clientes para respetar la recogida del material.'):(row.lateMinutes>=15?`Se prioriza lo máximo posible, aunque la llegada sigue ${row.lateMinutes} min fuera de ventana.`:(e.timeEnd?`Equilibra cercanía con la ventana ${e.timeStart||''}${e.timeEnd?'–'+e.timeEnd:''} para evitar retrasos.`:'Reduce el desplazamiento desde la parada anterior.'));return {n:i+1,text:`${e.customerName||e.category||'Parada'}: ${why}`}})
+      return order.slice(0,8).map((e,i)=>{const row=sim.rows[i];let why=e.isStoreStop?`Se visita Lowe’s ${routeStoreCode(e)||''} antes de los clientes que dependen de esa tienda; otra tienda puede quedar más tarde si aún no hace falta.`:(routeOnSite(e)?`El ticket indica Product On Site / On Site, por eso puede ir antes de Lowe’s cuando reduce conducción o protege la ventana. El cálculo reserva ${row.durationMinutes} min de instalación.`:(row.lateMinutes>=15?`Se prioriza lo máximo posible, aunque la llegada sigue ${row.lateMinutes} min fuera de ventana. El cálculo incluye ${row.durationMinutes} min de instalación.`:(e.timeEnd?`Equilibra conducción, ventana ${e.timeStart||''}${e.timeEnd?'–'+e.timeEnd:''}, Lowe’s ${routeStoreCode(e)||'asociado'} y ${row.durationMinutes} min de instalación.`:`Reduce desplazamiento, respeta la tienda asociada y reserva ${row.durationMinutes} min para instalar.`)));return {n:i+1,text:`${e.customerName||e.category||'Parada'}: ${why}`}})
     }
     function signature(list){return list.map(e=>[e.id,e.address,e.store,e.timeStart,e.timeEnd,e.status].join('|')).join('~')}
     function setText(id,text){const el=document.getElementById(id);if(el)el.textContent=text}
@@ -5554,14 +5898,27 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     function renderAnalysis(a){
       setText('miruta-brain-state','Ruta recomendada');setText('miruta-plan-leave',fmtClock(a.leaveAt));setText('miruta-plan-wake',fmtClock(a.wakeAt));setText('miruta-plan-drive',fmtMinutes(a.sim.drive));setText('miruta-plan-finish',fmtClock(a.sim.finish));
       const saved=a.currentSim?Math.round((a.currentSim.drive-a.sim.drive)/60):0,lateDelta=a.currentSim?Math.round(a.currentSim.late-a.sim.late):0;
-      let s=`Salida recomendada desde Base de Jean a las ${fmtClock(a.leaveAt)}. La ruta estima ${fmtMinutes(a.sim.drive)} de conducción y terminar alrededor de las ${fmtClock(a.sim.finish)}.`;if(dateFromIso(a.dateIso).getDay()===6)s+=` 🖤 Saturday Black Day activo: Receiving cerrado, Customer Service de alto riesgo y margen conservador aplicado.`;if(saved>1)s+=` Ahorra aproximadamente ${saved} min de conducción frente al orden actual.`;if(lateDelta>0)s+=` Reduce cerca de ${lateDelta} min de retrasos acumulados.`;
+      const installMinutes=a.sim.rows.filter(r=>!a.order.find(e=>String(e.id)===String(r.id))?.isStoreStop).reduce((sum,r)=>sum+Number(r.durationMinutes||0),0);
+      let s=`Salida recomendada desde Base de Jean a las ${fmtClock(a.leaveAt)}. Cada Lowe’s queda antes de sus clientes dependientes; Product On Site puede adelantarse si mejora la ruta. La ruta estima ${fmtMinutes(a.sim.drive)} de conducción, ${Math.round(installMinutes)} min de instalación calculados con el modelo aprendido/configurado y terminar alrededor de las ${fmtClock(a.sim.finish)}.`;if(dateFromIso(a.dateIso).getDay()===6)s+=` 🖤 Saturday Black Day activo: Receiving cerrado, Customer Service de alto riesgo y margen conservador aplicado.`;if(saved>1)s+=` Ahorra aproximadamente ${saved} min de conducción frente al orden actual.`;if(lateDelta>0)s+=` Reduce cerca de ${lateDelta} min de retrasos acumulados.`;
       setText('miruta-plan-summary',s);const box=document.getElementById('miruta-route-reasons');if(box)box.innerHTML=a.reasons.map(x=>`<div class="miruta-route-reason"><i>${x.n}</i><span>${escapeHtml(x.text)}</span></div>`).join('');updateWakeUI(a)
     }
     async function analyze({autoApply=false,force=false}={}){
       if(planning)return lastAnalysis;const dateIso=routeDate(),list=jobs(dateIso);if(!list.length){renderEmpty();return null}planning=true;setText('miruta-brain-state','Calculando');
       try{
-        const base=await geocode(settings.baseAddress||DEFAULT_BASE),coords=[base],valid=[];
-        for(const e of list){const address=e.address||(e.isStoreStop?state.storeAddresses?.[storeKey(e)]:'');if(!address)continue;try{e._brainCoord=await geocode(address);coords.push(e._brainCoord);valid.push(e)}catch(_err){}}
+        // RC115 always starts route ordering from the configured Base de Jean and uses verified stop coordinates.
+        const base=await geocode(settings.baseAddress||DEFAULT_BASE),coords=[base],valid=[],rejected=[];
+        for(const e of list){
+          try{
+            e._brainCoord=await geocodeRouteEntry(e);
+            if(!e._brainCoord){rejected.push(e);continue}
+            coords.push(e._brainCoord);valid.push(e)
+          }catch(_err){rejected.push(e)}
+        }
+        if(valid.some(e=>!e.isStoreStop)&&valid.some(e=>e.isStoreStop)===false){
+          // No synthetic behavior here: if tickets require stores, RC71/bridge must create them before planning.
+        }
+        if(rejected.length)console.warn('INSTARA RC115 route geocode rejected',rejected.map(e=>({id:e.id,address:e.address,customer:e.customerName})));
+        try{persistEntries()}catch(_e){}
         if(!valid.length)throw new Error('No hay paradas con dirección localizable');const matrix=await table(coords),indexMap=new Map([['__base__',0]]);valid.forEach((e,i)=>indexMap.set(String(e.id),i+1));
         let roughStart=new Date(`${dateIso}T${dateFromIso(dateIso).getDay()===6?'08:00:00':'07:30:00'}`).getTime();if(dateIso===todayISO())roughStart=Math.max(roughStart,Date.now());const greedy=greedyOrder(valid,matrix,indexMap,roughStart,dateIso),improved=improve(greedy,matrix,indexMap,roughStart,dateIso);let leaveAt=recommendedDeparture(improved.order,matrix,indexMap,dateIso);if(dateIso===todayISO())leaveAt=Math.max(leaveAt,Date.now());const finalSim=simulate(improved.order,matrix,indexMap,leaveAt,dateIso),wakeAt=leaveAt-(Number(settings.prepMinutes)||60)*60000,currentValid=list.filter(e=>indexMap.has(String(e.id))),currentSim=precedenceOK(currentValid)?simulate(currentValid,matrix,indexMap,leaveAt,dateIso):null;
         const a={dateIso,order:improved.order,sim:finalSim,currentSim,matrix,indexMap,leaveAt,wakeAt,reasons:reasons(improved.order,finalSim)};lastAnalysis=a;recommendedPlan=a.order.map(e=>String(e.id));saveJSON(PLAN_KEY_PREFIX+dateIso,{ids:recommendedPlan,leaveAt,wakeAt,createdAt:Date.now()});renderAnalysis(a);scheduleWake(a,false);
@@ -6013,12 +6370,49 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   function keyOf(e){return String(e.cioOrderId||e.orderViewId||e.cioJobNumber||e.jobNumber||e.po||e.purchaseOrderNumber||e.eventId||e.cioEventId||'')}
   function isoDate(v){if(!v)return '';const raw=String(v).trim();const direct=raw.match(/^(\d{4}-\d{2}-\d{2})/);if(direct)return direct[1];const m=raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;const d=new Date(raw);return Number.isNaN(d.getTime())?'':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
   function observedStatus(j){const text=[j.imsStatus,j.jobStatus,j.raw?.barColor,j.laborCategory].filter(Boolean).join(' ').toLowerCase();if(j.confirmed)return 'pending';if(/payment received|past paid|paid/.test(text))return 'paid';if(/closed|complete|completed|work_complete/.test(text))return 'completed';if(/cancel|void|declin/.test(text))return 'cancelled';return 'observed'}
-  function virtualJob(j){const status=observedStatus(j),fallbackId=String(j.orderViewId||j.eventId||j.text||'').trim();return {_cioObserved:true,_cioRaw:j,cioOrderId:String(j.orderViewId||''),cioEventId:String(j.eventId||''),date:isoDate(j.scheduledDate||j.start),type:'income',status,displayStatus:statusName[status],customerName:j.customerName||j.eventCustomer||(fallbackId?`Ticket Mega #${fallbackId}`:'Ticket Mega sin identidad'),category:j.laborCategory||j.eventService||'Servicio pendiente de detalle',service:j.laborCategory||j.eventService||'Servicio pendiente de detalle',storeNumber:String(j.storeNumber||''),store:j.storeNumber?'Store '+String(j.storeNumber).replace(/^0+/,''):(j.sellerName||''),po:j.purchaseOrderNumber||'',windowStart:j.start||'',scheduledStart:j.start||'',time:j.start||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',jobNumber:j.jobNumber||'',projectNumber:j.projectNumber||'',invoiceNumber:j.invoiceNumber||'',imsStatus:j.imsStatus||'',jobStatus:j.jobStatus||'',purchaseOrderAmount:Number(j.purchaseOrderAmount||0),lineItems:j.lineItems||[],relatedOrders:j.relatedOrders||[],deliveryNotes:j.deliveryNotes||'',scopeNotes:j.scopeNotes||'',notesText:j.notesText||'',notesHistory:j.notesHistory||[],haulAway:j.haulAway===true||/haul\s*away/i.test([j.extendedOrderText,...(j.lineItems||[]).map(x=>x.description||'')].filter(Boolean).join(' | ')),extendedOrderText:j.extendedOrderText||'',extendedOrderRows:j.extendedOrderRows||[],detailError:j.detailError||''}}
+  function virtualJob(j){const status=observedStatus(j),fallbackId=String(j.orderViewId||j.eventId||j.text||'').trim();return {_cioObserved:true,_cioRaw:j,cioOrderId:String(j.orderViewId||''),cioEventId:String(j.eventId||''),date:isoDate(j.scheduledDate||j.start),type:'income',status,displayStatus:statusName[status],customerName:j.customerName||j.eventCustomer||(fallbackId?`Ticket Mega #${fallbackId}`:'Ticket Mega sin identidad'),category:j.laborCategory||j.eventService||'Servicio pendiente de detalle',service:j.laborCategory||j.eventService||'Servicio pendiente de detalle',storeNumber:String(j.storeNumber||''),store:j.storeNumber?'Store '+String(j.storeNumber).replace(/^0+/,''):(j.sellerName||''),po:j.purchaseOrderNumber||'',windowStart:j.start||'',scheduledStart:j.start||'',time:j.start||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',jobNumber:j.jobNumber||'',projectNumber:j.projectNumber||'',invoiceNumber:j.invoiceNumber||'',imsStatus:j.imsStatus||'',jobStatus:j.jobStatus||'',purchaseOrderAmount:Number(j.purchaseOrderAmount||0),lineItems:j.lineItems||[],relatedOrders:j.relatedOrders||[],deliveryNotes:j.deliveryNotes||'',scopeNotes:j.scopeNotes||'',notesText:j.notesText||'',notesHistory:j.notesHistory||[],haulAway:j.haulAway===true||/haul\s*away/i.test([j.extendedOrderText,...(j.lineItems||[]).map(x=>x.description||'')].filter(Boolean).join(' | ')),extendedOrderText:j.extendedOrderText||'',extendedOrderRows:j.extendedOrderRows||[],detailError:j.detailError||'',isStoreStop:j.isStoreStop===true,instaraAutoStore:j.instaraAutoStore===true,instaraDraftOnly:j.instaraDraftOnly===true}}
+  function isExplicitCalendarStoreStop(e){
+    if(!e)return false;
+
+    // First trust explicit internal identity.
+    if(e.isStoreStop===true||e.instaraAutoStore===true||e.instaraDraftOnly===true)return true;
+    if(/^instara_store_/i.test(String(e.id||'')))return true;
+
+    // Observed CiO/Schedule rows can arrive without INSTARA's synthetic flags.
+    // Detect ONLY a structural operational store event, never a real customer ticket
+    // merely because seller/store fields mention Lowe's.
+    const raw=e._cioRaw||{};
+    const eventIdentity=String(
+      raw.eventCustomer||raw.customerName||e.customerName||raw.text||''
+    ).trim();
+    const eventService=String(
+      raw.eventService||raw.laborCategory||e.service||e.category||''
+    ).trim();
+
+    const customerEvidence=[
+      raw.customerAddress,e.address,
+      raw.customerPhone,e.phone,
+      raw.customerEmail,e.email,
+      raw.purchaseOrderNumber,e.po,
+      raw.jobNumber,e.jobNumber,
+      raw.projectNumber,e.projectNumber
+    ].some(v=>String(v||'').trim());
+
+    const explicitStoreIdentity=/^\s*lowe'?s(?:\s+store)?\s*#?\s*\d{3,4}\s*$/i.test(eventIdentity)
+      || /^\s*lowe'?s\s+store\s+\d{3,4}\s*$/i.test(eventService)
+      || /^\s*store\s+stop\s+\d{3,4}\s*$/i.test(eventService);
+
+    return e._cioObserved===true && explicitStoreIdentity && !customerEvidence;
+  }
+
+  function isCalendarWork(e){
+    return !!e && !isExplicitCalendarStoreStop(e);
+  }
   function dayRows(day){
     const sunday=/^\d{4}-\d{2}-\d{2}$/.test(String(day||''))&&new Date(day+'T12:00:00').getDay()===0;
-    const active=rows().filter(e=>e.date===day&&e.type==='income'&&e.status!=='missing_price'&&(!sunday||e.manualRouteOverride===true));
+    const active=rows().filter(e=>e.date===day&&e.type==='income'&&e.status!=='missing_price'&&isCalendarWork(e)&&(!sunday||e.manualRouteOverride===true));
     const keys=new Set(active.map(keyOf).filter(Boolean));
-    const observed=sunday?[]:(load(OBSERVED_KEY,[])||[]).map(virtualJob).filter(e=>e.date===day&&(!keyOf(e)||!keys.has(keyOf(e))));
+    const observed=sunday?[]:(load(OBSERVED_KEY,[])||[]).map(virtualJob).filter(e=>e.date===day&&isCalendarWork(e)&&(!keyOf(e)||!keys.has(keyOf(e))));
     return [...active,...observed].sort((a,b)=>String(a.windowStart||a.scheduledStart||a.time||'99:99').localeCompare(String(b.windowStart||b.scheduledStart||b.time||'99:99')));
   }
   function iso(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
@@ -6360,7 +6754,7 @@ body button,body input,body select,body textarea{font-size:18px!important;line-h
   .route-header-row{grid-template-columns:38px minmax(0,1fr) auto 38px!important}.drag-handle{display:none!important}.route-expand-toggle{grid-column:4!important}.route-order{grid-column:1!important}
   .route-amount{grid-column:3!important;grid-row:1!important}.route-customer-wrap{grid-column:2!important}
   .bottom-nav .nav-item{min-width:68px!important}
-  .miruta-nav-top{grid-template-columns:minmax(0,1fr) auto!important}.miruta-nav-distance,.miruta-nav-speed{min-width:86px!important}.miruta-nav-top #nav-close-btn,.miruta-nav-top #nav-search-btn{grid-row:2!important}
+  .miruta-nav-top{grid-template-columns:minmax(0,1fr) auto!important}.miruta-nav-distance,.miruta-nav-speed{min-width:86px!important}.miruta-nav-top #nav-search-btn{grid-row:2!important}
   #instara-avatar{width:62px;height:62px}
 }
 </style>
@@ -8109,46 +8503,6 @@ window.InstaraRC98={repairImportedDetails,forceRecalculate};
 </script>
 
 
-<style id="instara-rc99-navigation-ticket-time-css">
-/* Apple/Google-like floating navigation window. */
-body.miruta-nav-open .bottom-nav{display:none!important}
-body.miruta-nav-open #instara-copilot{display:none!important}
-#miruta-nav-panel{
-  inset:calc(env(safe-area-inset-top) + 8px) 8px calc(env(safe-area-inset-bottom) + 8px)!important;
-  width:auto!important;height:auto!important;border-radius:30px!important;overflow:hidden!important;
-  border:1px solid rgba(255,255,255,.25)!important;box-shadow:0 28px 90px rgba(0,0,0,.72)!important;
-  background:#080d10!important;
-  display:grid!important;grid-template-rows:auto minmax(280px,1fr) auto!important;
-}
-#miruta-nav-panel[hidden]{display:none!important}
-.miruta-nav-top{padding:10px 12px!important;grid-template-columns:minmax(0,1fr) auto auto!important;min-height:76px!important}
-.miruta-nav-top #nav-search-btn{display:none!important}
-.miruta-nav-top #nav-close-btn{display:grid!important;width:42px!important;height:42px!important;grid-column:3!important;grid-row:1!important}
-.miruta-nav-distance{min-width:72px!important;padding:8px!important}.miruta-nav-distance b{font-size:22px!important}.miruta-nav-distance small{display:none!important}
-.miruta-nav-speed{position:absolute!important;left:14px!important;bottom:148px!important;z-index:8!important;width:70px!important;height:70px!important;border-radius:50%!important;background:rgba(5,10,14,.88)!important;box-shadow:0 8px 24px rgba(0,0,0,.4)!important}
-.miruta-nav-speed b{font-size:23px!important}.miruta-nav-speed small{font-size:11px!important}
-#miruta-nav-map{min-height:45vh!important}
-.miruta-nav-bottom{padding:10px 12px 12px!important;background:rgba(5,10,14,.97)!important}
-.miruta-nav-client{margin-bottom:6px!important}.miruta-nav-client small{font-size:12px!important}.miruta-nav-client b{font-size:21px!important}
-.miruta-nav-eta{margin:0 0 8px!important;padding:9px 11px!important;font-size:14px!important}.miruta-nav-eta b{font-size:16px!important}
-.miruta-nav-actions{display:flex!important;justify-content:center!important;gap:9px!important}
-.miruta-nav-actions button{
-  width:48px!important;height:48px!important;min-height:48px!important;flex:0 0 48px!important;border-radius:50%!important;
-  padding:0!important;font-size:23px!important;line-height:1!important;background:rgba(255,255,255,.09)!important;
-  border:1px solid rgba(255,255,255,.22)!important;color:#fff!important;
-}
-#nav-complete-btn{background:#20a65a!important;border-color:#54db8a!important}
-#nav-next-btn{background:#0A84FF!important;border-color:#58a6ff!important}
-#nav-end-btn{background:rgba(255,90,80,.18)!important;border-color:rgba(255,110,100,.5)!important}
-#nav-center-btn,#nav-satellite-btn,#nav-voice-btn{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif!important}
-.instara-ticket-detail-modal{z-index:16000!important;align-items:center!important;padding:12px!important}
-.instara-ticket-detail-modal>div{border-radius:24px!important;background:#071017!important;border:1px solid rgba(255,255,255,.24)!important}
-@media(max-width:520px){
-  #miruta-nav-panel{inset:calc(env(safe-area-inset-top) + 4px) 4px calc(env(safe-area-inset-bottom) + 4px)!important;border-radius:24px!important}
-  #miruta-nav-map{min-height:43vh!important}
-  .miruta-nav-actions{gap:7px!important}.miruta-nav-actions button{width:45px!important;height:45px!important;flex-basis:45px!important}
-}
-</style>
 <script id="instara-rc99-runtime-law">
 (function(){
 'use strict';
@@ -8264,90 +8618,6 @@ window.InstaraRC99={strictCompletionRepair,repairDetails,recalcClock};
 </button>
 
 
-<style id="instara-rc100-fullscreen-gps">
-body.miruta-nav-open{overflow:hidden!important}
-body.miruta-nav-open .bottom-nav,
-body.miruta-nav-open #instara-copilot,
-body.miruta-nav-open #instara-gps-resume-btn{display:none!important}
-
-#miruta-nav-panel{
-  position:fixed!important;
-  inset:0!important;
-  width:100vw!important;
-  height:100dvh!important;
-  max-width:none!important;
-  transform:none!important;
-  border:0!important;
-  border-radius:0!important;
-  box-shadow:none!important;
-  background:#081014!important;
-  display:grid!important;
-  grid-template-rows:auto minmax(0,1fr) auto!important;
-  overflow:hidden!important;
-  z-index:20000!important;
-}
-#miruta-nav-panel[hidden]{display:none!important}
-#miruta-nav-map{width:100%!important;height:100%!important;min-height:0!important}
-.miruta-nav-top{
-  position:absolute!important;left:0!important;right:0!important;top:0!important;z-index:10!important;
-  padding:calc(10px + env(safe-area-inset-top)) 12px 10px!important;
-  background:linear-gradient(180deg,rgba(3,8,11,.94),rgba(3,8,11,.72),transparent)!important;
-  border:0!important;
-  grid-template-columns:minmax(0,1fr) auto auto auto auto!important;
-  gap:8px!important;
-  pointer-events:none;
-}
-.miruta-nav-top>*{pointer-events:auto}
-.miruta-nav-instruction{
-  background:rgba(5,12,16,.88)!important;border:1px solid rgba(255,255,255,.18)!important;
-  border-radius:20px!important;padding:10px 13px!important;box-shadow:0 12px 34px rgba(0,0,0,.35)!important;
-}
-.miruta-nav-instruction b{font-size:22px!important}
-.miruta-nav-distance,.miruta-nav-speed{
-  background:rgba(5,12,16,.88)!important;border:1px solid rgba(255,255,255,.18)!important;
-  box-shadow:0 12px 34px rgba(0,0,0,.35)!important;
-}
-#nav-search-btn,#nav-background-btn,#nav-close-btn{
-  width:44px!important;height:44px!important;border-radius:50%!important;
-  border:1px solid rgba(255,255,255,.25)!important;background:rgba(5,12,16,.88)!important;
-  color:#fff!important;font-size:19px!important;display:grid!important;place-items:center!important;
-  box-shadow:0 12px 34px rgba(0,0,0,.35)!important;
-}
-#nav-background-btn{font-size:21px!important}
-#nav-close-btn{background:rgba(70,15,16,.82)!important}
-#nav-search-bar{position:absolute!important;left:10px!important;right:10px!important;top:calc(72px + env(safe-area-inset-top))!important;z-index:15!important;border-radius:18px!important}
-.miruta-nav-bottom{
-  position:absolute!important;left:8px!important;right:8px!important;bottom:calc(8px + env(safe-area-inset-bottom))!important;
-  z-index:10!important;border-radius:24px!important;padding:11px!important;
-  background:rgba(5,12,16,.91)!important;border:1px solid rgba(255,255,255,.18)!important;
-  box-shadow:0 18px 46px rgba(0,0,0,.5)!important;backdrop-filter:blur(24px)!important;
-}
-.miruta-nav-client b{font-size:19px!important}
-.miruta-nav-actions{display:flex!important;justify-content:center!important;gap:8px!important}
-.miruta-nav-actions button{width:46px!important;height:46px!important;min-height:46px!important;flex:0 0 46px!important;border-radius:50%!important}
-.miruta-nav-speed{
-  position:absolute!important;left:12px!important;bottom:calc(188px + env(safe-area-inset-bottom))!important;
-  width:68px!important;height:68px!important;border-radius:50%!important;z-index:11!important;
-}
-#instara-gps-resume-btn{
-  position:fixed;right:14px;bottom:calc(92px + env(safe-area-inset-bottom));z-index:9998;
-  display:flex;align-items:center;gap:9px;max-width:min(72vw,320px);
-  border:1px solid rgba(88,166,255,.6);border-radius:999px;padding:8px 13px 8px 8px;
-  background:rgba(4,12,18,.92);color:#fff;box-shadow:0 16px 42px rgba(0,0,0,.45);
-  backdrop-filter:blur(20px);
-}
-#instara-gps-resume-btn[hidden]{display:none!important}
-.gps-resume-icon{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#0A84FF;font-size:20px}
-.gps-resume-copy{min-width:0;text-align:left}.gps-resume-copy b,.gps-resume-copy small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gps-resume-copy b{font-size:13px;color:#fff}.gps-resume-copy small{font-size:10px;color:rgba(255,255,255,.65)}
-@media(max-width:600px){
-  .miruta-nav-top{grid-template-columns:minmax(0,1fr) auto auto!important}
-  .miruta-nav-speed{display:none!important}
-  #nav-search-btn{display:none!important}
-  .miruta-nav-distance{min-width:66px!important}
-  .miruta-nav-instruction b{font-size:19px!important}
-}
-</style>
 <script id="instara-rc100-resume-bootstrap">
 (function(){
 'use strict';
@@ -9268,25 +9538,72 @@ window.InstaraRC108={refreshFinance,install};
 .miruta-nav-panel{position:fixed!important;inset:0!important;z-index:15000!important;background:#0c0e10!important;display:block!important;padding:0!important;overflow:hidden!important}
 #miruta-nav-map{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;z-index:1!important}
 
-#nav-close-btn{position:absolute;top:calc(env(safe-area-inset-top) + 12px);left:14px;z-index:20;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:rgba(20,22,24,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:#fff;font-size:16px;display:grid;place-items:center;box-shadow:0 6px 18px rgba(0,0,0,.35)}
 
 .miruta-nav-instruction-card{
-  position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:64px;right:14px;z-index:15;
-  background:rgba(18,20,22,.86);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
-  border-radius:20px;border:1px solid rgba(255,255,255,.14);box-shadow:0 10px 30px rgba(0,0,0,.4);
-  overflow:hidden;transition:transform .35s cubic-bezier(.25,1,.4,1),opacity .3s ease;
+  position:absolute;
+  top:0;left:0;right:0;z-index:15;
+  width:100%;margin:0;
+  background:linear-gradient(180deg,rgba(75,75,73,.72),rgba(59,59,57,.64));
+  backdrop-filter:blur(32px) saturate(155%);
+  -webkit-backdrop-filter:blur(32px) saturate(155%);
+  border:0;
+  border-bottom:1px solid rgba(255,255,255,.20);
+  border-radius:0 0 34px 34px;
+  box-shadow:0 16px 46px rgba(0,0,0,.28);
+  overflow:hidden;
+  transition:transform .35s cubic-bezier(.22,1,.36,1),opacity .3s ease;
 }
-.miruta-nav-instruction-main{display:flex;align-items:center;gap:14px;padding:16px 16px}
-.miruta-nav-turn-icon{font-size:34px;line-height:1;flex:0 0 auto;width:44px;text-align:center}
-.miruta-nav-turn-icon.sm{font-size:20px;width:28px}
-.miruta-nav-instruction-text{min-width:0;flex:1}
-.miruta-nav-instruction-text small{display:block;color:rgba(255,255,255,.55);font-size:11px;letter-spacing:.6px;text-transform:uppercase;font-weight:700;margin-bottom:2px}
-.miruta-nav-instruction-text b{display:block;font-size:22px;line-height:1.15;font-weight:800;color:#fff}
-.miruta-nav-instruction-text span{display:block;font-size:13px;color:rgba(255,255,255,.6);margin-top:2px}
-.miruta-nav-instruction-next{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.55);font-size:14px}
+.miruta-nav-instruction-main{
+  display:grid;
+  grid-template-columns:68px minmax(0,1fr);
+  align-items:center;
+  gap:14px;
+  min-height:152px;
+  padding:calc(env(safe-area-inset-top) + 18px) 24px 20px;
+}
+.miruta-nav-turn-icon{
+  font-size:52px;
+  line-height:1;
+  width:68px;
+  text-align:center;
+  color:#fff;
+  filter:drop-shadow(0 3px 10px rgba(0,0,0,.24));
+}
+.miruta-nav-turn-icon.sm{font-size:31px;width:46px}
+.miruta-nav-instruction-text{min-width:0}
+.miruta-nav-instruction-text small{display:none!important}
+.miruta-nav-instruction-text b{
+  display:block;
+  font-size:clamp(31px,7.4vw,46px);
+  line-height:1.02;
+  font-weight:860;
+  letter-spacing:-1.15px;
+  color:#fff;
+  text-shadow:0 2px 10px rgba(0,0,0,.22);
+}
+.miruta-nav-instruction-text span{
+  display:block;
+  font-size:clamp(18px,4.2vw,24px);
+  font-weight:720;
+  color:rgba(255,255,255,.72);
+  margin-top:9px;
+}
+.miruta-nav-instruction-next{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  min-height:82px;
+  padding:15px 24px 18px;
+  border-top:1px solid rgba(255,255,255,.14);
+  background:rgba(40,40,39,.22);
+  color:rgba(255,255,255,.72);
+  font-size:clamp(20px,4.8vw,28px);
+  font-weight:760;
+}
+.miruta-nav-instruction-next[hidden]{display:none!important}
 
 .miruta-nav-float-rail{
-  position:absolute;top:150px;right:14px;z-index:14;display:flex;flex-direction:column;gap:10px;
+  position:absolute;top:calc(env(safe-area-inset-top) + 252px);right:14px;z-index:14;display:flex;flex-direction:column;gap:10px;
 }
 .miruta-nav-float-rail button{
   width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.22);
@@ -9390,15 +9707,43 @@ window.InstaraRC108={refreshFinance,install};
 #nav-inline-search .sugg-empty{padding:12px 14px;color:rgba(255,255,255,.55);font-size:14px}
 
 /* --- lista de paradas numeradas y reordenables, dentro del GPS --- */
-.miruta-nav-stoplist{display:flex;flex-direction:column;gap:6px;margin-bottom:10px;max-height:0;opacity:0;overflow:hidden;transition:max-height .3s ease,opacity .25s ease}
-.miruta-nav-sheet[data-state="expanded"] .miruta-nav-stoplist{max-height:260px;opacity:1;overflow-y:auto}
-.nav-stop-row{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:9px 10px;touch-action:none}
-.nav-stop-row.current{border-color:rgba(255,208,90,.55);background:rgba(255,208,90,.1)}
-.nav-stop-row.dragging{opacity:.5;box-shadow:0 10px 24px rgba(0,0,0,.4)}
-.nav-stop-handle{font-size:17px;color:rgba(255,255,255,.5);flex:0 0 auto;padding:2px 4px;cursor:grab}
-.nav-stop-order{width:24px;height:24px;border-radius:50%;background:rgba(88,166,255,.28);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
-.nav-stop-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;font-size:14px;font-weight:600}
-.nav-stop-remove{width:26px;height:26px;border-radius:50%;border:none;background:rgba(255,80,80,.22);color:#ff9a92;font-size:13px;flex:0 0 auto}
+.miruta-nav-stoplist{
+  display:flex;flex-direction:column;gap:7px;margin-bottom:10px;max-height:0;opacity:0;overflow:hidden;
+  transition:max-height .28s cubic-bezier(.22,1,.36,1),opacity .20s ease;
+  touch-action:pan-y;overscroll-behavior:contain;scroll-behavior:smooth
+}
+.miruta-nav-sheet[data-state="expanded"] .miruta-nav-stoplist{
+  max-height:min(44vh,430px);opacity:1;overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;
+  scrollbar-width:none
+}
+.miruta-nav-sheet[data-state="expanded"] .miruta-nav-stoplist::-webkit-scrollbar{display:none}
+.nav-stop-row{
+  display:grid;grid-template-columns:30px 28px minmax(0,1fr) 30px;align-items:center;gap:9px;
+  min-height:54px;background:linear-gradient(135deg,rgba(255,255,255,.10),rgba(255,255,255,.055));
+  border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:9px 9px;
+  touch-action:pan-y;will-change:transform;cursor:grab;
+  -webkit-user-select:none;user-select:none;
+  transition:transform .18s cubic-bezier(.22,1,.36,1),box-shadow .18s ease,opacity .16s ease
+}
+.nav-stop-row:active{cursor:grabbing}
+.nav-stop-row .nav-stop-name,.nav-stop-row .nav-stop-order,.nav-stop-row .nav-stop-handle{pointer-events:none}
+.nav-stop-row.current{border-color:rgba(255,208,90,.62);background:linear-gradient(135deg,rgba(255,208,90,.16),rgba(255,255,255,.06))}
+.nav-stop-handle{
+  width:30px;height:34px;display:grid;place-items:center;font-size:20px;color:rgba(255,255,255,.58);
+  cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none
+}
+.nav-stop-handle:active{cursor:grabbing}
+.nav-stop-order{width:28px;height:28px;border-radius:50%;background:#0A84FF;color:#fff;font-size:12px;font-weight:850;display:flex;align-items:center;justify-content:center}
+.nav-stop-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;font-size:14px;font-weight:720}
+.nav-stop-remove{width:30px;height:30px;border-radius:50%;border:none;background:rgba(255,80,80,.17);color:#ff9a92;font-size:13px}
+#nav-stoplist.is-sorting .nav-stop-row:not(.sortable-chosen){transition:transform .16s cubic-bezier(.22,1,.36,1)!important}
+.nav-stop-row.sortable-chosen{
+  z-index:50;transform:scale(1.025) rotate(-.25deg)!important;
+  box-shadow:0 24px 60px rgba(0,0,0,.52),0 0 0 2px rgba(10,132,255,.50)!important
+}
+.nav-stop-row.sortable-drag{opacity:.98!important}
+.nav-stop-row.sortable-ghost{opacity:.16!important;transform:scale(.97)!important}
 </style>
 <script id="instara-rc109-work-clock">
 (function(){
@@ -9406,7 +9751,7 @@ window.InstaraRC108={refreshFinance,install};
 
 const VERSION='RC109';
 const KEY='instara-work-clock-v1';
-const GEO_KEY='miruta-route-geocache-v2';
+const GEO_KEY='miruta-route-geocache-v3';
 const SETTINGS_KEY='miruta-route-brain-settings-v1';
 const DEFAULT_BASE='6451 Archcrest Dr, Roanoke, VA 24019';
 const HOME_RADIUS_M=180;
@@ -9795,6 +10140,77 @@ function auditCalendarSummary(){
 }
 
 window.InstaraRC114={auditCalendarSummary};
+})();
+</script>
+
+
+<script id="instara-rc118-associated-store-onsite-law">
+(function(){
+'use strict';
+const VERSION='RC118';
+function storeCode(e){
+  const raw=[e?.storeNumber,e?.sellerStoreNumber,e?.store,e?.storeName,e?.category,e?._cioRaw?.storeNumber,e?._cioRaw?.sellerStoreNumber,e?._cioRaw?.store,e?._cioRaw?.storeName].filter(Boolean).join(' ');
+  const m=raw.match(/(?:store\s*#?|lowe'?s?\s*#?|eln\s*#?|^|\D)(0*\d{3,4})(?:\D|$)/i);
+  return m?String(parseInt(m[1],10)):'';
+}
+function onSite(e){
+  const vals=[e?.scopeNotes,e?.notes,e?.notesText,e?.deliveryNotes,e?.cioRawOperationalNotes,e?.extendedOrderText,e?.description,e?.specialInstructions,e?.cioHistory,e?.notesHistory,e?.lineItems,e?.extendedOrderRows,e?.relatedOrders,e?._cioRaw];
+  const text=vals.map(v=>{if(v==null)return '';if(typeof v==='string')return v;try{return JSON.stringify(v)}catch(_e){return String(v)}}).join(' ').toLowerCase();
+  return /\bproduct\s+on\s+site\b|\bon\s*site\b|\bonsite\b|unit\s+(?:is\s+)?(?:at|in)\s+(?:the\s+)?(?:customer|home|house)|customer\s+(?:has|already\s+has)\s+(?:the\s+)?(?:unit|product|appliance)|product\s+(?:is\s+)?at\s+(?:the\s+)?(?:customer|home|house)/.test(text);
+}
+function validate(order){
+  const stores=new Set((order||[]).filter(e=>e?.isStoreStop).map(storeCode).filter(Boolean));
+  const visited=new Set();
+  for(const e of order||[]){
+    const code=storeCode(e);
+    if(e?.isStoreStop){if(code)visited.add(code);continue}
+    if(onSite(e))continue;
+    if(code&&stores.has(code)&&!visited.has(code))return {ok:false,entry:e,store:code};
+  }
+  return {ok:true};
+}
+function install(){
+  const brain=window.MirutaRouteBrain;
+  if(!brain||brain.__instaraRC118)return false;
+  brain.__instaraRC118=true;
+  const originalAnalyze=brain.analyze?.bind(brain);
+  if(originalAnalyze)brain.analyze=async function(options={}){
+    const result=await originalAnalyze(options);
+    const check=validate(result?.order||[]);
+    if(!check.ok)throw new Error(`RC118 bloqueó ${check.entry?.customerName||'un cliente'} antes de su Lowe's ${check.store}.`);
+    try{window.MirutaSchedule?.recalculate?.(true)}catch(_e){}
+    try{window.MirutaNav?.refreshRoute?.()}catch(_e){}
+    return result;
+  };
+  return true;
+}
+document.addEventListener('DOMContentLoaded',()=>setTimeout(install,900));
+setTimeout(install,1500);
+window.InstaraRC118={version:VERSION,storeCode,onSite,validate,install};
+})();
+</script>
+
+
+<script id="instara-rc123-calendar-structural-store-filter">
+(function(){
+'use strict';
+const VERSION='RC123';
+function audit(date){
+  try{
+    const observed=JSON.parse(localStorage.getItem('instara-cio-observed-jobs-v2')||'[]');
+    const rows=window.InstaraSchedule?.dayRows?.(date)||[];
+    return {
+      version:VERSION,
+      date,
+      calendarJobs:rows.length,
+      observedRows:Array.isArray(observed)?observed.length:0,
+      visibleStoreStops:rows.filter(e=>e?.isStoreStop===true||e?.instaraAutoStore===true||/^instara_store_/i.test(String(e?.id||''))).length
+    };
+  }catch(_e){
+    return {version:VERSION,date,calendarJobs:0,observedRows:0,visibleStoreStops:-1};
+  }
+}
+window.InstaraRC123={audit};
 })();
 </script>
 
