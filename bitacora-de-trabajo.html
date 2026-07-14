@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC132">
+  <meta name="instara-ai-version" content="RC133">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2418,9 +2418,34 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       ['event',item?.cioEventId||item?.eventId],
       ['project',item?.cioProjectNumber||item?.projectNumber]
     ];
-    return pairs
+    const tokens=pairs
       .filter(([,value])=>String(value||'').trim())
       .map(([kind,value])=>kind+':'+String(value).trim().toLowerCase());
+
+    const normValue=value=>String(value||'')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g,'')
+      .replace(/[^a-z0-9]/g,'');
+    const day=String(item?.date||item?.scheduledDate||item?.start||'').match(/20\d{2}-\d{2}-\d{2}/)?.[0]||'';
+    const customer=normValue(item?.customerName||item?.eventCustomer||item?.customer||item?.clientName);
+    const address=normValue(item?.address||item?.customerAddress);
+    const phone=normValue(item?.phone||item?.customerPhone);
+    const store=normValue(item?.storeNumber||item?.sellerStoreNumber||item?.store);
+    const service=normValue(item?.category||item?.service||item?.laborCategory||item?.eventService);
+
+    if(day&&customer.length>=4&&address.length>=8){
+      tokens.push(`fpca:${day}|${customer}|${address}`);
+      if(service)tokens.push(`fpcas:${day}|${customer}|${address}|${service}`);
+    }
+    if(day&&customer.length>=4&&phone.length>=7){
+      tokens.push(`fpcp:${day}|${customer}|${phone}`);
+    }
+    if(day&&customer.length>=4&&store&&service){
+      tokens.push(`fpcss:${day}|${customer}|${store}|${service}`);
+    }
+
+    return [...new Set(tokens)];
   }
 
   function isMegaEntry(entry){
@@ -2513,10 +2538,24 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     state.entries=dedupeMegaRecords(state.entries);
     const after=state.entries.length;
     if(before!==after){
-      console.warn('INSTARA RC131 deduplicated wl:entries',{before,after,removed:before-after});
+      console.warn('INSTARA RC133 deduplicated wl:entries',{before,after,removed:before-after});
     }
     return {before,after,removed:before-after};
   }
+
+  function canonicalStateDay(dateIso){
+    canonicalizeStateEntries();
+    return state.entries.filter(entry=>entry?.date===dateIso);
+  }
+
+  window.InstaraMegaCanonical={
+    tokens:megaIdentityTokens,
+    isMega:isMegaEntry,
+    merge:mergeRichRecord,
+    dedupe:dedupeMegaRecords,
+    canonicalizeStateEntries,
+    stateDay:canonicalStateDay
+  };
 
   async function loadState(){
     try{
@@ -3197,8 +3236,8 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
 
   // ---------- RC119: una sola fuente de verdad para el orden Ruta ↔ GPS ----------
   function routeDayStops(dateIso){
-    return state.entries
-      .filter(e=> e.type==='income' && e.date===dateIso && e.status !== 'missing_price' && !e.isFinanceOnly && e.routeExcluded!==true)
+    return window.InstaraMegaCanonical.stateDay(dateIso)
+      .filter(e=> e.type==='income' && e.status !== 'missing_price' && !e.isFinanceOnly && e.routeExcluded!==true)
       .sort((a,b)=> (a.order ?? 9999) - (b.order ?? 9999));
   }
 
@@ -4832,7 +4871,9 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   function premiumHaptic(pattern){ try{ if(navigator.vibrate) navigator.vibrate(pattern || 10); }catch(_e){} }
   function getTodayRouteEntries(){
     const iso=todayISO();
-    return state.entries.filter(e=>e.type==='income'&&e.date===iso&&e.status!=='missing_price'&&!e.isFinanceOnly).sort((a,b)=>(a.order??9999)-(b.order??9999));
+    return window.InstaraMegaCanonical.stateDay(iso)
+      .filter(e=>e.type==='income'&&e.status!=='missing_price'&&!e.isFinanceOnly)
+      .sort((a,b)=>(a.order??9999)-(b.order??9999));
   }
   function updatePremiumDashboard(){
     const jobs=getTodayRouteEntries();
@@ -6974,17 +7015,17 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   }
   function dayRows(day){
     const sunday=/^\d{4}-\d{2}-\d{2}$/.test(String(day||''))&&new Date(day+'T12:00:00').getDay()===0;
-    const active=dedupeMegaRecords(rows().filter(e=>e.date===day&&e.type==='income'&&e.status!=='missing_price'&&isCalendarWork(e)&&(!sunday||e.manualRouteOverride===true)));
-    const activeTokens=new Set(active.flatMap(megaIdentityTokens));
-    const observed=sunday?[]:dedupeMegaRecords(
+    const active=window.InstaraMegaCanonical.dedupe(rows().filter(e=>e.date===day&&e.type==='income'&&e.status!=='missing_price'&&isCalendarWork(e)&&(!sunday||e.manualRouteOverride===true)));
+    const activeTokens=new Set(active.flatMap(window.InstaraMegaCanonical.tokens));
+    const observed=sunday?[]:window.InstaraMegaCanonical.dedupe(
       (load(OBSERVED_KEY,[])||[]).map(virtualJob).filter(e=>e.date===day&&isCalendarWork(e))
     ).filter(e=>{
-      const tokens=megaIdentityTokens(e);
+      const tokens=window.InstaraMegaCanonical.tokens(e);
       if(tokens.length)return !tokens.some(token=>activeTokens.has(token));
       const fallback=[e.date,norm(customer(e)),norm(e.address||e.customerAddress),norm(e.phone||e.customerPhone)].join('|');
       return !active.some(a=>[a.date,norm(customer(a)),norm(a.address||a.customerAddress),norm(a.phone||a.customerPhone)].join('|')===fallback);
     });
-    return dedupeMegaRecords([...active,...observed]).sort((a,b)=>String(a.windowStart||a.scheduledStart||a.time||'99:99').localeCompare(String(b.windowStart||b.scheduledStart||b.time||'99:99')));
+    return window.InstaraMegaCanonical.dedupe([...active,...observed]).sort((a,b)=>String(a.windowStart||a.scheduledStart||a.time||'99:99').localeCompare(String(b.windowStart||b.scheduledStart||b.time||'99:99')));
   }
   function iso(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
   function niceDay(v){const d=new Date(v+'T12:00:00');return d.toLocaleDateString('es-US',{weekday:'long',month:'short',day:'numeric'}).replace(/^./,x=>x.toUpperCase())}
@@ -6996,7 +7037,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   function classOf(e){const l=labelOf(e);return /COMPLETADO|PAGADO/.test(l)?'done':/CANCELADO/.test(l)?'cancelled':/OBSERVADO/.test(l)?'observed':''}
   function norm(v){return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'')}
   function allKnownRows(){
-    return dedupeMegaRecords([
+    return window.InstaraMegaCanonical.dedupe([
       ...rows(),
       ...(load(OBSERVED_KEY,[])||[]).map(virtualJob)
     ]);
@@ -8736,9 +8777,11 @@ function injectSettings(){
       try{window.updatePremiumDashboard?.()}catch(_e){}
 
       const todayIso=localToday();
-      const todayCount=window.InstaraSchedule?.dayRows?.(todayIso)?.length ?? 0;
+      const viewAudit=window.InstaraCanonicalViewAudit?.(todayIso);
+      const todayCount=viewAudit?.counts?.calendar ?? window.InstaraSchedule?.dayRows?.(todayIso)?.length ?? 0;
+      const workCount=viewAudit?.counts?.work ?? 0;
       setStatus(
-        `Firebase Mega purgado ✓ ${state.entries.filter(isMegaEntry).length} registros canónicos · hoy ${todayCount} trabajos`,
+        `Firebase Mega purgado ✓ ${state.entries.filter(isMegaEntry).length} registros canónicos · hoy ${workCount} trabajos · calendario ${todayCount}`,
         'ok'
       );
     }catch(err){
@@ -11112,9 +11155,9 @@ window.InstaraMegaCanonicalAudit=function(dateIso){
   return {
     date:day,
     activeRaw:activeRaw.length,
-    activeCanonical:dedupeMegaRecords(activeRaw).length,
+    activeCanonical:window.InstaraMegaCanonical.dedupe(activeRaw).length,
     observedRaw:observedRaw.length,
-    observedCanonical:dedupeMegaRecords(observedRaw).length,
+    observedCanonical:window.InstaraMegaCanonical.dedupe(observedRaw).length,
     calendarCanonical:calendar.length,
     names:calendar.map(e=>e.customerName||e.category||'Parada')
   };
@@ -11122,4 +11165,56 @@ window.InstaraMegaCanonicalAudit=function(dateIso){
 })();
 </script>
 
+
+<script id="instara-rc133-one-canonical-view-audit">
+(function(){
+'use strict';
+function isoToday(){
+  const d=new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function nameOf(e){return e?.customerName||e?.eventCustomer||e?.category||e?.service||'Parada'}
+function signature(e){
+  return {
+    id:String(e?.id||''),
+    name:nameOf(e),
+    date:e?.date||'',
+    status:e?.status||'',
+    storeStop:e?.isStoreStop===true,
+    autoStore:e?.instaraAutoStore===true,
+    source:e?.bridgeSource||'',
+    identities:window.InstaraMegaCanonical?.tokens?.(e)||[]
+  };
+}
+window.InstaraCanonicalViewAudit=function(dateIso=isoToday()){
+  const canonical=window.InstaraMegaCanonical?.stateDay?.(dateIso)||[];
+  const hoy=canonical.filter(e=>e?.type==='income'&&e?.status!=='missing_price'&&!e?.isFinanceOnly);
+  const work=hoy.filter(e=>e?.isStoreStop!==true&&e?.instaraAutoStore!==true);
+  const route=(typeof routeDayStops==='function'?routeDayStops(dateIso):[]);
+  let calendar=[];
+  try{
+    calendar=window.InstaraSchedule?.dayRows?.(dateIso)||[];
+  }catch(err){
+    return {
+      date:dateIso,
+      error:'calendar-dayRows: '+(err?.message||String(err)),
+      counts:{canonical:canonical.length,hoy:hoy.length,work:work.length,route:route.length,calendar:-1},
+      canonical:canonical.map(signature),
+      hoy:hoy.map(signature),
+      work:work.map(signature),
+      route:route.map(signature)
+    };
+  }
+  return {
+    date:dateIso,
+    counts:{canonical:canonical.length,hoy:hoy.length,work:work.length,route:route.length,calendar:calendar.length},
+    canonical:canonical.map(signature),
+    hoy:hoy.map(signature),
+    work:work.map(signature),
+    route:route.map(signature),
+    calendar:calendar.map(signature)
+  };
+};
+})();
+</script>
 </body>
