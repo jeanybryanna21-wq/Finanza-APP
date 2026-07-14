@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC126">
+  <meta name="instara-ai-version" content="RC127">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -4420,239 +4420,74 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
 
 
 
-  // ---------- RC126: resolvedor único y resiliente de direcciones US ----------
+  // ---------- RC127: resolvedor único estructurado + multiproveedor ----------
   const InstaraGeoResolver = (()=>{
-    const GEO_KEY='miruta-route-geocache-v4';
+    const GEO_KEY='miruta-route-geocache-v5';
     let cache={};
     try{cache=JSON.parse(localStorage.getItem(GEO_KEY)||'{}')||{}}catch(_e){cache={}}
 
     function save(){try{localStorage.setItem(GEO_KEY,JSON.stringify(cache))}catch(_e){}}
-    function normalize(address){
-      return String(address||'')
-        .trim()
-        .replace(/\s+/g,' ')
-        .replace(/\s*,\s*/g,', ')
-        .replace(/,\s*$/,'');
-    }
-    function validCoord(lat,lng){
-      return Number.isFinite(Number(lat))
-        &&Number.isFinite(Number(lng))
-        &&Math.abs(Number(lat))<=90
-        &&Math.abs(Number(lng))<=180;
-    }
-    function stripUnit(address){
-      return normalize(address)
-        .replace(/\s+(?:apt|apartment|unit|suite|ste|#)\s*[-A-Za-z0-9]+\b/ig,'')
-        .replace(/\s*,\s*(?:apt|apartment|unit|suite|ste|#)\s*[-A-Za-z0-9]+\b/ig,'')
-        .replace(/\s{2,}/g,' ')
-        .replace(/\s+,/g,',')
-        .trim();
-    }
+    function normalize(address){return String(address||'').trim().replace(/\s+/g,' ').replace(/\s*,\s*/g,', ').replace(/,\s*$/,'')}
+    function validCoord(lat,lng){return Number.isFinite(Number(lat))&&Number.isFinite(Number(lng))&&Math.abs(Number(lat))<=90&&Math.abs(Number(lng))<=180}
+    function stripUnit(address){return normalize(address).replace(/\s+(?:apt|apartment|unit|suite|ste|#)\s*[-A-Za-z0-9]+\b/ig,'').replace(/\s*,\s*(?:apt|apartment|unit|suite|ste|#)\s*[-A-Za-z0-9]+\b/ig,'').replace(/\s{2,}/g,' ').replace(/\s+,/g,',').trim()}
     function parseAddress(address){
-      const original=normalize(address);
-      const q=stripUnit(original);
-      const zip=(q.match(/\b(\d{5})(?:-\d{4})?\b/)||[])[1]||'';
-      const state=(q.match(/(?:,|\s)\s*([A-Z]{2})(?:\s+\d{5})?\s*$/i)||[])[1]?.toUpperCase()||'';
-      const house=(q.match(/^\s*(\d+[A-Za-z-]*)\b/)||[])[1]||'';
-
-      const noZip=q.replace(/\b\d{5}(?:-\d{4})?\b/g,'').replace(/,\s*$/,'').trim();
-      const chunks=noZip.split(',').map(v=>v.trim()).filter(Boolean);
-      const street=chunks[0]||'';
-      let city='';
-      if(chunks.length>=2)city=chunks[1].replace(/\b[A-Z]{2}\b\s*$/i,'').trim();
-      if(!city){
-        const tail=noZip.replace(street,'').replace(/^,\s*/,'').trim();
-        city=tail.replace(/\b[A-Z]{2}\b\s*$/i,'').trim();
-      }
-      return {
-        original,
-        q,
-        street,
-        city,
-        state:state||'VA',
-        zip,
-        house:String(house).toLowerCase()
-      };
+      const original=normalize(address),stripped=stripUnit(original);
+      const zip=(stripped.match(/\b(\d{5})(?:-\d{4})?\b/)||[])[1]||'';
+      const state=(stripped.match(/(?:,|\s)\s*([A-Z]{2})(?:\s+\d{5})?\s*$/i)||[])[1]?.toUpperCase()||'VA';
+      const house=(stripped.match(/^\s*(\d+[A-Za-z-]*)\b/)||[])[1]||'';
+      const noZip=stripped.replace(/\b\d{5}(?:-\d{4})?\b/g,'').replace(/,\s*$/,'').trim();
+      const chunks=noZip.split(',').map(v=>v.trim()).filter(Boolean),street=chunks[0]||'';
+      let city=''; if(chunks.length>=2)city=chunks[1].replace(/\b[A-Z]{2}\b\s*$/i,'').trim();
+      return {original,stripped,street,city,state,zip,house:String(house).toLowerCase()};
     }
+    function candidateText(candidate){return String(candidate?.display_name||candidate?.address||candidate?.attributes?.LongLabel||candidate?.attributes?.Match_addr||'').toLowerCase()}
+    function houseMatches(text,house){if(!house)return true;const safe=String(house).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');return new RegExp(`(?:^|\\D)${safe}(?:\\D|$)`,'i').test(String(text||''))}
     function scoreNominatim(candidate,p){
-      const a=candidate?.address||{};
-      const display=String(candidate?.display_name||'').toLowerCase();
-      let value=0;
-      const cZip=String(a.postcode||'').slice(0,5);
-      const cHouse=String(a.house_number||'').toLowerCase();
-      const cState=String(a['ISO3166-2-lvl4']||a.state_code||'').toUpperCase();
-
-      if(p.zip)value+=cZip===p.zip?130:-120;
-      if(p.house)value+=cHouse===p.house?110:(display.includes(p.house+' ')?60:-55);
+      const a=candidate?.address||{},display=candidateText(candidate); let value=0;
+      const cZip=String(a.postcode||'').slice(0,5),cHouse=String(a.house_number||'').toLowerCase(),cState=String(a['ISO3166-2-lvl4']||a.state_code||'').toUpperCase();
+      if(p.zip)value+=cZip===p.zip?140:-100;
+      if(p.house)value+=cHouse===p.house?130:(houseMatches(display,p.house)?75:-70);
       if(p.state==='VA')value+=cState.includes('VA')||/virginia/.test(display)?55:-90;
-      if(p.city&&display.includes(p.city.toLowerCase()))value+=45;
-      if(candidate?.type==='house'||candidate?.addresstype==='building'||candidate?.addresstype==='amenity')value+=22;
-      value+=Math.max(0,30-Number(candidate?.place_rank||30));
-      return value;
+      if(p.city&&display.includes(p.city.toLowerCase()))value+=50;
+      if(candidate?.type==='house'||candidate?.addresstype==='building'||candidate?.addresstype==='amenity')value+=25;
+      value+=Math.max(0,30-Number(candidate?.place_rank||30)); return value;
     }
-    function storeCode(entry){
-      const raw=[entry?.storeNumber,entry?.sellerStoreNumber,entry?.store,entry?.storeName,entry?.category].filter(Boolean).join(' ');
-      const m=raw.match(/(?:store\s*#?|lowe'?s?\s*#?|eln\s*#?|^|\D)(0*\d{3,4})(?:\D|$)/i);
-      return m?String(parseInt(m[1],10)):'';
+    function storeCode(entry){const raw=[entry?.storeNumber,entry?.sellerStoreNumber,entry?.store,entry?.storeName,entry?.category].filter(Boolean).join(' ');const m=raw.match(/(?:store\s*#?|lowe'?s?\s*#?|eln\s*#?|^|\D)(0*\d{3,4})(?:\D|$)/i);return m?String(parseInt(m[1],10)):''}
+    function entryAddress(entry){const direct=normalize(entry?.address);if(direct)return direct;if(entry?.isStoreStop){const code=storeCode(entry),root=window.state||window.__INSTARA_STATE__;const found=[code&&root?.storeAddresses?.['store:'+code],code&&root?.storeAddresses?.[code]].find(Boolean);if(found)return normalize(found)}return ''}
+    function cityVariants(city){const values=[];const add=v=>{v=normalize(v);if(v&&!values.some(x=>x.toLowerCase()===v.toLowerCase()))values.push(v)};add(city);if(/^hollins$/i.test(city))add('Roanoke');if(/^roanoke$/i.test(city))add('Hollins');return values}
+    function freeformVariants(p){const values=[];const add=v=>{v=normalize(v);if(v&&!values.some(x=>x.toLowerCase()===v.toLowerCase()))values.push(v)};add(p.original);add(p.stripped);cityVariants(p.city).forEach(city=>{add([p.street,city,p.state,p.zip].filter(Boolean).join(', '));add([p.street,city,p.state].filter(Boolean).join(', '))});add([p.street,p.state].filter(Boolean).join(', '));return values}
+    async function searchNominatimStructured(p){
+      if(!p.street)return []; const rows=[],cities=cityVariants(p.city),structuredCities=cities.length?cities:[''];
+      for(const city of structuredCities){
+        const params=new URLSearchParams({format:'jsonv2',limit:'8',countrycodes:'us',addressdetails:'1',dedupe:'1',street:p.street,state:p.state||'VA'});if(city)params.set('city',city);if(p.zip)params.set('postalcode',p.zip);
+        const res=await fetch('https://nominatim.openstreetmap.org/search?'+params.toString(),{headers:{'Accept-Language':'en-US,en;q=0.9'}});if(!res.ok)throw new Error(`Nominatim structured ${res.status}`);const data=await res.json();if(Array.isArray(data))rows.push(...data.map(candidate=>({candidate,score:scoreNominatim(candidate,p)+35,source:'nominatim-structured',query:params.toString()})));await new Promise(resolve=>setTimeout(resolve,1050));
+      } return rows;
     }
-    function entryAddress(entry){
-      const direct=normalize(entry?.address);
-      if(direct)return direct;
-      if(entry?.isStoreStop){
-        const code=storeCode(entry),root=window.state||window.__INSTARA_STATE__;
-        const found=[code&&root?.storeAddresses?.['store:'+code],code&&root?.storeAddresses?.[code]].find(Boolean);
-        if(found)return normalize(found);
-      }
-      return '';
-    }
-    function queryVariants(address){
-      const p=parseAddress(address);
-      const variants=[];
-      const add=value=>{
-        const q=normalize(value);
-        if(q&&!variants.some(v=>v.toLowerCase()===q.toLowerCase()))variants.push(q);
-      };
-
-      add(p.original);
-      add(p.q);
-      if(p.state&&!new RegExp(`\\b${p.state}\\b`,'i').test(p.q))add(`${p.q}, ${p.state}`);
-      if(p.street&&p.city)add(`${p.street}, ${p.city}, ${p.state}`);
-      if(p.street&&p.city&&p.zip)add(`${p.street}, ${p.city}, ${p.state} ${p.zip}`);
-      return {p,variants};
-    }
-    async function searchNominatim(query,p){
-      const url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=8&countrycodes=us&addressdetails=1&dedupe=1&q='+encodeURIComponent(query);
-      const res=await fetch(url,{headers:{'Accept-Language':'en-US,en;q=0.9'}});
-      if(!res.ok)throw new Error(`Nominatim ${res.status}`);
-      const data=await res.json();
-      if(!Array.isArray(data)||!data.length)return [];
-      return data
-        .map(candidate=>({candidate,score:scoreNominatim(candidate,p),query}))
-        .filter(item=>validCoord(item.candidate?.lat,item.candidate?.lon));
+    async function searchNominatimFreeform(p){
+      const rows=[];for(const query of freeformVariants(p)){const params=new URLSearchParams({format:'jsonv2',limit:'8',countrycodes:'us',addressdetails:'1',dedupe:'1',q:query});const res=await fetch('https://nominatim.openstreetmap.org/search?'+params.toString(),{headers:{'Accept-Language':'en-US,en;q=0.9'}});if(!res.ok)throw new Error(`Nominatim freeform ${res.status}`);const data=await res.json();if(Array.isArray(data))rows.push(...data.map(candidate=>({candidate,score:scoreNominatim(candidate,p),source:'nominatim-freeform',query})));if(rows.some(row=>row.score>=210))break;await new Promise(resolve=>setTimeout(resolve,1050))}return rows;
     }
     async function searchCensus(p){
-      const address=[p.street,p.city,p.state,p.zip].filter(Boolean).join(', ');
-      if(!p.street||!p.city)return [];
-      const url='https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?benchmark=Public_AR_Current&format=json&address='+encodeURIComponent(address);
-      const res=await fetch(url,{headers:{'Accept':'application/json'}});
-      if(!res.ok)throw new Error(`Census ${res.status}`);
-      const data=await res.json();
-      const matches=data?.result?.addressMatches;
-      if(!Array.isArray(matches))return [];
-      return matches
-        .map(match=>({
-          lat:Number(match?.coordinates?.y),
-          lng:Number(match?.coordinates?.x),
-          display:match?.matchedAddress||address,
-          source:'us-census',
-          query:address,
-          score:260
-        }))
-        .filter(item=>validCoord(item.lat,item.lng));
+      if(!p.street||!p.city)return [];const rows=[];for(const city of cityVariants(p.city)){const params=new URLSearchParams({benchmark:'Public_AR_Current',format:'json',street:p.street,city,state:p.state||'VA',zip:p.zip||''});const res=await fetch('https://geocoding.geo.census.gov/geocoder/locations/address?'+params.toString(),{headers:{'Accept':'application/json'}});if(!res.ok)throw new Error(`Census ${res.status}`);const data=await res.json(),matches=data?.result?.addressMatches;if(Array.isArray(matches))rows.push(...matches.map(match=>({lat:Number(match?.coordinates?.y),lng:Number(match?.coordinates?.x),display:match?.matchedAddress||[p.street,city,p.state,p.zip].filter(Boolean).join(', '),source:'us-census-structured',query:params.toString(),score:280})).filter(item=>validCoord(item.lat,item.lng)&&houseMatches(item.display,p.house)))}return rows;
+    }
+    async function searchArcGIS(p){
+      const rows=[];for(const query of freeformVariants(p)){const params=new URLSearchParams({SingleLine:query,f:'json',outFields:'Match_addr,LongLabel,Addr_type',maxLocations:'8',countryCode:'USA'});const res=await fetch('https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?'+params.toString(),{headers:{'Accept':'application/json'}});if(!res.ok)throw new Error(`ArcGIS ${res.status}`);const data=await res.json(),candidates=data?.candidates;if(Array.isArray(candidates))rows.push(...candidates.map(candidate=>({lat:Number(candidate?.location?.y),lng:Number(candidate?.location?.x),display:candidate?.address||candidate?.attributes?.LongLabel||query,source:'arcgis-world-geocoder',query,score:Number(candidate?.score||0)})).filter(item=>validCoord(item.lat,item.lng)&&item.score>=75&&houseMatches(item.display,p.house)));if(rows.some(row=>row.score>=95))break}return rows;
     }
     async function resolveAddress(address){
-      const normalized=normalize(address);
-      if(!normalized)throw new Error('Dirección vacía');
-
-      const cacheKey=normalized.toLowerCase();
-      const cached=cache[cacheKey];
-      if(cached?.verified===true&&validCoord(cached.lat,cached.lng))return cached;
-      if(!navigator.onLine)throw new Error(`Sin coordenadas verificadas para ${normalized}`);
-
-      const {p,variants}=queryVariants(normalized);
-      const nominatimResults=[];
-      const errors=[];
-
-      for(const query of variants){
-        try{
-          const rows=await searchNominatim(query,p);
-          nominatimResults.push(...rows);
-          if(rows.some(row=>row.score>=180))break;
-        }catch(err){errors.push(err?.message||String(err))}
-        await new Promise(resolve=>setTimeout(resolve,1050));
-      }
-
-      const ranked=nominatimResults.sort((a,b)=>b.score-a.score);
-      let resolved=null;
-      if(ranked[0]&&ranked[0].score>=35){
-        resolved={
-          lat:Number(ranked[0].candidate.lat),
-          lng:Number(ranked[0].candidate.lon),
-          display:ranked[0].candidate.display_name||ranked[0].query,
-          source:'verified-nominatim-v4',
-          query:ranked[0].query,
-          score:ranked[0].score
-        };
-      }
-
-      if(!resolved){
-        try{
-          const census=await searchCensus(p);
-          if(census[0])resolved=census[0];
-        }catch(err){errors.push(err?.message||String(err))}
-      }
-
-      if(!resolved){
-        throw new Error(`No pude verificar ${normalized}${errors.length?' · '+errors.join(' / '):''}`);
-      }
-
-      const out={...resolved,verified:true,originalAddress:normalized};
-      cache[cacheKey]=out;
-
-      // All successful variants point to the same verified coordinate.
-      variants.forEach(query=>{cache[normalize(query).toLowerCase()]=out});
-      save();
-      return out;
+      const normalized=normalize(address);if(!normalized)throw new Error('Dirección vacía');const cacheKey=normalized.toLowerCase(),cached=cache[cacheKey];if(cached?.verified===true&&validCoord(cached.lat,cached.lng))return cached;if(!navigator.onLine)throw new Error(`Sin coordenadas verificadas para ${normalized}`);
+      const p=parseAddress(normalized),errors=[];let resolved=null;
+      try{const structured=await searchNominatimStructured(p),best=structured.sort((a,b)=>b.score-a.score)[0];if(best&&best.score>=70)resolved={lat:Number(best.candidate.lat),lng:Number(best.candidate.lon),display:best.candidate.display_name||p.stripped,source:best.source,query:best.query,score:best.score}}catch(err){errors.push(err?.message||String(err))}
+      if(!resolved)try{const freeform=await searchNominatimFreeform(p),best=freeform.sort((a,b)=>b.score-a.score)[0];if(best&&best.score>=45)resolved={lat:Number(best.candidate.lat),lng:Number(best.candidate.lon),display:best.candidate.display_name||p.stripped,source:best.source,query:best.query,score:best.score}}catch(err){errors.push(err?.message||String(err))}
+      if(!resolved)try{const census=await searchCensus(p);if(census[0])resolved=census[0]}catch(err){errors.push(err?.message||String(err))}
+      if(!resolved)try{const arcgis=await searchArcGIS(p);if(arcgis[0])resolved=arcgis.sort((a,b)=>b.score-a.score)[0]}catch(err){errors.push(err?.message||String(err))}
+      if(!resolved)throw new Error(`No pude verificar ${normalized}${errors.length?' · '+errors.join(' / '):''}`);
+      const out={...resolved,verified:true,originalAddress:normalized};cache[cacheKey]=out;freeformVariants(p).forEach(query=>{cache[normalize(query).toLowerCase()]=out});save();return out;
     }
-    async function resolveEntry(entry,{persist=true}={}){
-      if(validCoord(entry?.lat,entry?.lng)){
-        return {
-          lat:Number(entry.lat),
-          lng:Number(entry.lng),
-          display:entryAddress(entry)||entry?.customerName||entry?.category||'',
-          verified:true,
-          source:entry?.geoSource||'ticket'
-        };
-      }
-
-      const address=entryAddress(entry);
-      if(!address)throw new Error(`Sin dirección para ${entry?.customerName||entry?.category||entry?.id||'parada'}`);
-      const coord=await resolveAddress(address);
-
-      entry.lat=coord.lat;
-      entry.lng=coord.lng;
-      entry.geoVerified=true;
-      entry.geoSource=coord.source;
-      entry.geoDisplay=coord.display;
-      entry.geoResolvedQuery=coord.query||address;
-      if(persist){try{persistEntries()}catch(_e){}}
-      return coord;
-    }
-    function inspectEntry(entry){
-      const address=entryAddress(entry);
-      const key=normalize(address).toLowerCase();
-      const cached=key?cache[key]:null;
-      return {
-        id:String(entry?.id||''),
-        name:entry?.customerName||entry?.category||'Parada',
-        address,
-        hasTicketCoord:validCoord(entry?.lat,entry?.lng),
-        cachedVerified:cached?.verified===true&&validCoord(cached?.lat,cached?.lng),
-        cacheEntry:cached||null
-      };
-    }
-
-    return {resolveAddress,resolveEntry,inspectEntry,normalize,queryVariants};
+    async function resolveEntry(entry,{persist=true}={}){if(validCoord(entry?.lat,entry?.lng))return{lat:Number(entry.lat),lng:Number(entry.lng),display:entryAddress(entry)||entry?.customerName||entry?.category||'',verified:true,source:entry?.geoSource||'ticket'};const address=entryAddress(entry);if(!address)throw new Error(`Sin dirección para ${entry?.customerName||entry?.category||entry?.id||'parada'}`);const coord=await resolveAddress(address);entry.lat=coord.lat;entry.lng=coord.lng;entry.geoVerified=true;entry.geoSource=coord.source;entry.geoDisplay=coord.display;entry.geoResolvedQuery=coord.query||address;if(persist){try{persistEntries()}catch(_e){}}return coord}
+    function inspectEntry(entry){const address=entryAddress(entry),key=normalize(address).toLowerCase(),cached=key?cache[key]:null;return{id:String(entry?.id||''),name:entry?.customerName||entry?.category||'Parada',address,hasTicketCoord:validCoord(entry?.lat,entry?.lng),cachedVerified:cached?.verified===true&&validCoord(cached?.lat,cached?.lng),cacheEntry:cached||null}}
+    return {resolveAddress,resolveEntry,inspectEntry,normalize};
   })();
   window.InstaraGeoResolver=InstaraGeoResolver;
-  window.InstaraGeoDiagnostics={
-    inspectToday(){
-      const date=document.getElementById('route-date')?.value||todayISO();
-      const stops=typeof routeDayStops==='function'?routeDayStops(date):[];
-      return stops.map(stop=>window.InstaraGeoResolver.inspectEntry(stop));
-    },
-    failed(){return window.__INSTARA_GEO_FAILED_STOPS__||[]}
-  };
+  window.InstaraGeoDiagnostics={inspectToday(){const date=document.getElementById('route-date')?.value||todayISO();const stops=typeof routeDayStops==='function'?routeDayStops(date):[];return stops.map(stop=>window.InstaraGeoResolver.inspectEntry(stop))},failed(){return window.__INSTARA_GEO_FAILED_STOPS__||[]}};
 
   // ---------- RC59: motor GPS Pro — MapLibre GPU + guía predictiva ----------
   const MirutaNav = (()=>{
@@ -5959,7 +5794,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   // ---------- RC62: Auto Route Intelligence ----------
   const MirutaRouteBrain = (()=>{
     const DEFAULT_BASE='6451 Archcrest Dr, Roanoke, VA 24019';
-    const SETTINGS_KEY='miruta-route-brain-settings-v1', LEARNING_KEY='miruta-service-learning-v1', GEO_KEY='miruta-route-geocache-v4';
+    const SETTINGS_KEY='miruta-route-brain-settings-v1', LEARNING_KEY='miruta-service-learning-v1', GEO_KEY='miruta-route-geocache-v5';
     const PLAN_KEY_PREFIX='miruta-recommended-plan-', AUTO_SIG_PREFIX='miruta-auto-plan-signature-';
     const DEFAULTS={dishwasher:45,microwave:30,toilet:35,faucet:25,disposal:35,cooktop:45,range:45,oven:50,washer:35,dryer:35,refrigerator:45,other:45};
     const labels={dishwasher:'Dishwasher',microwave:'OTR Microwave',toilet:'Toilet',faucet:'Faucet',disposal:'Garbage Disposal',cooktop:'Cooktop',range:'Range',oven:'Oven',washer:'Washer',dryer:'Dryer',refrigerator:'Refrigerator',other:'Otros'};
@@ -9970,7 +9805,7 @@ window.InstaraRC108={refreshFinance,install};
 
 const VERSION='RC109';
 const KEY='instara-work-clock-v1';
-const GEO_KEY='miruta-route-geocache-v4';
+const GEO_KEY='miruta-route-geocache-v5';
 const SETTINGS_KEY='miruta-route-brain-settings-v1';
 const DEFAULT_BASE='6451 Archcrest Dr, Roanoke, VA 24019';
 const HOME_RADIUS_M=180;
