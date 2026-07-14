@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC134">
+  <meta name="instara-ai-version" content="RC135">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2554,7 +2554,14 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     merge:mergeRichRecord,
     dedupe:dedupeMegaRecords,
     canonicalizeStateEntries,
-    stateDay:canonicalStateDay
+    stateDay:canonicalStateDay,
+    async reloadEntriesFromSharedStorage(){
+      const shared=await window.storage.get('wl:entries');
+      const parsed=JSON.parse(shared?.value||'[]');
+      state.entries=dedupeMegaRecords(Array.isArray(parsed)?parsed:[]);
+      canonicalizeStateEntries();
+      return state.entries;
+    }
   };
 
   async function loadState(){
@@ -8728,6 +8735,7 @@ function injectSettings(){
     const original=btn.textContent;
     btn.disabled=true;
     btn.textContent='PURGANDO FIREBASE…';
+    let purgeStage='inicio';
 
     try{
       if(
@@ -8756,24 +8764,32 @@ function injectSettings(){
       ];
       purgeKeys.forEach(key=>{try{localStorage.removeItem(key)}catch(_e){}});
 
+      let purgeStage='reemplazo Firebase';
       const atomic=await window.InstaraCloudMemory.replaceSharedValueAtomic(
         'wl:entries',
         JSON.stringify(keep)
       );
       if(!atomic?.ok)throw new Error('Firebase no confirmó la purga de wl:entries.');
 
+      purgeStage='force pull Firebase';
       await window.InstaraCloudMemory.forcePull();
-      await loadState();
-      window.InstaraMegaCanonical.canonicalizeStateEntries();
+
+      // RC135: loadState is private to the main app IIFE. The purge handler lives
+      // in the Sync Hub IIFE, so never call loadState directly here.
+      // Rehydrate the shared wl:entries value through the public storage contract.
+      purgeStage='recarga memoria compartida';
+      await window.InstaraMegaCanonical.reloadEntriesFromSharedStorage();
 
       btn.textContent='DESCARGANDO HUB FRESCO…';
 
+      purgeStage='descarga Hub fresco';
       const result=await fetchLatest({manual:true,force:true});
       if(!result?.ok)throw new Error(result?.message||'El Hub no respondió.');
 
       window.InstaraMegaCanonical.canonicalizeStateEntries();
       await persistEntries();
 
+      purgeStage='verificación Firebase final';
       await window.InstaraCloudMemory.replaceSharedValueAtomic(
         'wl:entries',
         JSON.stringify(state.entries)
@@ -8793,10 +8809,12 @@ function injectSettings(){
         'ok'
       );
     }catch(err){
-      console.error('RC134 atomic Firebase Mega purge',err);
-      setStatus('Purga Firebase falló: '+(err?.message||'error desconocido'),'error');
+      console.error('RC135 atomic Firebase Mega purge',{stage:typeof purgeStage==='string'?purgeStage:'inicio',error:err});
+      const stage=typeof purgeStage==='string'?purgeStage:'inicio';
+      setStatus(`Purga Firebase falló en ${stage}: `+(err?.message||'error desconocido'),'error');
       alert(
         'INSTARA NO TERMINÓ LA PURGA DE FIREBASE\n\n'+
+        'Etapa: '+stage+'\n\n'+
         (err?.message||'Error desconocido')+
         '\n\nNo continuaré mezclando la memoria vieja con una sincronización nueva.'
       );
