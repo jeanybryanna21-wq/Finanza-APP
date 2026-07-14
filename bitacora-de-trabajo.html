@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC131">
+  <meta name="instara-ai-version" content="RC132">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2139,7 +2139,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       localStorage.setItem(key,next);
       localShadow.set(key,next);
       if(previous!==next&&cloudHydrated&&isSharedKey(key)&&!applyingRemoteMemory){
-        pushSharedValue(key,next).catch(()=>{});
+        await pushSharedValue(key,next);
       }
       return {key,value:next,shared:isSharedKey(key),source:'local+cloud'};
     },
@@ -2175,6 +2175,36 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       Object.entries(snap.val()||{}).forEach(([key,node])=>{if(applyRemoteNode(key,node))changed=true});
       if(changed)scheduleRuntimeReload('manual-pull');
       return {ok:true,changed};
+    },
+    replaceSharedValueAtomic:async(key,value)=>{
+      if(!isSharedKey(key))throw new Error(`La clave ${key} no pertenece a la memoria compartida.`);
+      if(!firebaseSyncActive||!fbDb)await enableCloudSync();
+
+      const next=String(value??'');
+      const updatedAt=Date.now();
+      const envelope=wrapCloud(next,updatedAt);
+
+      applyingRemoteMemory=true;
+      clearTimeout(runtimeReloadTimer);
+      try{
+        localStorage.setItem(key,next);
+        localShadow.set(key,next);
+        cloudShadow.set(key,JSON.stringify(envelope));
+        remoteUpdatedAt.set(key,updatedAt);
+
+        await fbDb.ref('bitacora/'+key).set(envelope);
+
+        const verifySnap=await fbDb.ref('bitacora/'+key).once('value');
+        const verify=unwrapCloud(verifySnap.val());
+        if(!verify||verify.value!==next){
+          throw new Error(`Firebase no confirmó el reemplazo atómico de ${key}.`);
+        }
+        cloudShadow.set(key,JSON.stringify(verifySnap.val()));
+        remoteUpdatedAt.set(key,Math.max(updatedAt,verify.updatedAt||0));
+        return {ok:true,key,updatedAt,bytes:next.length};
+      }finally{
+        applyingRemoteMemory=false;
+      }
     }
   };
 
@@ -6944,10 +6974,17 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   }
   function dayRows(day){
     const sunday=/^\d{4}-\d{2}-\d{2}$/.test(String(day||''))&&new Date(day+'T12:00:00').getDay()===0;
-    const active=rows().filter(e=>e.date===day&&e.type==='income'&&e.status!=='missing_price'&&isCalendarWork(e)&&(!sunday||e.manualRouteOverride===true));
-    const keys=new Set(active.map(keyOf).filter(Boolean));
-    const observed=sunday?[]:(load(OBSERVED_KEY,[])||[]).map(virtualJob).filter(e=>e.date===day&&isCalendarWork(e)&&(!keyOf(e)||!keys.has(keyOf(e))));
-    return [...active,...observed].sort((a,b)=>String(a.windowStart||a.scheduledStart||a.time||'99:99').localeCompare(String(b.windowStart||b.scheduledStart||b.time||'99:99')));
+    const active=dedupeMegaRecords(rows().filter(e=>e.date===day&&e.type==='income'&&e.status!=='missing_price'&&isCalendarWork(e)&&(!sunday||e.manualRouteOverride===true)));
+    const activeTokens=new Set(active.flatMap(megaIdentityTokens));
+    const observed=sunday?[]:dedupeMegaRecords(
+      (load(OBSERVED_KEY,[])||[]).map(virtualJob).filter(e=>e.date===day&&isCalendarWork(e))
+    ).filter(e=>{
+      const tokens=megaIdentityTokens(e);
+      if(tokens.length)return !tokens.some(token=>activeTokens.has(token));
+      const fallback=[e.date,norm(customer(e)),norm(e.address||e.customerAddress),norm(e.phone||e.customerPhone)].join('|');
+      return !active.some(a=>[a.date,norm(customer(a)),norm(a.address||a.customerAddress),norm(a.phone||a.customerPhone)].join('|')===fallback);
+    });
+    return dedupeMegaRecords([...active,...observed]).sort((a,b)=>String(a.windowStart||a.scheduledStart||a.time||'99:99').localeCompare(String(b.windowStart||b.scheduledStart||b.time||'99:99')));
   }
   function iso(y,m,d){return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
   function niceDay(v){const d=new Date(v+'T12:00:00');return d.toLocaleDateString('es-US',{weekday:'long',month:'short',day:'numeric'}).replace(/^./,x=>x.toUpperCase())}
@@ -6959,11 +6996,10 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   function classOf(e){const l=labelOf(e);return /COMPLETADO|PAGADO/.test(l)?'done':/CANCELADO/.test(l)?'cancelled':/OBSERVADO/.test(l)?'observed':''}
   function norm(v){return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'')}
   function allKnownRows(){
-    const active=rows();
-    const observed=(load(OBSERVED_KEY,[])||[]).map(virtualJob);
-    const out=[],seen=new Set();
-    for(const e of [...active,...observed]){const k=keyOf(e)||[e.date,norm(customer(e)),norm(e.address||e.customerAddress),norm(e.phone||e.customerPhone)].join('|');if(seen.has(k))continue;seen.add(k);out.push(e)}
-    return out;
+    return dedupeMegaRecords([
+      ...rows(),
+      ...(load(OBSERVED_KEY,[])||[]).map(virtualJob)
+    ]);
   }
   function sameClient(a,b){
     const an=norm(customer(a)),bn=norm(customer(b));
@@ -8632,7 +8668,7 @@ async function syncNow(){
 function injectSettings(){
   const root=document.getElementById('screen-ajustes');if(!root||document.getElementById('instara-sync-hub-settings'))return;
   const section=document.createElement('div');section.id='instara-sync-hub-settings';section.className='section-card';
-  section.innerHTML=`<button class="section-toggle open" type="button"><span>INSTARA SYNC HUB</span><span class="chev">▾</span></button><div class="section-body open"><div class="form-row"><div class="field" style="flex:2"><label>Hub URL</label><input id="instara-hub-url" type="url" placeholder="https://instara-sync-hub....workers.dev"></div></div><div class="form-row"><div class="field"><label>Channel ID</label><input id="instara-hub-channel" autocomplete="off"></div><div class="field"><label>Read Token</label><input id="instara-hub-read-token" type="password" autocomplete="off"></div></div><div class="form-row"><div class="field" style="flex:2"><label>Sync Key</label><input id="instara-hub-sync-key" type="password" autocomplete="off"></div></div><div class="form-row"><button class="btn-mini" id="instara-hub-save" type="button">GUARDAR HUB</button><button class="btn-mini" id="instara-hub-test" type="button">PROBAR HUB</button><label class="btn-mini" style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer">IMPORTAR CONFIG<input id="instara-hub-import" type="file" accept="application/json" hidden></label></div><div class="form-row"><button class="btn-outline" id="instara-mega-clean-sync" type="button" style="width:100%;border-color:rgba(255,112,102,.72);color:#ff9a92">LIMPIAR MEMORIA MEGA + RESINCRONIZAR</button></div><div id="${STATUS_ID}" class="preview" data-tone="info">Sync Hub no configurado.</div></div>`;
+  section.innerHTML=`<button class="section-toggle open" type="button"><span>INSTARA SYNC HUB</span><span class="chev">▾</span></button><div class="section-body open"><div class="form-row"><div class="field" style="flex:2"><label>Hub URL</label><input id="instara-hub-url" type="url" placeholder="https://instara-sync-hub....workers.dev"></div></div><div class="form-row"><div class="field"><label>Channel ID</label><input id="instara-hub-channel" autocomplete="off"></div><div class="field"><label>Read Token</label><input id="instara-hub-read-token" type="password" autocomplete="off"></div></div><div class="form-row"><div class="field" style="flex:2"><label>Sync Key</label><input id="instara-hub-sync-key" type="password" autocomplete="off"></div></div><div class="form-row"><button class="btn-mini" id="instara-hub-save" type="button">GUARDAR HUB</button><button class="btn-mini" id="instara-hub-test" type="button">PROBAR HUB</button><label class="btn-mini" style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer">IMPORTAR CONFIG<input id="instara-hub-import" type="file" accept="application/json" hidden></label></div><div class="form-row"><button class="btn-outline" id="instara-mega-clean-sync" type="button" style="width:100%;border-color:rgba(255,112,102,.72);color:#ff9a92">PURGAR FIREBASE MEGA + RESINCRONIZAR</button></div><div id="${STATUS_ID}" class="preview" data-tone="info">Sync Hub no configurado.</div></div>`;
   root.insertBefore(section,root.firstChild);
   const c=cfg();
   document.getElementById('instara-hub-url').value=c.hubUrl||'';document.getElementById('instara-hub-channel').value=c.channelId||'';document.getElementById('instara-hub-read-token').value=c.readToken||'';document.getElementById('instara-hub-sync-key').value=c.syncKey||'';
@@ -8642,18 +8678,18 @@ function injectSettings(){
     const btn=document.getElementById('instara-mega-clean-sync');
     if(btn?.disabled)return;
     const ok=confirm(
-      '¿LIMPIAR MEMORIA MEGA Y RESINCRONIZAR?\n\n'+
-      'Esto elimina tickets Mega/CiO guardados localmente y en la memoria compartida, caché observada, ruta/GPS y snapshot del teléfono.\n\n'+
-      'NO borra precios, partes, compendio, aprendizaje ni registros manuales que no sean Mega.\n\n'+
-      'Después INSTARA descargará una copia fresca del Sync Hub.'
+      '¿PURGAR FIREBASE MEGA Y RESINCRONIZAR?\n\n'+
+      'INSTARA reemplazará la memoria Mega compartida en Firebase, verificará que quedó limpia y solo después descargará una copia fresca del Sync Hub.\n\n'+
+      'NO borra precios, partes, compendio, aprendizaje, geocodificación ni registros manuales que no sean Mega.'
     );
     if(!ok)return;
 
     const original=btn.textContent;
     btn.disabled=true;
-    btn.textContent='LIMPIANDO…';
+    btn.textContent='PURGANDO FIREBASE…';
+
     try{
-      const keep=(state.entries||[]).filter(entry=>!isMegaEntry(entry));
+      const keep=dedupeMegaRecords((state.entries||[]).filter(entry=>!isMegaEntry(entry)));
       state.entries=keep;
 
       const purgeKeys=[
@@ -8671,28 +8707,48 @@ function injectSettings(){
       ];
       purgeKeys.forEach(key=>{try{localStorage.removeItem(key)}catch(_e){}});
 
-      // This write is shared: it overwrites polluted Firebase wl:entries with the clean non-Mega set.
-      await window.storage.set('wl:entries',JSON.stringify(keep));
+      const atomic=await window.InstaraCloudMemory.replaceSharedValueAtomic(
+        'wl:entries',
+        JSON.stringify(keep)
+      );
+      if(!atomic?.ok)throw new Error('Firebase no confirmó la purga de wl:entries.');
+
+      await window.InstaraCloudMemory.forcePull();
+      await loadState();
       canonicalizeStateEntries();
 
-      try{window.MirutaNav?.finish?.(false)}catch(_e){}
-      try{window.render?.()}catch(_e){}
-      try{window.InstaraSchedule?.refresh?.()}catch(_e){}
+      btn.textContent='DESCARGANDO HUB FRESCO…';
 
-      btn.textContent='DESCARGANDO HUB…';
-      const result=await syncNow();
+      const result=await fetchLatest({manual:true,force:true});
       if(!result?.ok)throw new Error(result?.message||'El Hub no respondió.');
 
       canonicalizeStateEntries();
       await persistEntries();
+
+      await window.InstaraCloudMemory.replaceSharedValueAtomic(
+        'wl:entries',
+        JSON.stringify(state.entries)
+      );
+
+      try{window.MirutaNav?.finish?.(false)}catch(_e){}
       try{window.render?.()}catch(_e){}
       try{window.InstaraSchedule?.refresh?.()}catch(_e){}
       try{window.updatePremiumDashboard?.()}catch(_e){}
-      setStatus(`Memoria Mega limpia · ${state.entries.filter(isMegaEntry).length} registros canónicos después del sync.`,'ok');
+
+      const todayIso=localToday();
+      const todayCount=window.InstaraSchedule?.dayRows?.(todayIso)?.length ?? 0;
+      setStatus(
+        `Firebase Mega purgado ✓ ${state.entries.filter(isMegaEntry).length} registros canónicos · hoy ${todayCount} trabajos`,
+        'ok'
+      );
     }catch(err){
-      console.error('RC131 clean Mega memory',err);
-      setStatus('Limpieza incompleta: '+(err?.message||'error desconocido'),'error');
-      alert('INSTARA limpió la memoria Mega local/compartida, pero la resincronización falló:\n\n'+(err?.message||'Error desconocido')+'\n\nPulsa ACTUALIZAR MEGA cuando el Hub esté disponible.');
+      console.error('RC132 atomic Firebase Mega purge',err);
+      setStatus('Purga Firebase falló: '+(err?.message||'error desconocido'),'error');
+      alert(
+        'INSTARA NO TERMINÓ LA PURGA DE FIREBASE\n\n'+
+        (err?.message||'Error desconocido')+
+        '\n\nNo continuaré mezclando la memoria vieja con una sincronización nueva.'
+      );
     }finally{
       btn.disabled=false;
       btn.textContent=original;
@@ -11048,6 +11104,21 @@ function audit(date){
   }
 }
 window.InstaraRC123={audit};
+window.InstaraMegaCanonicalAudit=function(dateIso){
+  const day=String(dateIso||localToday());
+  const activeRaw=rows().filter(e=>e.date===day&&e.type==='income');
+  const observedRaw=(load(OBSERVED_KEY,[])||[]).map(virtualJob).filter(e=>e.date===day);
+  const calendar=dayRows(day);
+  return {
+    date:day,
+    activeRaw:activeRaw.length,
+    activeCanonical:dedupeMegaRecords(activeRaw).length,
+    observedRaw:observedRaw.length,
+    observedCanonical:dedupeMegaRecords(observedRaw).length,
+    calendarCanonical:calendar.length,
+    names:calendar.map(e=>e.customerName||e.category||'Parada')
+  };
+};
 })();
 </script>
 
