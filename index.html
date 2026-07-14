@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC129">
+  <meta name="instara-ai-version" content="RC130">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1776,77 +1776,319 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
 <script src="assets/sortable.min.js"></script>
 <script>
 (function(){
-  // RC52: almacenamiento local-first. La app inicia y guarda al instante sin internet.
-  // Firebase se conecta en segundo plano cuando existe conexión y nunca bloquea la interfaz.
+  // RC130: memoria compartida Safari ↔ PWA instalada.
+  // Firebase se hidrata ANTES de loadState para que una instalación nueva no ejecute
+  // el reset local ni sobrescriba una memoria más rica que ya existe en otro contexto.
   let firebaseSyncActive = false;
   let fbDb = null;
-  const cloudQueue = new Map();
+  let cloudHydrated = false;
+  let cloudBootPromise = null;
+  let applyingRemoteMemory = false;
+  let runtimeReloadTimer = null;
+  let directWatchTimer = null;
 
+  const CLOUD_SCHEMA = 2;
+  const CLIENT_ID_KEY = 'instara-cloud-client-id-v1';
+  const DIRECT_SHARED_KEYS = new Set([
+    'instara-work-clock-v1',
+    'miruta-mileage-active-v1',
+    'miruta-mileage-ledger-v1',
+    'miruta-service-learning-v1',
+    'miruta-route-brain-settings-v1',
+    'miruta-economics-v1',
+    'instara-financial-goals-v1',
+    'miruta-return-tasks-v1',
+    'miruta-return-flows-v2',
+    'wl:gps_favorites'
+  ]);
+  const cloudShadow = new Map();
+  const localShadow = new Map();
+  const remoteUpdatedAt = new Map();
+
+  function clientId(){
+    let id=localStorage.getItem(CLIENT_ID_KEY);
+    if(!id){
+      id='ios_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,10);
+      localStorage.setItem(CLIENT_ID_KEY,id);
+    }
+    return id;
+  }
+  const THIS_CLIENT=clientId();
+
+  function isSharedKey(key){
+    return String(key||'').startsWith('wl:') || DIRECT_SHARED_KEYS.has(String(key||''));
+  }
   function localGet(key){
-    const value = localStorage.getItem(key);
-    if(value === null) throw new Error('not found');
+    const value=localStorage.getItem(key);
+    if(value===null)throw new Error('not found');
     return value;
   }
   function localKeys(prefix){
-    const keys = [];
-    for(let i=0; i<localStorage.length; i++){
-      const key = localStorage.key(i);
-      if(key && (!prefix || key.startsWith(prefix))) keys.push(key);
+    const keys=[];
+    for(let i=0;i<localStorage.length;i++){
+      const key=localStorage.key(i);
+      if(key&&(!prefix||key.startsWith(prefix)))keys.push(key);
     }
     return keys;
   }
-  async function flushCloudQueue(){
-    if(!firebaseSyncActive || !fbDb || !navigator.onLine) return;
-    for(const [key, job] of Array.from(cloudQueue.entries())){
-      try{
-        const ref = fbDb.ref('bitacora/' + key);
-        if(job.type === 'delete') await ref.remove();
-        else await ref.set(job.value);
-        cloudQueue.delete(key);
-      }catch(_err){ break; }
+  function unwrapCloud(node){
+    if(node&&typeof node==='object'&&Number(node.__instaraSync)===CLOUD_SCHEMA&&Object.prototype.hasOwnProperty.call(node,'value')){
+      return {
+        value:String(node.value??''),
+        updatedAt:Number(node.updatedAt||0),
+        clientId:String(node.clientId||''),
+        wrapped:true
+      };
     }
+    if(node===null||node===undefined)return null;
+    return {value:String(node),updatedAt:0,clientId:'legacy',wrapped:false};
   }
-
-  window.storage = {
-    get: async (key) => {
-      try{ return { key, value: localGet(key), shared:false, source:'local' }; }
-      catch(_localErr){
-        if(firebaseSyncActive && fbDb && navigator.onLine){
-          const snap = await fbDb.ref('bitacora/' + key).once('value');
-          if(snap.exists()){
-            const value = snap.val();
-            localStorage.setItem(key, value);
-            return { key, value, shared:false, source:'cloud' };
-          }
-        }
-        throw new Error('not found');
+  function wrapCloud(value,updatedAt=Date.now()){
+    return {
+      __instaraSync:CLOUD_SCHEMA,
+      value:String(value??''),
+      updatedAt:Number(updatedAt),
+      clientId:THIS_CLIENT
+    };
+  }
+  function safeJson(value,fallback=null){
+    try{return JSON.parse(String(value??''))}catch(_e){return fallback}
+  }
+  function maxTime(value){
+    const seen=new Set();
+    function walk(node){
+      if(node===null||node===undefined)return 0;
+      if(typeof node==='string'){
+        const t=Date.parse(node);
+        return Number.isFinite(t)?t:0;
       }
-    },
-    set: async (key, value) => {
-      localStorage.setItem(key, value);
-      cloudQueue.set(key, {type:'set', value});
-      flushCloudQueue();
-      return { key, value, shared:false, source:'local' };
-    },
-    delete: async (key) => {
-      localStorage.removeItem(key);
-      cloudQueue.set(key, {type:'delete'});
-      flushCloudQueue();
-      return { key, deleted:true, shared:false, source:'local' };
-    },
-    list: async (prefix) => ({ keys: localKeys(prefix), prefix, shared:false, source:'local' })
-  };
-
+      if(typeof node!=='object')return 0;
+      if(seen.has(node))return 0;
+      seen.add(node);
+      let best=0;
+      for(const [key,val] of Object.entries(node)){
+        if(/(?:at|time|date|start|end|updated|created|completed|sync)/i.test(key)){
+          const t=typeof val==='number'?Number(val):Date.parse(String(val||''));
+          if(Number.isFinite(t))best=Math.max(best,t);
+        }
+        if(typeof val==='object'&&val!==null)best=Math.max(best,walk(val));
+      }
+      return best;
+    }
+    return walk(value);
+  }
+  function migrationScore(key,value){
+    if(value===null||value===undefined)return -1;
+    if(key==='wl:entries'){
+      const rows=safeJson(value,[]);
+      if(!Array.isArray(rows))return 0;
+      const jobs=rows.filter(e=>e?.type==='income');
+      const done=jobs.filter(e=>['completed','paid'].includes(String(e?.status||''))||e?.manualCompletion===true).length;
+      const latest=maxTime(rows);
+      return jobs.length*1000 + done*100000 + Math.floor(latest/1000000);
+    }
+    if(key==='instara-work-clock-v1'){
+      const obj=safeJson(value,{});
+      return Math.floor(maxTime(obj)/1000) + (obj?.active?10000000000:0);
+    }
+    if(key==='miruta-mileage-ledger-v1'){
+      const rows=safeJson(value,[]);
+      return (Array.isArray(rows)?rows.length:0)*100000 + Math.floor(maxTime(rows)/1000);
+    }
+    if(key==='miruta-mileage-active-v1'){
+      const obj=safeJson(value,{});
+      return Math.floor(maxTime(obj)/1000) + Number(obj?.miles||obj?.distance||0)*100;
+    }
+    const parsed=safeJson(value,null);
+    return (String(value).length||0) + Math.floor(maxTime(parsed)/1000000);
+  }
+  function chooseFirstHydrationValue(key,localValue,remoteInfo){
+    if(!remoteInfo)return {value:localValue,source:'local-only'};
+    if(localValue===null)return {value:remoteInfo.value,source:'cloud-only'};
+    if(remoteInfo.wrapped&&remoteInfo.updatedAt>0)return {value:remoteInfo.value,source:'cloud-versioned'};
+    if(['wl:entries','instara-work-clock-v1','miruta-mileage-active-v1','miruta-mileage-ledger-v1'].includes(key)){
+      const localScore=migrationScore(key,localValue);
+      const remoteScore=migrationScore(key,remoteInfo.value);
+      return localScore>remoteScore
+        ? {value:localValue,source:'local-richer'}
+        : {value:remoteInfo.value,source:'cloud-richer'};
+    }
+    return {value:remoteInfo.value,source:'cloud-legacy'};
+  }
   function loadScript(src){
     return new Promise((resolve,reject)=>{
+      const existing=[...document.scripts].find(s=>s.src===src);
+      if(existing){
+        if(existing.dataset.loaded==='1')return resolve();
+        existing.addEventListener('load',resolve,{once:true});
+        existing.addEventListener('error',reject,{once:true});
+        return;
+      }
       const s=document.createElement('script');
-      s.src=src; s.async=true; s.onload=resolve; s.onerror=reject;
+      s.src=src;s.async=true;
+      s.addEventListener('load',()=>{s.dataset.loaded='1';resolve()},{once:true});
+      s.addEventListener('error',reject,{once:true});
       document.head.appendChild(s);
     });
   }
+  async function pushSharedValue(key,value){
+    if(!firebaseSyncActive||!fbDb||!navigator.onLine||!cloudHydrated||!isSharedKey(key))return false;
+    const updatedAt=Date.now();
+    const envelope=wrapCloud(value,updatedAt);
+    cloudShadow.set(key,JSON.stringify(envelope));
+    localShadow.set(key,String(value??''));
+    remoteUpdatedAt.set(key,updatedAt);
+    await fbDb.ref('bitacora/'+key).set(envelope);
+    return true;
+  }
+  async function deleteSharedValue(key){
+    if(!firebaseSyncActive||!fbDb||!navigator.onLine||!cloudHydrated||!isSharedKey(key))return false;
+    cloudShadow.set(key,'__deleted__');
+    localShadow.delete(key);
+    remoteUpdatedAt.set(key,Date.now());
+    await fbDb.ref('bitacora/'+key).remove();
+    return true;
+  }
+  function scheduleRuntimeReload(reason='cloud'){
+    clearTimeout(runtimeReloadTimer);
+    runtimeReloadTimer=setTimeout(async()=>{
+      if(applyingRemoteMemory)return;
+      applyingRemoteMemory=true;
+      try{
+        if(typeof loadState==='function')await loadState();
+        try{window.InstaraWorkClock?.refreshUI?.()}catch(_e){}
+        try{window.updatePremiumDashboard?.()}catch(_e){}
+        try{window.MirutaNav?.refreshRoute?.()}catch(_e){}
+        try{window.MirutaAI?.refresh?.()}catch(_e){}
+        try{window.InstaraSchedule?.refresh?.()}catch(_e){}
+        const line=document.getElementById('status-line');
+        if(line)line.textContent='memoria compartida actualizada ✓';
+        console.info('INSTARA RC130 memory applied',reason);
+      }finally{
+        applyingRemoteMemory=false;
+      }
+    },180);
+  }
+  function applyRemoteNode(key,node,{initial=false}={}){
+    if(!isSharedKey(key))return false;
+    const info=unwrapCloud(node);
+    if(!info)return false;
+
+    const serialized=JSON.stringify(node);
+    if(!initial&&cloudShadow.get(key)===serialized)return false;
+    cloudShadow.set(key,serialized);
+
+    if(info.clientId===THIS_CLIENT){
+      remoteUpdatedAt.set(key,Math.max(remoteUpdatedAt.get(key)||0,info.updatedAt||0));
+      return false;
+    }
+
+    const knownAt=remoteUpdatedAt.get(key)||0;
+    if(info.wrapped&&info.updatedAt&&info.updatedAt<knownAt)return false;
+
+    const previous=localStorage.getItem(key);
+    if(previous===info.value){
+      localShadow.set(key,info.value);
+      remoteUpdatedAt.set(key,Math.max(knownAt,info.updatedAt||0));
+      return false;
+    }
+
+    localStorage.setItem(key,info.value);
+    localShadow.set(key,info.value);
+    remoteUpdatedAt.set(key,Math.max(knownAt,info.updatedAt||0));
+    return true;
+  }
+  async function hydrateBeforeApp(){
+    const snap=await fbDb.ref('bitacora').once('value');
+    const remote=snap.val()||{};
+    const keys=new Set([
+      ...Object.keys(remote).filter(isSharedKey),
+      ...localKeys('').filter(isSharedKey)
+    ]);
+
+    let choseLocal=0,choseCloud=0;
+    for(const key of keys){
+      const localValue=localStorage.getItem(key);
+      const remoteNode=remote[key];
+      const remoteInfo=unwrapCloud(remoteNode);
+      const chosen=chooseFirstHydrationValue(key,localValue,remoteInfo);
+
+      if(chosen.value!==null&&chosen.value!==undefined){
+        localStorage.setItem(key,String(chosen.value));
+        localShadow.set(key,String(chosen.value));
+      }
+
+      if(remoteNode!==undefined)cloudShadow.set(key,JSON.stringify(remoteNode));
+      if(remoteInfo?.updatedAt)remoteUpdatedAt.set(key,remoteInfo.updatedAt);
+
+      if(chosen.source.startsWith('local')){
+        choseLocal++;
+        if(chosen.value!==null&&String(chosen.value)!==String(remoteInfo?.value??'')){
+          await pushSharedValueAfterHydration(key,chosen.value);
+        }
+      }else{
+        choseCloud++;
+      }
+    }
+
+    return {keys:keys.size,choseLocal,choseCloud};
+  }
+  async function pushSharedValueAfterHydration(key,value){
+    const updatedAt=Date.now();
+    const envelope=wrapCloud(value,updatedAt);
+    cloudShadow.set(key,JSON.stringify(envelope));
+    localShadow.set(key,String(value??''));
+    remoteUpdatedAt.set(key,updatedAt);
+    await fbDb.ref('bitacora/'+key).set(envelope);
+  }
+  function installRealtimeMemory(){
+    let first=true;
+    fbDb.ref('bitacora').on('value',snap=>{
+      const remote=snap.val()||{};
+      if(first){
+        first=false;
+        Object.entries(remote).forEach(([key,node])=>{
+          if(isSharedKey(key))cloudShadow.set(key,JSON.stringify(node));
+        });
+        return;
+      }
+
+      let changed=false;
+      const remoteKeys=new Set(Object.keys(remote).filter(isSharedKey));
+      for(const [key,node] of Object.entries(remote)){
+        if(applyRemoteNode(key,node))changed=true;
+      }
+      for(const key of [...localShadow.keys()].filter(isSharedKey)){
+        if(remoteKeys.has(key))continue;
+        if(cloudShadow.get(key)==='__deleted__')continue;
+      }
+      if(changed)scheduleRuntimeReload('firebase-realtime');
+    });
+
+    fbDb.ref('bitacora/incoming_emails').on('value',snap=>{
+      try{processIncomingEmailsQueue(snap.val())}catch(_e){}
+    });
+  }
+  function installDirectKeyWatcher(){
+    clearInterval(directWatchTimer);
+    DIRECT_SHARED_KEYS.forEach(key=>localShadow.set(key,localStorage.getItem(key)??''));
+    directWatchTimer=setInterval(()=>{
+      if(!cloudHydrated||applyingRemoteMemory)return;
+      DIRECT_SHARED_KEYS.forEach(key=>{
+        const current=localStorage.getItem(key);
+        const previous=localShadow.get(key);
+        const normalized=current??'';
+        if(normalized===previous)return;
+        localShadow.set(key,normalized);
+        if(current===null)deleteSharedValue(key).catch(()=>{});
+        else pushSharedValue(key,current).catch(()=>{});
+      });
+    },1200);
+  }
   async function enableCloudSync(){
-    if(!navigator.onLine || firebaseSyncActive) return;
-    try{
+    if(cloudBootPromise)return cloudBootPromise;
+    cloudBootPromise=(async()=>{
+      if(!navigator.onLine)throw new Error('offline');
       await loadScript('https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js');
       await loadScript('https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js');
       if(!firebase.apps.length){
@@ -1862,11 +2104,75 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       }
       fbDb=firebase.database();
       firebaseSyncActive=true;
-      flushCloudQueue();
-    }catch(_err){ firebaseSyncActive=false; }
+
+      const hydration=await hydrateBeforeApp();
+      cloudHydrated=true;
+      installRealtimeMemory();
+      installDirectKeyWatcher();
+      console.info('INSTARA RC130 shared memory hydrated',hydration);
+      return hydration;
+    })().catch(err=>{
+      firebaseSyncActive=false;
+      cloudHydrated=false;
+      cloudBootPromise=null;
+      throw err;
+    });
+    return cloudBootPromise;
   }
-  window.addEventListener('online', enableCloudSync, {passive:true});
-  setTimeout(enableCloudSync, 4200);
+
+  window.storage={
+    get:async key=>{
+      const value=localGet(key);
+      return {key,value,shared:isSharedKey(key),source:cloudHydrated?'shared-memory':'local'};
+    },
+    set:async(key,value)=>{
+      const next=String(value??'');
+      const previous=localStorage.getItem(key);
+      localStorage.setItem(key,next);
+      localShadow.set(key,next);
+      if(previous!==next&&cloudHydrated&&isSharedKey(key)&&!applyingRemoteMemory){
+        pushSharedValue(key,next).catch(()=>{});
+      }
+      return {key,value:next,shared:isSharedKey(key),source:'local+cloud'};
+    },
+    delete:async key=>{
+      localStorage.removeItem(key);
+      localShadow.delete(key);
+      if(cloudHydrated&&isSharedKey(key)&&!applyingRemoteMemory)deleteSharedValue(key).catch(()=>{});
+      return {key,deleted:true,shared:isSharedKey(key),source:'local+cloud'};
+    },
+    list:async prefix=>({keys:localKeys(prefix),prefix,shared:true,source:cloudHydrated?'shared-memory':'local'})
+  };
+
+  window.InstaraCloudMemory={
+    async boot(){
+      try{
+        await enableCloudSync();
+        await loadState();
+        const line=document.getElementById('status-line');
+        if(line)line.textContent='memoria compartida Safari ↔ app ✓';
+        return {ok:true,cloud:true};
+      }catch(err){
+        console.warn('INSTARA RC130 cloud memory fallback',err?.message||err);
+        await loadState();
+        return {ok:true,cloud:false,message:'Modo local temporal'};
+      }
+    },
+    isActive:()=>firebaseSyncActive&&cloudHydrated,
+    clientId:()=>THIS_CLIENT,
+    forcePull:async()=>{
+      if(!firebaseSyncActive)await enableCloudSync();
+      const snap=await fbDb.ref('bitacora').once('value');
+      let changed=false;
+      Object.entries(snap.val()||{}).forEach(([key,node])=>{if(applyRemoteNode(key,node))changed=true});
+      if(changed)scheduleRuntimeReload('manual-pull');
+      return {ok:true,changed};
+    }
+  };
+
+  window.addEventListener('online',()=>{
+    enableCloudSync().then(()=>window.InstaraCloudMemory.forcePull()).catch(()=>{});
+  },{passive:true});
 
   const state = { entries: [], rate: 90, priceList: [], parts: [], partUsage: [], storeAddresses: {}, knowledgeBase: [], mountedArchives: [] };
   window.__INSTARA_STATE__ = state;
@@ -2139,7 +2445,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     render();
     if(typeof renderKnowledge==='function'){ renderKnowledge(); fillKnowledgeEditor(); }
     setTimeout(()=>window.MirutaProactive?.evaluate?.(), 250);
-    statusLine.textContent = 'datos guardados en este dispositivo';
+    statusLine.textContent = window.InstaraCloudMemory?.isActive?.() ? 'memoria compartida sincronizada ✓' : 'datos guardados en este dispositivo';
   }
   async function persistEntries(){
     try{
@@ -6221,19 +6527,9 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   }
   document.getElementById('global-alerts-btn')?.addEventListener('click',()=>{ buildAlerts(); openSheet(alertsSheet); });
 
-  if(firebaseSyncActive){
-    fbDb.ref('bitacora').on('value', () => {
-      loadState();
-      statusLine.textContent = 'sincronizado con Firebase ✓';
-    });
-    setTimeout(()=>{
-      fbDb.ref('bitacora/incoming_emails').on('value', (snap)=>{
-        processIncomingEmailsQueue(snap.val());
-      });
-    }, 1200);
-  } else {
-    loadState();
-  }
+  // RC130: do not choose local/cloud synchronously here.
+  // Hydrate shared memory first, then load the in-memory state exactly once.
+  window.InstaraCloudMemory.boot();
 
 // ---------- RC65/RC66: historial montado, diario, ingresos extra, devoluciones y evidencia ----------
   const RETURN_TASKS_KEY='miruta-return-tasks-v1';
