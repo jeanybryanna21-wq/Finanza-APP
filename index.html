@@ -1256,25 +1256,69 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   </section>
 
   <div class="miruta-nav-panel" id="miruta-nav-panel" hidden>
-    <div class="miruta-nav-top">
-      <div class="miruta-nav-instruction"><small id="nav-step-label">NAVEGANDO</small><b id="nav-step-text">Preparando ruta…</b><span id="nav-step-street">Calculando instrucciones</span></div>
-      <div class="miruta-nav-distance"><b id="nav-step-distance">—</b><small>PRÓXIMO GIRO</small></div><div class="miruta-nav-speed"><b id="nav-speed">0</b><small>MPH</small></div>
-      <button id="nav-search-btn" type="button" aria-label="Buscar dirección">🔍</button>
-      <button id="nav-background-btn" type="button" aria-label="Dejar GPS en segundo plano" title="Segundo plano">▣</button>
-      <button id="nav-close-btn" type="button" aria-label="Salir del GPS" title="Salir del GPS">✕</button>
+    <button id="nav-close-btn" type="button" aria-label="Salir del GPS" title="Salir del GPS">✕</button>
+
+    <div class="miruta-nav-instruction-card">
+      <div class="miruta-nav-instruction-main">
+        <span class="miruta-nav-turn-icon" id="nav-turn-icon">➜</span>
+        <div class="miruta-nav-instruction-text">
+          <small id="nav-step-label">NAVEGANDO</small>
+          <b id="nav-step-text">Preparando ruta…</b>
+          <span id="nav-step-street">Calculando instrucciones</span>
+        </div>
+      </div>
+      <div class="miruta-nav-instruction-next" id="nav-instruction-next" hidden>
+        <span class="miruta-nav-turn-icon sm">↰</span>
+        <span id="nav-step-next-text">—</span>
+      </div>
     </div>
+
+    <div class="miruta-nav-float-rail">
+      <button id="nav-share-btn" type="button" aria-label="Compartir llegada" title="Compartir llegada">👤➕</button>
+      <button id="nav-voice-btn" type="button" class="voice-on" aria-label="Voz" title="Voz">🔊</button>
+      <button id="nav-report-btn" type="button" aria-label="Reportar incidente" title="Reportar incidente">⚠️</button>
+      <button id="nav-satellite-btn" type="button" aria-label="Satélite" title="Satélite">🛰️</button>
+      <button id="nav-center-btn" type="button" aria-label="Centrar" title="Centrar">⌖</button>
+      <button id="nav-search-btn" type="button" aria-label="Buscar dirección" title="Buscar dirección">🔍</button>
+      <button id="nav-background-btn" type="button" aria-label="Dejar GPS en segundo plano" title="Segundo plano">▣</button>
+    </div>
+
     <div id="nav-search-bar" hidden>
       <input type="text" id="nav-search-input" placeholder="Escribe una dirección…" autocomplete="off" autocorrect="off" />
       <button id="nav-search-go" type="button">IR</button>
       <button id="nav-search-cancel" type="button">✕</button>
       <div id="nav-search-suggest"></div>
     </div>
+
     <div id="miruta-nav-map"></div>
-    <div class="miruta-nav-bottom">
-      <div class="miruta-nav-client"><div><small id="nav-client-label">SIGUIENTE PARADA</small><b id="nav-client-name">—</b></div><span class="miruta-nav-progress" id="nav-route-progress">0/0</span></div>
-      <div class="miruta-nav-eta"><span>⏱ <b id="nav-eta-time">Llegada —</b></span><span id="nav-eta-remaining">— min restantes</span></div>
-      <div class="miruta-nav-actions"><button id="nav-center-btn" type="button" aria-label="Centrar" title="Centrar">⌖</button><button id="nav-satellite-btn" type="button" aria-label="Satélite" title="Satélite">◉</button><button id="nav-voice-btn" type="button" class="voice-on" aria-label="Voz" title="Voz">🔊</button><button id="nav-complete-btn" type="button" aria-label="Completar parada" title="Completar parada">✓</button><button id="nav-next-btn" type="button" aria-label="Siguiente parada" title="Siguiente parada">⇥</button><button id="nav-end-btn" type="button" aria-label="Terminar ruta" title="Terminar ruta">■</button></div>
+
+    <div class="miruta-nav-sheet" id="miruta-nav-sheet" data-state="collapsed">
+      <div class="miruta-nav-grabber" id="miruta-nav-grabber"><span></span></div>
+
+      <button class="miruta-nav-eta-row" id="nav-eta-row" type="button">
+        <div><b id="nav-eta-time">—</b><small>llegada</small></div>
+        <div><b id="nav-eta-remaining-min">—</b><small>min</small></div>
+        <div><b id="nav-eta-remaining-mi">—</b><small>mi</small></div>
+      </button>
+
+      <button class="miruta-nav-dest-row" id="nav-dest-row" type="button">
+        <span class="miruta-nav-dest-icon" id="nav-dest-icon">🏠</span>
+        <span id="nav-client-name">—</span>
+        <span class="miruta-nav-progress" id="nav-route-progress">0/0</span>
+      </button>
+
+      <div class="miruta-nav-menu">
+        <button id="nav-add-stop-btn" type="button"><span class="mi">➕</span>Agregar parada</button>
+        <button id="nav-share-menu-btn" type="button"><span class="mi">👤➕</span>Compartir llegada</button>
+        <button id="nav-complete-btn" type="button"><span class="mi">✅</span>Completar esta parada</button>
+        <button id="nav-next-btn" type="button"><span class="mi">⏭️</span>Saltar a la siguiente</button>
+        <button id="nav-report-menu-btn" type="button"><span class="mi">⚠️</span>Reportar incidente</button>
+        <button id="nav-voice-menu-btn" type="button"><span class="mi">🔊</span>Opciones de la voz</button>
+      </div>
+
+      <button class="miruta-nav-finish-btn" id="nav-end-btn" type="button">Finalizar</button>
     </div>
+
     <div class="miruta-arrival-toast" id="miruta-arrival-toast"><b>Has llegado</b><span id="arrival-client-name">Preparando siguiente parada…</span></div>
   </div>
 
@@ -4350,20 +4394,46 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         miniMap=L.map('miruta-map',{zoomControl:false,attributionControl:true,dragging:true,tap:true,zoomAnimation:true,fadeAnimation:true,markerZoomAnimation:true}).setView([37.2709,-79.9414],10);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,updateWhenIdle:false,keepBuffer:5,attribution:'© OpenStreetMap'}).addTo(miniMap);
       }
+      let fullOk=!!fullMap;
       if(!fullMap&&$('miruta-nav-map')&&typeof maplibregl!=='undefined'){
         fullMap=new maplibregl.Map({
           container:'miruta-nav-map',
-          style:{version:8,sources:{
-            osm:{type:'raster',tiles:['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap'},
-            satellite:{type:'raster',tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],tileSize:256,attribution:'Esri, Maxar, Earthstar Geographics'}
-          },layers:[
-            {id:'osm',type:'raster',source:'osm',paint:{'raster-fade-duration':120,'raster-resampling':'linear'}},
-            {id:'satellite',type:'raster',source:'satellite',layout:{visibility:'none'},paint:{'raster-fade-duration':120,'raster-resampling':'linear'}}
-          ]},
+          style:'https://tiles.openfreemap.org/styles/liberty',
           center:[-79.9414,37.2709],zoom:13,pitch:0,bearing:0,antialias:true,attributionControl:true,maxZoom:19,
           dragRotate:true,touchPitch:true,cooperativeGestures:false
         });
-        fullMap.on('load',()=>{fullMapReady=true;ensureRouteLayers();drawFavoriteMarkers();if(currentPos){fullMap.jumpTo({center:[currentPos.lng,currentPos.lat],zoom:17,pitch:55,bearing:lastHeading||0});}});
+        fullMap.on('load',()=>{
+          fullMapReady=true;
+          try{
+            // capa satelital alterna (Esri, gratis) — se agrega apagada, se prende con el botón
+            if(!fullMap.getSource('miruta-satellite')){
+              fullMap.addSource('miruta-satellite',{type:'raster',tiles:['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],tileSize:256,attribution:'Esri, Maxar, Earthstar Geographics'});
+              fullMap.addLayer({id:'miruta-satellite-layer',type:'raster',source:'miruta-satellite',layout:{visibility:'none'}});
+            }
+            // edificios en 3D real, usando la fuente vectorial que ya trae el estilo gratis
+            if(!fullMap.getLayer('miruta-3d-buildings')){
+              const styleObj=fullMap.getStyle();
+              const vectorSourceId=Object.keys(styleObj.sources||{}).find(id=>styleObj.sources[id].type==='vector');
+              let labelLayerId;
+              (styleObj.layers||[]).forEach(l=>{ if(!labelLayerId&&l.type==='symbol'&&l.layout&&l.layout['text-field'])labelLayerId=l.id; });
+              if(vectorSourceId){
+                fullMap.addLayer({
+                  id:'miruta-3d-buildings',source:vectorSourceId,'source-layer':'building',type:'fill-extrusion',minzoom:14,
+                  filter:['!=',['get','hide_3d'],true],
+                  paint:{
+                    'fill-extrusion-color':['interpolate',['linear'],['coalesce',['get','render_height'],5],0,'#cfd3d8',50,'#b7bdc6',150,'#9aa1ac'],
+                    'fill-extrusion-height':['interpolate',['linear'],['zoom'],14,0,16,['coalesce',['get','render_height'],8]],
+                    'fill-extrusion-base':['case',['>=',['get','zoom'],16],['coalesce',['get','render_min_height'],0],0],
+                    'fill-extrusion-opacity':0.9
+                  }
+                },labelLayerId);
+              }
+            }
+          }catch(_e){ console.warn('miruta 3d/satelite',_e); }
+          ensureRouteLayers();drawFavoriteMarkers();
+          if(currentPos){fullMap.jumpTo({center:[currentPos.lng,currentPos.lat],zoom:17,pitch:55,bearing:lastHeading||0});}
+        });
+        fullMap.on('error',e=>{ console.warn('miruta map error',e?.error||e); });
         if(navigator.geolocation && !currentPos){
           navigator.geolocation.getCurrentPosition(pos=>{
             currentPos={lat:pos.coords.latitude,lng:pos.coords.longitude};
@@ -4373,8 +4443,9 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         }
         const userBreak=()=>{if(active)followMode=false;};
         fullMap.on('dragstart',userBreak);fullMap.on('zoomstart',e=>{if(e.originalEvent)userBreak();});fullMap.on('rotatestart',e=>{if(e.originalEvent)userBreak();});fullMap.on('pitchstart',e=>{if(e.originalEvent)userBreak();});
+        fullOk=true;
       }
-      return !!miniMap;
+      return !!miniMap && (fullOk || !$('miruta-nav-map'));
     }
     function stopIcon(n,isStore=false){return L.divIcon({className:'',html:`<div class="miruta-stop-marker${isStore?' store':''}"><span>${n}</span></div>`,iconSize:[29,29],iconAnchor:[15,27]});}
     function vanIcon(heading=0){return L.divIcon({className:'',html:`<div class="miruta-van-marker" style="transform:rotate(${Number(heading)||0}deg)">➤</div>`,iconSize:[34,34],iconAnchor:[17,17]});}
@@ -4412,6 +4483,21 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       const roadLabel=[road,ref].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(' / ');return roadLabel&&type!=='arrive'&&!text.includes(roadLabel)?`${text} en ${roadLabel}`:text;
     }
     function formatClock(date){return new Intl.DateTimeFormat('en-US',{hour:'numeric',minute:'2-digit'}).format(date)}
+    function maneuverIcon(step){
+      if(!step)return'➜';
+      const type=String(step.maneuver?.type||'').toLowerCase(),mod=String(step.maneuver?.modifier||'').toLowerCase();
+      if(type==='arrive')return'🏁';
+      if(type==='depart')return'➜';
+      if(type==='roundabout'||type==='rotary'||type.includes('roundabout'))return'🔄';
+      if(mod==='uturn')return'↩️';
+      if(mod==='left')return'⬅️';
+      if(mod==='right')return'➡️';
+      if(mod==='slight left')return'↖️';
+      if(mod==='slight right')return'↗️';
+      if(mod==='sharp left')return'↙️';
+      if(mod==='sharp right')return'↘️';
+      return'⬆️';
+    }
     function buildRouteGuidance(route){
       routeGeom=(route?.geometry?.coordinates||[]).map(toLL);routeCum=[];let total=0;routeGeom.forEach((p,i)=>{if(i)total+=haversine(routeGeom[i-1],p);routeCum[i]=total});
       const steps=route?.legs?.[0]?.steps||[];currentSteps=steps;stepGuide=[];let searchFrom=0;
@@ -4426,11 +4512,25 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       const g=stepGuide[currentGuideIndex],distance=Math.max(0,g.along-along);const mph=lastSpeedMps*2.23694;let thresholds=mph>=55?[2400,1100,400]:mph>=35?[1300,500,180]:[650,250,70];let band=distance<=thresholds[2]?'now':distance<=thresholds[1]?'soon':distance<=thresholds[0]?'prepare':'far';return{...g,distance,band,mph};
     }
     function speak(text,key,force=false){if(!voiceOn||!('speechSynthesis'in window)||!text)return;if(!force&&lastSpokenKey===key)return;try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='en-US';u.rate=1.08;u.pitch=1;u.volume=1;speechSynthesis.speak(u);lastSpokenKey=key}catch(_e){}}
-    function currentEtaSeconds(){let seconds=Math.max(0,Number(currentRouteDuration)||0);if(routeCum.length&&currentRouteDistance>0&&currentPos){const idx=nearestGeomIndex(currentPos),traveled=Math.min(currentRouteDistance,routeCum[idx]||0),remainingRatio=clamp((currentRouteDistance-traveled)/currentRouteDistance,0,1);seconds*=remainingRatio;}return Math.max(0,seconds);}    function updateEta(){const seconds=currentEtaSeconds(),mins=Math.max(1,Math.round(seconds/60)),arrival=new Date(Date.now()+seconds*1000);$('nav-eta-time').textContent=`Llegada ${formatClock(arrival)}`;$('nav-eta-remaining').textContent=`${mins} min restantes`;}
+    function currentEtaSeconds(){let seconds=Math.max(0,Number(currentRouteDuration)||0);if(routeCum.length&&currentRouteDistance>0&&currentPos){const idx=nearestGeomIndex(currentPos),traveled=Math.min(currentRouteDistance,routeCum[idx]||0),remainingRatio=clamp((currentRouteDistance-traveled)/currentRouteDistance,0,1);seconds*=remainingRatio;}return Math.max(0,seconds);}
+    function currentRemainingMiles(){if(!routeCum.length||currentRouteDistance<=0||!currentPos)return metersToMiles(currentRouteDistance||0);const idx=nearestGeomIndex(currentPos),traveled=Math.min(currentRouteDistance,routeCum[idx]||0);return metersToMiles(Math.max(0,currentRouteDistance-traveled));}
+    function updateEta(){
+      const seconds=currentEtaSeconds(),mins=Math.max(1,Math.round(seconds/60)),arrival=new Date(Date.now()+seconds*1000),miles=currentRemainingMiles();
+      const timeEl=$('nav-eta-time'),minEl=$('nav-eta-remaining-min'),miEl=$('nav-eta-remaining-mi');
+      if(timeEl)timeEl.textContent=formatClock(arrival);
+      if(minEl)minEl.textContent=String(mins);
+      if(miEl)miEl.textContent=miles.toFixed(miles<10?1:0);
+    }
     function updateInstructionLive(){
       const g=guidanceState(),step=g.step;let text=maneuverText(step);if(g.band==='prepare'&&step)text=`Prepárate: ${text}`;else if(g.band==='soon'&&step)text=`En ${fmtDistance(g.distance)}, ${text.toLowerCase()}`;else if(g.band==='now'&&step)text=maneuverText(step);
-      $('nav-step-text').textContent=text;$('nav-step-street').textContent=step?.name?`Vía actual / próxima: ${step.name}`:'Sigue la línea azul';$('nav-step-distance').textContent=step?fmtDistance(g.distance):'—';$('nav-speed').textContent=Math.round(g.mph||0);updateEta();
-      const stop=routeStops[currentIndex];$('nav-client-name').textContent=stop?.customerName||stop?.category||'Ruta completada';$('nav-route-progress').textContent=routeStops.length?`${Math.min(currentIndex+1,routeStops.length)}/${routeStops.length}`:'0/0';$('nav-client-label').textContent=stop?.isStoreStop?"SIGUIENTE PARADA · LOWE'S":'SIGUIENTE CLIENTE';
+      $('nav-step-text').textContent=text;
+      const streetEl=$('nav-step-street');if(streetEl)streetEl.textContent=step?fmtDistance(g.distance):'Sigue la línea azul';
+      const turnIconEl=$('nav-turn-icon');if(turnIconEl)turnIconEl.textContent=maneuverIcon(step);
+      updateEta();
+      const stop=routeStops[currentIndex];
+      const nameEl=$('nav-client-name');if(nameEl)nameEl.textContent=stop?.customerName||stop?.category||'Ruta completada';
+      const progEl=$('nav-route-progress');if(progEl)progEl.textContent=routeStops.length?`${Math.min(currentIndex+1,routeStops.length)}/${routeStops.length}`:'0/0';
+      const iconEl=$('nav-dest-icon');if(iconEl)iconEl.textContent=stop?.isStoreStop?'🏬':'🏠';
       if(step&&g.band!==lastAlertBand){const key=`${g.key}:${g.band}`;if(g.band==='prepare')speak(`In ${Math.max(1,Math.round(g.distance/1609.344*10)/10)} miles. ${maneuverText(step)}`,key);else if(g.band==='soon')speak(`In ${fmtDistance(g.distance)}. ${maneuverText(step)}`,key);else if(g.band==='now')speak(maneuverText(step),key,true);lastAlertBand=g.band;premiumHaptic(g.band==='now'?[25,45,25]:8)}
     }
     async function refreshMini(){if(!await ensureNavLibraries()||!initMaps()){const s=$('miruta-map-status');if(s)s.textContent='Mapa no disponible — revisa conexión';return}try{await prepareStops();drawMiniMarkers();if(routeStops.length>=2){const route=await osrmRoute(routeStops.map(s=>s._coord),false);drawMiniRoute(route);$('map-caption').textContent=`${routeStops.length} paradas • ${metersToMiles(route.distance).toFixed(1)} mi`;$('miruta-map-status').textContent=`${Math.round(route.duration/60)} min estimados`}else if(routeStops.length===1){$('map-caption').textContent='1 parada preparada';$('miruta-map-status').textContent='GPS interno'}}catch(err){console.warn(err);$('miruta-map-status').textContent='No se pudo calcular ahora'}setTimeout(()=>miniMap?.invalidateSize(),50)}
@@ -4612,7 +4712,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       try{
         if(!await ensureNavLibraries()||!initMaps())throw new Error('No se pudieron cargar Leaflet/MapLibre');
         showNavigation();
-        $('nav-step-text').textContent='Preparando ruta…';$('nav-step-street').textContent='Localizando todas las paradas en tu orden';$('nav-eta-time').textContent='Llegada —';$('nav-eta-remaining').textContent='Calculando…';
+        $('nav-step-text').textContent='Preparando ruta…';$('nav-step-street').textContent='Localizando todas las paradas en tu orden';$('nav-eta-time').textContent='—';if($('nav-eta-remaining-min'))$('nav-eta-remaining-min').textContent='—';if($('nav-eta-remaining-mi'))$('nav-eta-remaining-mi').textContent='—';
         await prepareStops();
         if(!routeStops.length)throw new Error('No hay paradas con una dirección válida para navegar');
         currentIndex=0;active=true;backgrounded=false;followMode=true;lastSpokenKey='';lastAlertBand='';saveNavSession();
@@ -4705,8 +4805,8 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         finally{ searchBusy=false }
       },550);
     }
-    function openAddressSearch(){
-      if(!initMaps()){alert('El mapa todavía no cargó. Recarga Miruta con conexión una vez.');return}
+    async function openAddressSearch(){
+      if(!await ensureNavLibraries()||!initMaps()){alert('El mapa todavía no cargó. Revisa tu conexión e inténtalo de nuevo.');return}
       $('miruta-nav-panel').hidden=false;document.body.style.overflow='hidden';document.body.classList.add('miruta-nav-open');
       $('nav-search-bar').hidden=false;
       $('nav-search-suggest').innerHTML='';
@@ -4718,9 +4818,10 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       if(!active){$('miruta-nav-panel').hidden=true;document.body.style.overflow=''}
     }
     async function startAdHocFromCoord(label,lat,lng){
+      if(!await ensureNavLibraries()||!initMaps()){statusLine.textContent='No se pudo cargar el mapa — revisa tu conexión';return}
       $('nav-search-bar').hidden=true;$('nav-search-suggest').innerHTML='';
       $('nav-step-text').textContent='Calculando ruta…';$('nav-step-street').textContent=label;
-      $('nav-eta-time').textContent='Llegada —';$('nav-eta-remaining').textContent='Calculando…';
+      $('nav-eta-time').textContent='—';if($('nav-eta-remaining-min'))$('nav-eta-remaining-min').textContent='—';if($('nav-eta-remaining-mi'))$('nav-eta-remaining-mi').textContent='—';
       routeStops=[{id:'adhoc-'+Date.now(),customerName:label,address:label,_coord:{lat,lng},isStoreStop:false}];
       currentIndex=0;active=true;followMode=true;lastSpokenKey='';lastAlertBand='';arrivalStopId=null;
       if(fullMapReady)drawFullMarkers();else fullMap?.once('load',drawFullMarkers);
@@ -4738,8 +4839,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       if(!fullMap||!fullMapReady)return;
       satelliteOn=!satelliteOn;
       try{
-        fullMap.setLayoutProperty('osm','visibility',satelliteOn?'none':'visible');
-        fullMap.setLayoutProperty('satellite','visibility',satelliteOn?'visible':'none');
+        fullMap.setLayoutProperty('miruta-satellite-layer','visibility',satelliteOn?'visible':'none');
       }catch(_e){}
       const btn=$('nav-satellite-btn');if(btn)btn.classList.toggle('active',satelliteOn);
       statusLine.textContent=satelliteOn?'vista satelital activada':'vista de calles activada';
@@ -4832,6 +4932,73 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       refreshMini();
     }
     $('miruta-go-btn')?.addEventListener('click',start);$('miruta-route-reload')?.addEventListener('click',refreshMini);$('nav-center-btn')?.addEventListener('click',center);$('nav-voice-btn')?.addEventListener('click',toggleVoice);$('nav-complete-btn')?.addEventListener('click',completeCurrent);$('nav-next-btn')?.addEventListener('click',advance);$('nav-end-btn')?.addEventListener('click',()=>{if(confirm('¿Terminar completamente esta ruta?'))finish(false)});$('nav-close-btn')?.addEventListener('click',hideNavigation);$('nav-background-btn')?.addEventListener('click',hideNavigation);$('miruta-adhoc-btn')?.addEventListener('click',startAdHoc);$('nav-search-btn')?.addEventListener('click',openAddressSearch);$('nav-search-cancel')?.addEventListener('click',closeAddressSearch);$('nav-search-input')?.addEventListener('input',onSearchInput);$('nav-search-go')?.addEventListener('click',async()=>{const q=$('nav-search-input').value.trim();if(!q)return;try{const list=await fetchSuggestions(q);if(list&&list[0])startAdHocFromCoord(list[0].display_name||q,Number(list[0].lat),Number(list[0].lon));else $('nav-search-suggest').innerHTML='<div class="sugg-empty">No se encontró esa dirección</div>'}catch(_e){$('nav-search-suggest').innerHTML='<div class="sugg-empty">Sin conexión para buscar ahora mismo</div>'}});$('nav-satellite-btn')?.addEventListener('click',toggleSatellite);
+
+    // ---------- hoja inferior deslizable (estilo Apple Maps) ----------
+    function shareArrival(){
+      const stop=routeStops[currentIndex];
+      const text=`Voy en camino a ${stop?.customerName||'mi próxima parada'}. Llegada estimada: ${$('nav-eta-time')?.textContent||'—'}.`;
+      if(navigator.share){ navigator.share({title:'Miruta — Mi llegada',text}).catch(()=>{}); }
+      else if(navigator.clipboard){ navigator.clipboard.writeText(text).then(()=>{statusLine.textContent='Mensaje de llegada copiado — pégalo donde quieras enviarlo'}); }
+      else statusLine.textContent=text;
+    }
+    function reportIncident(){
+      const note=prompt('¿Qué quieres anotar? (ej. obra en la vía, accidente, calle cerrada) — queda guardado solo para ti, no se comparte con nadie más');
+      if(!note||!note.trim())return;
+      const log=loadJSON('wl:gps_incident_log',[]);
+      log.unshift({at:Date.now(),note:note.trim(),lat:currentPos?.lat,lng:currentPos?.lng});
+      saveJSON('wl:gps_incident_log',log.slice(0,200));
+      statusLine.textContent='Nota guardada ✓ (queda solo en tu Miruta, no se comparte con otros conductores)';
+    }
+    function setSheetState(state){
+      const sheet=$('miruta-nav-sheet');if(!sheet)return;
+      sheet.dataset.state=state;
+    }
+    function toggleSheet(){
+      const sheet=$('miruta-nav-sheet');if(!sheet)return;
+      setSheetState(sheet.dataset.state==='expanded'?'collapsed':'expanded');
+    }
+    $('nav-dest-row')?.addEventListener('click',toggleSheet);
+    $('nav-eta-row')?.addEventListener('click',toggleSheet);
+    $('nav-share-btn')?.addEventListener('click',shareArrival);
+    $('nav-share-menu-btn')?.addEventListener('click',shareArrival);
+    $('nav-report-btn')?.addEventListener('click',reportIncident);
+    $('nav-report-menu-btn')?.addEventListener('click',reportIncident);
+    $('nav-voice-menu-btn')?.addEventListener('click',toggleVoice);
+    $('nav-add-stop-btn')?.addEventListener('click',()=>{setSheetState('collapsed');openAddressSearch();});
+
+    // arrastre real de la hoja con el dedo, con física de "cae a la posición más cercana"
+    (function setupSheetDrag(){
+      const sheet=$('miruta-nav-sheet'),grabber=$('miruta-nav-grabber');
+      if(!sheet||!grabber)return;
+      let startY=0,startTranslate=0,dragging=false;
+      function currentTranslate(){
+        const st=getComputedStyle(sheet).transform;
+        if(st==='none')return 0;
+        const m=new DOMMatrixReadOnly(st);
+        return m.m42;
+      }
+      function onStart(clientY){ dragging=true; startY=clientY; startTranslate=currentTranslate(); sheet.style.transition='none'; }
+      function onMove(clientY){
+        if(!dragging)return;
+        const delta=clientY-startY;
+        const next=Math.max(0,startTranslate+delta);
+        sheet.style.transform=`translateY(${next}px)`;
+      }
+      function onEnd(){
+        if(!dragging)return;
+        dragging=false;
+        sheet.style.transition='';
+        sheet.style.transform='';
+        const finalTranslate=currentTranslate();
+        setSheetState(finalTranslate>90?'collapsed':'expanded');
+      }
+      grabber.addEventListener('touchstart',e=>onStart(e.touches[0].clientY),{passive:true});
+      grabber.addEventListener('touchmove',e=>onMove(e.touches[0].clientY),{passive:true});
+      grabber.addEventListener('touchend',onEnd);
+      grabber.addEventListener('mousedown',e=>{onStart(e.clientY);const mm=ev=>onMove(ev.clientY),mu=()=>{onEnd();document.removeEventListener('mousemove',mm);document.removeEventListener('mouseup',mu)};document.addEventListener('mousemove',mm);document.addEventListener('mouseup',mu)});
+      grabber.addEventListener('click',toggleSheet);
+    })();
+
     window.addEventListener('online',()=>{refreshMini();if(active)reroute(true)});setTimeout(refreshMini,700);
     return{start,resumeNavigation,hideNavigation,showNavigation,startAtEntry,finish,refreshRoute:refreshMini,reroute,advance,completeCurrent,getCurrentStop:currentStop,isActive:()=>active,isBackgrounded:()=>backgrounded,estimateEntryEta,estimateDayPlan,getCurrentEtaMinutes:()=>Math.max(1,Math.round(currentEtaSeconds()/60))};
   })();
@@ -8965,6 +9132,118 @@ window.InstaraRC108={refreshFinance,install};
 .work-clock-actions button[disabled]{opacity:.38;filter:grayscale(.4)}
 .work-clock-auto{margin-top:11px;padding-top:10px;border-top:1px solid rgba(255,255,255,.10);font-size:11px;line-height:1.4;color:rgba(255,255,255,.68)}
 .work-clock-auto.good{color:#7be39c}.work-clock-auto.warn{color:#ffd05a}.work-clock-auto.bad{color:#ff9a92}
+</style>
+
+<style id="miruta-apple-maps-redesign">
+/* ================================================================
+   REDISEÑO GPS ESTILO APPLE MAPS — bloque final, gana sobre cualquier
+   estilo anterior del panel de navegación (mismos IDs/clases de siempre).
+   ================================================================ */
+.miruta-nav-panel{position:fixed!important;inset:0!important;z-index:15000!important;background:#0c0e10!important;display:block!important;padding:0!important;overflow:hidden!important}
+#miruta-nav-map{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;z-index:1!important}
+
+#nav-close-btn{position:absolute;top:calc(env(safe-area-inset-top) + 12px);left:14px;z-index:20;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:rgba(20,22,24,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);color:#fff;font-size:16px;display:grid;place-items:center;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+
+.miruta-nav-instruction-card{
+  position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:64px;right:14px;z-index:15;
+  background:rgba(18,20,22,.86);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+  border-radius:20px;border:1px solid rgba(255,255,255,.14);box-shadow:0 10px 30px rgba(0,0,0,.4);
+  overflow:hidden;transition:transform .35s cubic-bezier(.25,1,.4,1),opacity .3s ease;
+}
+.miruta-nav-instruction-main{display:flex;align-items:center;gap:14px;padding:16px 16px}
+.miruta-nav-turn-icon{font-size:34px;line-height:1;flex:0 0 auto;width:44px;text-align:center}
+.miruta-nav-turn-icon.sm{font-size:20px;width:28px}
+.miruta-nav-instruction-text{min-width:0;flex:1}
+.miruta-nav-instruction-text small{display:block;color:rgba(255,255,255,.55);font-size:11px;letter-spacing:.6px;text-transform:uppercase;font-weight:700;margin-bottom:2px}
+.miruta-nav-instruction-text b{display:block;font-size:22px;line-height:1.15;font-weight:800;color:#fff}
+.miruta-nav-instruction-text span{display:block;font-size:13px;color:rgba(255,255,255,.6);margin-top:2px}
+.miruta-nav-instruction-next{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.55);font-size:14px}
+
+.miruta-nav-float-rail{
+  position:absolute;top:150px;right:14px;z-index:14;display:flex;flex-direction:column;gap:10px;
+}
+.miruta-nav-float-rail button{
+  width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.22);
+  background:rgba(20,22,24,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  color:#fff;font-size:19px;display:grid;place-items:center;box-shadow:0 6px 18px rgba(0,0,0,.32);
+}
+.miruta-nav-float-rail button.voice-on{background:rgba(10,132,255,.32);border-color:rgba(88,166,255,.55)}
+.miruta-nav-float-rail button.active{background:rgba(88,166,255,.4);border-color:#58a6ff}
+
+#nav-search-bar{position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:14px;right:14px;z-index:19;display:flex;gap:8px;background:rgba(18,20,22,.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:16px;border:1px solid rgba(255,255,255,.16);padding:10px}
+#nav-search-bar input{flex:1;min-width:0;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;padding:10px 12px;font-size:16px}
+#nav-search-bar button{border-radius:12px;border:1px solid rgba(255,255,255,.25);background:rgba(10,132,255,.28);color:#fff;padding:0 16px;font-weight:700;flex:0 0 auto}
+#nav-search-cancel{background:rgba(255,255,255,.1)!important}
+#nav-search-suggest{position:absolute;left:10px;right:10px;top:100%;margin-top:6px;background:rgba(18,20,22,.97);border:1px solid rgba(255,255,255,.18);border-radius:14px;max-height:50vh;overflow-y:auto}
+#nav-search-suggest .sugg-item{padding:13px 14px;border-bottom:1px solid rgba(255,255,255,.1);color:#fff;font-size:15px}
+#nav-search-suggest .sugg-item:last-child{border-bottom:none}
+#nav-search-suggest .sugg-item:active{background:rgba(10,132,255,.2)}
+#nav-search-suggest .sugg-empty{padding:13px 14px;color:rgba(255,255,255,.55);font-size:14px}
+
+.miruta-nav-sheet{
+  position:absolute;left:0;right:0;bottom:0;z-index:16;
+  background:rgba(16,18,20,.92);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
+  border-top:1px solid rgba(255,255,255,.14);border-radius:20px 20px 0 0;
+  box-shadow:0 -10px 30px rgba(0,0,0,.4);
+  padding:8px 16px calc(16px + env(safe-area-inset-bottom));
+  transition:max-height .38s cubic-bezier(.25,1,.4,1);
+  max-height:calc(100vh - 100px);overflow:hidden;
+}
+.miruta-nav-grabber{display:flex;justify-content:center;padding:8px 0 10px;touch-action:none;cursor:grab}
+.miruta-nav-grabber span{width:38px;height:5px;border-radius:3px;background:rgba(255,255,255,.35)}
+
+.miruta-nav-eta-row{display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;gap:6px;margin-bottom:12px;background:none;border:none;padding:0;width:100%;font-family:inherit;-webkit-appearance:none}
+.miruta-nav-eta-row b{display:block;font-size:26px;font-weight:800;color:#fff;line-height:1.1}
+.miruta-nav-eta-row div:first-child b{color:var(--instara-gold,#ffd05a)}
+.miruta-nav-eta-row small{display:block;font-size:12px;color:rgba(255,255,255,.55);text-transform:lowercase;margin-top:2px}
+
+.miruta-nav-dest-row{
+  width:100%;display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:13px 14px;margin-bottom:10px;
+  color:#fff;font-size:16px;font-weight:700;text-align:left;
+}
+.miruta-nav-dest-icon{width:32px;height:32px;border-radius:50%;background:rgba(10,132,255,.3);display:grid;place-items:center;font-size:16px;flex:0 0 auto}
+.miruta-nav-dest-row span:nth-child(2){flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.miruta-nav-progress{color:#58a6ff;font-size:13px;font-weight:800;flex:0 0 auto}
+
+.miruta-nav-menu{display:flex;flex-direction:column;gap:2px;margin-bottom:12px;max-height:0;opacity:0;overflow:hidden;transition:max-height .3s ease,opacity .25s ease}
+.miruta-nav-menu button{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:13px 6px;
+  background:none;border:none;border-bottom:1px solid rgba(255,255,255,.09);color:#fff;font-size:16px;font-weight:600;
+}
+.miruta-nav-menu button:last-child{border-bottom:none}
+.miruta-nav-menu button .mi{font-size:19px;width:26px;text-align:center;flex:0 0 auto}
+
+.miruta-nav-finish-btn{
+  width:100%;padding:16px;border-radius:16px;border:none;background:#ff453a;color:#fff;
+  font-size:17px;font-weight:800;max-height:0;opacity:0;overflow:hidden;transition:max-height .3s ease,opacity .25s ease,padding .3s ease;
+}
+
+/* --- estado COLAPSADO: solo la fila de llegada, todo lo demás oculto --- */
+.miruta-nav-sheet[data-state="collapsed"]{max-height:150px}
+.miruta-nav-sheet[data-state="collapsed"] .miruta-nav-dest-row{display:none}
+.miruta-nav-sheet[data-state="collapsed"] .miruta-nav-menu{max-height:0!important;opacity:0!important;margin:0}
+.miruta-nav-sheet[data-state="collapsed"] .miruta-nav-finish-btn{max-height:0!important;opacity:0!important;padding:0!important;margin:0}
+
+/* --- estado EXPANDIDO: todo visible, como en la referencia --- */
+.miruta-nav-sheet[data-state="expanded"]{max-height:calc(100vh - 140px)}
+.miruta-nav-sheet[data-state="expanded"] .miruta-nav-menu{max-height:340px;opacity:1;margin-bottom:12px}
+.miruta-nav-sheet[data-state="expanded"] .miruta-nav-finish-btn{max-height:60px;opacity:1;margin-top:2px}
+
+.miruta-arrival-toast{
+  position:absolute;left:14px;right:14px;top:calc(env(safe-area-inset-top) + 10px);z-index:21;
+  background:rgba(20,140,80,.94);backdrop-filter:blur(14px);border-radius:16px;padding:14px 16px;
+  color:#fff;text-align:center;transform:translateY(-140%);transition:transform .4s cubic-bezier(.3,1.2,.4,1);
+}
+.miruta-arrival-toast.show{transform:translateY(0)}
+.miruta-arrival-toast b{display:block;font-size:17px;margin-bottom:2px}
+.miruta-arrival-toast span{display:block;font-size:13px;opacity:.85}
+
+@media(max-width:380px){
+  .miruta-nav-instruction-text b{font-size:19px}
+  .miruta-nav-eta-row b{font-size:22px}
+  .miruta-nav-float-rail button{width:42px;height:42px;font-size:17px}
+}
 </style>
 <script id="instara-rc109-work-clock">
 (function(){
