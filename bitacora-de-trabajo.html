@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC130">
+  <meta name="instara-ai-version" content="RC131">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1885,7 +1885,11 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       const jobs=rows.filter(e=>e?.type==='income');
       const done=jobs.filter(e=>['completed','paid'].includes(String(e?.status||''))||e?.manualCompletion===true).length;
       const latest=maxTime(rows);
-      return jobs.length*1000 + done*100000 + Math.floor(latest/1000000);
+      // RC131: quantity is NOT quality. Duplicate garbage must never win hydration.
+      const canonical=dedupeMegaRecords(rows);
+      const canonicalJobs=canonical.filter(e=>e?.type==='income');
+      const canonicalDone=canonicalJobs.filter(e=>['completed','paid'].includes(String(e?.status||''))||e?.manualCompletion===true).length;
+      return canonicalDone*100000 + Math.floor(latest/1000000) - Math.max(0,jobs.length-canonicalJobs.length)*1000000;
     }
     if(key==='instara-work-clock-v1'){
       const obj=safeJson(value,{});
@@ -2012,6 +2016,10 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       const remoteNode=remote[key];
       const remoteInfo=unwrapCloud(remoteNode);
       const chosen=chooseFirstHydrationValue(key,localValue,remoteInfo);
+      if(key==='wl:entries'&&chosen.value!==null&&chosen.value!==undefined){
+        const parsed=safeJson(chosen.value,[]);
+        chosen.value=JSON.stringify(dedupeMegaRecords(Array.isArray(parsed)?parsed:[]));
+      }
 
       if(chosen.value!==null&&chosen.value!==undefined){
         localStorage.setItem(key,String(chosen.value));
@@ -2370,6 +2378,116 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   }
 
   // ---------- persistencia ----------
+
+  // ---------- RC131: identidad canónica Mega/CiO y deduplicación ----------
+  function megaIdentityTokens(item){
+    const pairs=[
+      ['order',item?.cioOrderId||item?.orderViewId],
+      ['job',item?.cioJobNumber||item?.jobNumber],
+      ['po',item?.po||item?.purchaseOrderNumber],
+      ['event',item?.cioEventId||item?.eventId],
+      ['project',item?.cioProjectNumber||item?.projectNumber]
+    ];
+    return pairs
+      .filter(([,value])=>String(value||'').trim())
+      .map(([kind,value])=>kind+':'+String(value).trim().toLowerCase());
+  }
+
+  function isMegaEntry(entry){
+    return entry?.bridgeSource==='CiO Mega Bridge'
+      || entry?._cioObserved===true
+      || megaIdentityTokens(entry).length>0;
+  }
+
+  function mergeRichRecord(base,next){
+    const out={...(base||{})};
+    for(const [key,value] of Object.entries(next||{})){
+      if(value===undefined||value===null||value==='')continue;
+      if(Array.isArray(value)&&value.length===0)continue;
+      const current=out[key];
+      const currentEmpty=current===undefined||current===null||current===''||(Array.isArray(current)&&current.length===0);
+      if(currentEmpty){
+        out[key]=value;
+        continue;
+      }
+      if(Array.isArray(value)&&value.length>(Array.isArray(current)?current.length:0)){
+        out[key]=value;
+        continue;
+      }
+      if(typeof value==='string'&&typeof current==='string'&&value.length>current.length&&/notes|text|address|description|history/i.test(key)){
+        out[key]=value;
+      }
+    }
+    return out;
+  }
+
+  function dedupeMegaRecords(records){
+    const rows=Array.isArray(records)?records:[];
+    const groups=[];
+    const tokenToGroup=new Map();
+
+    for(const row of rows){
+      if(!isMegaEntry(row)){
+        groups.push({record:row,tokens:new Set(),manual:true});
+        continue;
+      }
+
+      const tokens=megaIdentityTokens(row);
+      let groupIndex=-1;
+      for(const token of tokens){
+        if(tokenToGroup.has(token)){
+          groupIndex=tokenToGroup.get(token);
+          break;
+        }
+      }
+
+      if(groupIndex<0){
+        groupIndex=groups.length;
+        groups.push({record:{...row},tokens:new Set(tokens),manual:false});
+      }else{
+        const group=groups[groupIndex];
+        group.record=mergeRichRecord(group.record,row);
+        tokens.forEach(token=>group.tokens.add(token));
+      }
+
+      const group=groups[groupIndex];
+      group.tokens.forEach(token=>tokenToGroup.set(token,groupIndex));
+      tokens.forEach(token=>tokenToGroup.set(token,groupIndex));
+    }
+
+    // A later identity token can join two previously separate groups.
+    let changed=true;
+    while(changed){
+      changed=false;
+      outer:
+      for(let i=0;i<groups.length;i++){
+        if(groups[i]?.manual)continue;
+        for(let j=i+1;j<groups.length;j++){
+          if(groups[j]?.manual)continue;
+          const overlap=[...groups[i].tokens].some(token=>groups[j].tokens.has(token));
+          if(!overlap)continue;
+          groups[i].record=mergeRichRecord(groups[i].record,groups[j].record);
+          groups[j].tokens.forEach(token=>groups[i].tokens.add(token));
+          groups.splice(j,1);
+          changed=true;
+          break outer;
+        }
+      }
+    }
+
+    return groups.map(group=>group.record);
+  }
+
+  function canonicalizeStateEntries(){
+    const before=Array.isArray(state.entries)?state.entries.length:0;
+    state.entries=dedupeMegaRecords(state.entries);
+    const after=state.entries.length;
+    if(before!==after){
+      console.warn('INSTARA RC131 deduplicated wl:entries',{before,after,removed:before-after});
+    }
+    return {before,after,removed:before-after};
+  }
+
   async function loadState(){
     try{
       const e = await window.storage.get('wl:entries', false);
@@ -2383,6 +2501,8 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       if(statusMigration[e.status]) e.status = statusMigration[e.status];
       if(!e.status) e.status = 'pending';
     });
+
+    canonicalizeStateEntries();
 
     try{
       const r = await window.storage.get('wl:rate', false);
@@ -2449,6 +2569,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   }
   async function persistEntries(){
     try{
+      canonicalizeStateEntries();
       await window.storage.set('wl:entries', JSON.stringify(state.entries), false);
       statusLine.textContent = 'guardado ✓';
     }catch(err){
@@ -6937,25 +7058,13 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
       const service=/(dish\s*washer|dishwasher|microwave|\botr\b|toilet|faucet|disposal|cooktop|range|oven|hood|washer|dryer|installation|trip charge|additional mileage|change order|exception category)/.test(text);
       return service&&!resource;
     });
-    const previousJobs=load(OBSERVED_KEY,[]);
-    const mergedJobs=new Map();
-    const mergeOne=(oldJob,newJob)=>{
-      const out={...(oldJob||{})};
-      for(const [k,v] of Object.entries(newJob||{})){
-        if(v===undefined||v===null||v===''||(Array.isArray(v)&&v.length===0))continue;
-        out[k]=v;
-      }
-      if(newJob?.confirmed===true)out.confirmed=true;
-      else if(newJob?.confirmed===false&&/(cancel|closed|payment received|past paid|needs office|delay)/i.test([newJob?.jobStatus,newJob?.imsStatus,newJob?.confirmationReason].filter(Boolean).join(' ')))out.confirmed=false;
-      return out;
-    };
-    for(const j of previousJobs){const k=jobKey(j);if(k)mergedJobs.set(k,j)}
-    for(const j of jobs){const k=jobKey(j);if(!k)continue;mergedJobs.set(k,mergeOne(mergedJobs.get(k),j))}
-    jobs=[...mergedJobs.values()];
+    // RC131: payload del Warehouse/Hub es la fuente retenida completa.
+    // No unir eternamente con OBSERVED_KEY viejo: eso conservaba identidades obsoletas y duplicados.
+    jobs=dedupeMegaRecords(jobs);
     save(OBSERVED_KEY,jobs);
     const confirmed=jobs.filter(j=>j.confirmed),observedById=new Map(jobs.map(j=>[jobKey(j),j]));
     let added=0,rescheduled=0,updated=0,suspended=0,preserved=0;
-    for(const job of confirmed){const incoming=normalizedJob(job);let e=(state.entries||[]).find(x=>String(x.cioOrderId||'')===String(incoming.cioOrderId||'')||(incoming.po&&x.po===incoming.po&&String(x.cioJobNumber||'')===String(incoming.cioJobNumber||'')));if(!e){incoming.order=nextOrder(incoming.date);incoming.orderIndex=incoming.order;addJournal(incoming,'INSTARA importó este ticket desde CiO después de verificar el estado confirmado.');state.entries.push(incoming);priceEvidence(incoming);added++;continue}if(statusIsDone(e)){Object.assign(e,{cioSyncAt:incoming.cioSyncAt,cioIMSStatus:incoming.cioIMSStatus,cioJobStatus:incoming.cioJobStatus,lineItems:incoming.lineItems,itemNumbers:incoming.itemNumbers,relatedOrders:incoming.relatedOrders,cioHistory:incoming.cioHistory,notes:incoming.notes,scopeNotes:incoming.scopeNotes,haulAway:incoming.haulAway,extendedOrderText:incoming.extendedOrderText,extendedOrderRows:incoming.extendedOrderRows,purchaseOrderAmount:incoming.purchaseOrderAmount,cioObservedOnly:false});preserved++;continue}const oldDate=e.date;if(oldDate!==incoming.date){e.date=incoming.date;e.order=nextOrder(incoming.date);e.orderIndex=e.order;rescheduled++;addJournal(e,`CiO reprogramó el trabajo de ${oldDate} a ${incoming.date}.`)}Object.assign(e,{...incoming,id:e.id,order:e.order,orderIndex:e.orderIndex||e.order,status:'pending',cioObservedOnly:false,clientJournal:e.clientJournal||[]});priceEvidence(e);updated++}
+    for(const job of confirmed){const incoming=normalizedJob(job);const incomingTokens=new Set(megaIdentityTokens(incoming));let e=(state.entries||[]).find(x=>megaIdentityTokens(x).some(token=>incomingTokens.has(token)));if(!e){incoming.order=nextOrder(incoming.date);incoming.orderIndex=incoming.order;addJournal(incoming,'INSTARA importó este ticket desde CiO después de verificar el estado confirmado.');state.entries.push(incoming);priceEvidence(incoming);added++;continue}if(statusIsDone(e)){Object.assign(e,{cioSyncAt:incoming.cioSyncAt,cioIMSStatus:incoming.cioIMSStatus,cioJobStatus:incoming.cioJobStatus,lineItems:incoming.lineItems,itemNumbers:incoming.itemNumbers,relatedOrders:incoming.relatedOrders,cioHistory:incoming.cioHistory,notes:incoming.notes,scopeNotes:incoming.scopeNotes,haulAway:incoming.haulAway,extendedOrderText:incoming.extendedOrderText,extendedOrderRows:incoming.extendedOrderRows,purchaseOrderAmount:incoming.purchaseOrderAmount,cioObservedOnly:false});preserved++;continue}const oldDate=e.date;if(oldDate!==incoming.date){e.date=incoming.date;e.order=nextOrder(incoming.date);e.orderIndex=e.order;rescheduled++;addJournal(e,`CiO reprogramó el trabajo de ${oldDate} a ${incoming.date}.`)}Object.assign(e,{...incoming,id:e.id,order:e.order,orderIndex:e.orderIndex||e.order,status:'pending',cioObservedOnly:false,clientJournal:e.clientJournal||[]});priceEvidence(e);updated++}
     for(const e of (state.entries||[]).filter(x=>x.bridgeSource==='CiO Mega Bridge'&&!statusIsDone(x))){
       const j=observedById.get(entryKey(e));
       if(!j)continue; // Missing from a scan is never deletion evidence.
@@ -6972,7 +7081,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
         e.cioReviewReason='';
       }
     }
-    persistEntries();if(typeof window.render==='function')window.render();window.InstaraSchedule?.refresh?.();
+    canonicalizeStateEntries();persistEntries();if(typeof window.render==='function')window.render();window.InstaraSchedule?.refresh?.();
     const impact={added,rescheduled,updated,suspended,preserved,totalObserved:jobs.length,totalConfirmed:confirmed.length,syncedAt:payload.syncedAt||nowIso(),source:payload.source||'CiO',windowFrom:payload.schedule?.windowFrom||'',windowTo:payload.schedule?.windowTo||''};save(BRIDGE_KEY,impact);lastPayload=payload;
     const delta=[];if(added)delta.push(`${added} nuevo${added===1?'':'s'} confirmado${added===1?'':'s'}`);if(rescheduled)delta.push(`${rescheduled} reprogramado${rescheduled===1?'':'s'}`);if(suspended)delta.push(`${suspended} observado${suspended===1?'':'s'} fuera de ruta`);if(!delta.length)delta.push('sin cambios operativos');const phase=payload?.hydrating?' · cargando detalles…':'';setBridgeStatus(`CiO 3 meses · ${jobs.length} trabajos · ${confirmed.length} confirmados${phase} · ${delta.join(' · ')}`,new Date(impact.syncedAt).toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'}));
     setTimeout(()=>{try{window.InstaraSchedule?.refresh?.();window.InstaraNextDay?.preplan?.()}catch(_e){}},120);
@@ -8523,12 +8632,72 @@ async function syncNow(){
 function injectSettings(){
   const root=document.getElementById('screen-ajustes');if(!root||document.getElementById('instara-sync-hub-settings'))return;
   const section=document.createElement('div');section.id='instara-sync-hub-settings';section.className='section-card';
-  section.innerHTML=`<button class="section-toggle open" type="button"><span>INSTARA SYNC HUB</span><span class="chev">▾</span></button><div class="section-body open"><div class="form-row"><div class="field" style="flex:2"><label>Hub URL</label><input id="instara-hub-url" type="url" placeholder="https://instara-sync-hub....workers.dev"></div></div><div class="form-row"><div class="field"><label>Channel ID</label><input id="instara-hub-channel" autocomplete="off"></div><div class="field"><label>Read Token</label><input id="instara-hub-read-token" type="password" autocomplete="off"></div></div><div class="form-row"><div class="field" style="flex:2"><label>Sync Key</label><input id="instara-hub-sync-key" type="password" autocomplete="off"></div></div><div class="form-row"><button class="btn-mini" id="instara-hub-save" type="button">GUARDAR HUB</button><button class="btn-mini" id="instara-hub-test" type="button">PROBAR HUB</button><label class="btn-mini" style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer">IMPORTAR CONFIG<input id="instara-hub-import" type="file" accept="application/json" hidden></label></div><div id="${STATUS_ID}" class="preview" data-tone="info">Sync Hub no configurado.</div></div>`;
+  section.innerHTML=`<button class="section-toggle open" type="button"><span>INSTARA SYNC HUB</span><span class="chev">▾</span></button><div class="section-body open"><div class="form-row"><div class="field" style="flex:2"><label>Hub URL</label><input id="instara-hub-url" type="url" placeholder="https://instara-sync-hub....workers.dev"></div></div><div class="form-row"><div class="field"><label>Channel ID</label><input id="instara-hub-channel" autocomplete="off"></div><div class="field"><label>Read Token</label><input id="instara-hub-read-token" type="password" autocomplete="off"></div></div><div class="form-row"><div class="field" style="flex:2"><label>Sync Key</label><input id="instara-hub-sync-key" type="password" autocomplete="off"></div></div><div class="form-row"><button class="btn-mini" id="instara-hub-save" type="button">GUARDAR HUB</button><button class="btn-mini" id="instara-hub-test" type="button">PROBAR HUB</button><label class="btn-mini" style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer">IMPORTAR CONFIG<input id="instara-hub-import" type="file" accept="application/json" hidden></label></div><div class="form-row"><button class="btn-outline" id="instara-mega-clean-sync" type="button" style="width:100%;border-color:rgba(255,112,102,.72);color:#ff9a92">LIMPIAR MEMORIA MEGA + RESINCRONIZAR</button></div><div id="${STATUS_ID}" class="preview" data-tone="info">Sync Hub no configurado.</div></div>`;
   root.insertBefore(section,root.firstChild);
   const c=cfg();
   document.getElementById('instara-hub-url').value=c.hubUrl||'';document.getElementById('instara-hub-channel').value=c.channelId||'';document.getElementById('instara-hub-read-token').value=c.readToken||'';document.getElementById('instara-hub-sync-key').value=c.syncKey||'';
   document.getElementById('instara-hub-save').addEventListener('click',()=>{const next={hubUrl:cleanUrl(document.getElementById('instara-hub-url').value),channelId:document.getElementById('instara-hub-channel').value.trim(),readToken:document.getElementById('instara-hub-read-token').value.trim(),syncKey:document.getElementById('instara-hub-sync-key').value.trim()};save(CFG_KEY,next);setStatus(ready(next)?'Sync Hub guardado.':'Faltan datos del Sync Hub.',ready(next)?'ok':'error');if(ready(next))fetchLatest({manual:true,force:true})});
   document.getElementById('instara-hub-test').addEventListener('click',()=>fetchLatest({manual:true,force:true}));
+  document.getElementById('instara-mega-clean-sync').addEventListener('click',async()=>{
+    const btn=document.getElementById('instara-mega-clean-sync');
+    if(btn?.disabled)return;
+    const ok=confirm(
+      '¿LIMPIAR MEMORIA MEGA Y RESINCRONIZAR?\n\n'+
+      'Esto elimina tickets Mega/CiO guardados localmente y en la memoria compartida, caché observada, ruta/GPS y snapshot del teléfono.\n\n'+
+      'NO borra precios, partes, compendio, aprendizaje ni registros manuales que no sean Mega.\n\n'+
+      'Después INSTARA descargará una copia fresca del Sync Hub.'
+    );
+    if(!ok)return;
+
+    const original=btn.textContent;
+    btn.disabled=true;
+    btn.textContent='LIMPIANDO…';
+    try{
+      const keep=(state.entries||[]).filter(entry=>!isMegaEntry(entry));
+      state.entries=keep;
+
+      const purgeKeys=[
+        'instara-cio-observed-jobs-v2',
+        'instara-mega-bridge-state-v2',
+        'instara-sync-hub-state-v1',
+        'instara-route-active-v1',
+        'miruta-route-order-v1',
+        'instara-gps-session-v1',
+        'instara-route-manual-impact-v1',
+        'miruta-route-current-plan-v1',
+        'miruta-route-plan-v1',
+        'instara-tomorrow-plan-v1',
+        'instara-next-day-plan-v1'
+      ];
+      purgeKeys.forEach(key=>{try{localStorage.removeItem(key)}catch(_e){}});
+
+      // This write is shared: it overwrites polluted Firebase wl:entries with the clean non-Mega set.
+      await window.storage.set('wl:entries',JSON.stringify(keep));
+      canonicalizeStateEntries();
+
+      try{window.MirutaNav?.finish?.(false)}catch(_e){}
+      try{window.render?.()}catch(_e){}
+      try{window.InstaraSchedule?.refresh?.()}catch(_e){}
+
+      btn.textContent='DESCARGANDO HUB…';
+      const result=await syncNow();
+      if(!result?.ok)throw new Error(result?.message||'El Hub no respondió.');
+
+      canonicalizeStateEntries();
+      await persistEntries();
+      try{window.render?.()}catch(_e){}
+      try{window.InstaraSchedule?.refresh?.()}catch(_e){}
+      try{window.updatePremiumDashboard?.()}catch(_e){}
+      setStatus(`Memoria Mega limpia · ${state.entries.filter(isMegaEntry).length} registros canónicos después del sync.`,'ok');
+    }catch(err){
+      console.error('RC131 clean Mega memory',err);
+      setStatus('Limpieza incompleta: '+(err?.message||'error desconocido'),'error');
+      alert('INSTARA limpió la memoria Mega local/compartida, pero la resincronización falló:\n\n'+(err?.message||'Error desconocido')+'\n\nPulsa ACTUALIZAR MEGA cuando el Hub esté disponible.');
+    }finally{
+      btn.disabled=false;
+      btn.textContent=original;
+    }
+  });
   document.getElementById('instara-hub-import').addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;try{const data=JSON.parse(await f.text());const next={hubUrl:cleanUrl(data.hubUrl),channelId:String(data.channelId||''),readToken:String(data.readToken||''),syncKey:String(data.syncKey||'')};save(CFG_KEY,next);['url','channel','read-token','sync-key'].forEach(()=>{});document.getElementById('instara-hub-url').value=next.hubUrl;document.getElementById('instara-hub-channel').value=next.channelId;document.getElementById('instara-hub-read-token').value=next.readToken;document.getElementById('instara-hub-sync-key').value=next.syncKey;setStatus('Configuración del Hub importada.','ok');await fetchLatest({manual:true,force:true})}catch(err){setStatus('Archivo de configuración inválido: '+err.message,'error')}finally{e.target.value=''}});
 }
 function installButtonInterceptor(){document.addEventListener('click',ev=>{const btn=ev.target?.closest?.('#instara-mega-sync');if(!btn)return;const c=cfg();if(!ready(c))return;ev.preventDefault();ev.stopImmediatePropagation();btn.disabled=true;btn.textContent='REVISANDO…';syncNow().finally(()=>{btn.disabled=false;btn.textContent='ACTUALIZAR MEGA'})},true)}
