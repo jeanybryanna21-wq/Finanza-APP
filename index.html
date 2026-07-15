@@ -2118,6 +2118,13 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       cloudHydrated=true;
       installRealtimeMemory();
       installDirectKeyWatcher();
+      // Empujón de seguridad: asegura que lo que ya esté guardado en este teléfono
+      // para trabajos observados de Mega suba a Firebase al menos una vez, sin
+      // depender de que se detecte un cambio futuro primero.
+      try{
+        const observedNow=localStorage.getItem('instara-cio-observed-jobs-v2');
+        if(observedNow)await pushSharedValue('instara-cio-observed-jobs-v2',observedNow);
+      }catch(_e){}
       console.info('INSTARA RC130 shared memory hydrated',hydration);
       return hydration;
     })().catch(err=>{
