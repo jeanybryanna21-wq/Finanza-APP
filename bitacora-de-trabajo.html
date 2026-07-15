@@ -8736,7 +8736,7 @@ async function syncNow(){
 function injectSettings(){
   const root=document.getElementById('screen-ajustes');if(!root||document.getElementById('instara-sync-hub-settings'))return;
   const section=document.createElement('div');section.id='instara-sync-hub-settings';section.className='section-card';
-  section.innerHTML=`<button class="section-toggle open" type="button"><span>INSTARA SYNC HUB</span><span class="chev">▾</span></button><div class="section-body open"><div class="form-row"><div class="field" style="flex:2"><label>Hub URL</label><input id="instara-hub-url" type="url" placeholder="https://instara-sync-hub....workers.dev"></div></div><div class="form-row"><div class="field"><label>Channel ID</label><input id="instara-hub-channel" autocomplete="off"></div><div class="field"><label>Read Token</label><input id="instara-hub-read-token" type="password" autocomplete="off"></div></div><div class="form-row"><div class="field" style="flex:2"><label>Sync Key</label><input id="instara-hub-sync-key" type="password" autocomplete="off"></div></div><div class="form-row"><button class="btn-mini" id="instara-hub-save" type="button">GUARDAR HUB</button><button class="btn-mini" id="instara-hub-test" type="button">PROBAR HUB</button><label class="btn-mini" style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer">IMPORTAR CONFIG<input id="instara-hub-import" type="file" accept="application/json" hidden></label></div><div class="form-row"><button class="btn-outline" id="instara-mega-clean-sync" type="button" style="width:100%;border-color:rgba(255,112,102,.72);color:#ff9a92">PURGAR FIREBASE MEGA + RESINCRONIZAR</button></div><div id="${STATUS_ID}" class="preview" data-tone="info">Sync Hub no configurado.</div></div>`;
+  section.innerHTML=`<button class="section-toggle open" type="button"><span>INSTARA SYNC HUB</span><span class="chev">▾</span></button><div class="section-body open"><div class="form-row"><div class="field" style="flex:2"><label>Hub URL</label><input id="instara-hub-url" type="url" placeholder="https://instara-sync-hub....workers.dev"></div></div><div class="form-row"><div class="field"><label>Channel ID</label><input id="instara-hub-channel" autocomplete="off"></div><div class="field"><label>Read Token</label><input id="instara-hub-read-token" type="password" autocomplete="off"></div></div><div class="form-row"><div class="field" style="flex:2"><label>Sync Key</label><input id="instara-hub-sync-key" type="password" autocomplete="off"></div></div><div class="form-row"><button class="btn-mini" id="instara-hub-save" type="button">GUARDAR HUB</button><button class="btn-mini" id="instara-hub-test" type="button">PROBAR HUB</button><label class="btn-mini" style="display:inline-flex;align-items:center;justify-content:center;cursor:pointer">IMPORTAR CONFIG<input id="instara-hub-import" type="file" accept="application/json" hidden></label></div><div class="form-row"><button class="btn-outline" id="instara-mega-clean-sync" type="button" style="width:100%;border-color:rgba(255,112,102,.72);color:#ff9a92">PURGAR FIREBASE MEGA + RESINCRONIZAR</button></div><div class="form-row"><button class="btn-outline" id="instara-mega-wipe-only" type="button" style="width:100%;border-color:rgba(255,112,102,.5);color:#ff9a92">VACIAR TODO POR AHORA (sin resincronizar)</button></div><div id="${STATUS_ID}" class="preview" data-tone="info">Sync Hub no configurado.</div></div>`;
   root.insertBefore(section,root.firstChild);
   const c=cfg();
   document.getElementById('instara-hub-url').value=c.hubUrl||'';document.getElementById('instara-hub-channel').value=c.channelId||'';document.getElementById('instara-hub-read-token').value=c.readToken||'';document.getElementById('instara-hub-sync-key').value=c.syncKey||'';
@@ -8826,6 +8826,77 @@ function injectSettings(){
         'INSTARA NO TERMINÓ LA PURGA DE FIREBASE\n\n'+
         (err?.message||'Error desconocido')+
         '\n\nNo continuaré mezclando la memoria vieja con una sincronización nueva.'
+      );
+    }finally{
+      btn.disabled=false;
+      btn.textContent=original;
+    }
+  });
+  document.getElementById('instara-mega-wipe-only')?.addEventListener('click',async()=>{
+    const btn=document.getElementById('instara-mega-wipe-only');
+    if(btn?.disabled)return;
+    const ok=confirm(
+      '¿VACIAR TODOS LOS TRABAJOS DE MEGA AHORA MISMO?\n\n'+
+      'INSTARA borrará todos los tickets de Mega Bridge de este dispositivo y de Firebase, y NO descargará nada nuevo del Sync Hub todavía. '+
+      'La app quedará sin trabajos de Mega hasta que vuelvas a sincronizar manualmente (por ejemplo cuando la extensión esté activa en la computadora).\n\n'+
+      'NO borra precios, partes, compendio, aprendizaje, geocodificación ni registros manuales que no sean Mega.'
+    );
+    if(!ok)return;
+
+    const original=btn.textContent;
+    btn.disabled=true;
+    btn.textContent='VACIANDO…';
+
+    try{
+      if(
+        !window.InstaraMegaCanonical?.dedupe ||
+        !window.InstaraMegaCanonical?.isMega ||
+        !window.InstaraMegaCanonical?.canonicalizeStateEntries
+      ){
+        throw new Error('Motor canónico Mega no disponible. Recarga INSTARA e inténtalo otra vez.');
+      }
+
+      const keep=window.InstaraMegaCanonical.dedupe((window.__INSTARA_STATE__.entries||[]).filter(entry=>!window.InstaraMegaCanonical.isMega(entry)));
+      window.__INSTARA_STATE__.entries=keep;
+
+      const purgeKeys=[
+        'instara-cio-observed-jobs-v2',
+        'instara-mega-bridge-state-v2',
+        'instara-sync-hub-state-v1',
+        'instara-route-active-v1',
+        'miruta-route-order-v1',
+        'instara-gps-session-v1',
+        'instara-route-manual-impact-v1',
+        'miruta-route-current-plan-v1',
+        'miruta-route-plan-v1',
+        'instara-tomorrow-plan-v1',
+        'instara-next-day-plan-v1'
+      ];
+      purgeKeys.forEach(key=>{try{localStorage.removeItem(key)}catch(_e){}});
+
+      const atomic=await window.InstaraCloudMemory.replaceSharedValueAtomic(
+        'wl:entries',
+        JSON.stringify(keep)
+      );
+      if(!atomic?.ok)throw new Error('Firebase no confirmó la limpieza de wl:entries.');
+
+      await window.InstaraCloudMemory.forcePull();
+      if(typeof window.loadState==='function')await window.loadState();
+      window.InstaraMegaCanonical.canonicalizeStateEntries();
+      await window.persistEntries();
+
+      try{window.MirutaNav?.finish?.(false)}catch(_e){}
+      try{window.render?.()}catch(_e){}
+      try{window.InstaraSchedule?.refresh?.()}catch(_e){}
+      try{window.updatePremiumDashboard?.()}catch(_e){}
+
+      setStatus('App vaciada de Mega ✓ 0 trabajos de Mega. Sincroniza más tarde con "PROBAR HUB" cuando la extensión esté activa.','ok');
+    }catch(err){
+      console.error('RC135 wipe-only (sin resync)',err);
+      setStatus('Vaciado falló: '+(err?.message||'error desconocido'),'error');
+      alert(
+        'INSTARA NO TERMINÓ DE VACIAR\n\n'+
+        (err?.message||'Error desconocido')
       );
     }finally{
       btn.disabled=false;

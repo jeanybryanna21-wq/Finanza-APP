@@ -1,4 +1,4 @@
-const CACHE='instara-ai-rc135-v7-cio-status-fix-real';
+const CACHE='instara-ai-rc136-v1-wipe-only-button';
 const CORE=[
   './','./index.html','./bitacora-de-trabajo.html','./fondo-app.webp','./manifest.webmanifest','./sw.js',
   './assets/leaflet/leaflet.css','./assets/leaflet/leaflet.js','./assets/maplibre/maplibre-gl.css','./assets/maplibre/maplibre-gl.js','./assets/sortable.min.js',
