@@ -6997,20 +6997,6 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   function keyOf(e){return String(e.cioOrderId||e.orderViewId||e.cioJobNumber||e.jobNumber||e.po||e.purchaseOrderNumber||e.eventId||e.cioEventId||'')}
   function isoDate(v){if(!v)return '';const raw=String(v).trim();const direct=raw.match(/^(\d{4}-\d{2}-\d{2})/);if(direct)return direct[1];const m=raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;const d=new Date(raw);return Number.isNaN(d.getTime())?'':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
   function observedStatus(j){const text=[j.imsStatus,j.jobStatus,j.raw?.barColor,j.laborCategory].filter(Boolean).join(' ').toLowerCase();if(j.confirmed)return 'pending';if(/payment received|past paid|paid/.test(text))return 'paid';if(/closed|complete|completed|work_complete/.test(text))return 'completed';if(/cancel|void|declin/.test(text))return 'cancelled';return 'observed'}
-  // RC135: clasifica CADA ticket de CiO por el texto real de su status (en vez de exigir
-  // imsStatus==='scheduled' && jobStatus==='scheduled' para dejarlo entrar). Así TODOS los
-  // tickets se importan a la bitácora, solo cambia el estado con el que entran:
-  //  - "Past Paid PO ..."      -> cerrado y pagado
-  //  - "Complete Installation" -> cerrado, todavía sin pagar
-  //  - "Scheduled Installation"-> futuro / listo para instalar
-  //  - cancelado / anulado     -> cancelado
-  function classifyBridgeStatus(j){
-    const text=[j.imsStatus,j.jobStatus,j.displayStatus,j.lowesActivity,j.confirmationReason,j.raw?.barColor,j.laborCategory].filter(Boolean).join(' ').toLowerCase();
-    if(/cancel|void|declin/.test(text))return 'cancelled';
-    if(/payment received|past paid/.test(text))return 'paid';
-    if(/\bclosed\b|\bcomplete\b|\bcompleted\b|work_complete/.test(text))return 'completed';
-    return 'pending'; // incluye "Scheduled Installation" y cualquier otro texto no reconocido: futuro, listo para instalar
-  }
   function virtualJob(j){const status=observedStatus(j),fallbackId=String(j.orderViewId||j.eventId||j.text||'').trim();return {_cioObserved:true,_cioRaw:j,cioOrderId:String(j.orderViewId||''),cioEventId:String(j.eventId||''),date:isoDate(j.scheduledDate||j.start),type:'income',status,displayStatus:statusName[status],customerName:j.customerName||j.eventCustomer||(fallbackId?`Ticket Mega #${fallbackId}`:'Ticket Mega sin identidad'),category:j.laborCategory||j.eventService||'Servicio pendiente de detalle',service:j.laborCategory||j.eventService||'Servicio pendiente de detalle',storeNumber:String(j.storeNumber||''),store:j.storeNumber?'Store '+String(j.storeNumber).replace(/^0+/,''):(j.sellerName||''),po:j.purchaseOrderNumber||'',windowStart:j.start||'',scheduledStart:j.start||'',time:j.start||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',jobNumber:j.jobNumber||'',projectNumber:j.projectNumber||'',invoiceNumber:j.invoiceNumber||'',imsStatus:j.imsStatus||'',jobStatus:j.jobStatus||'',purchaseOrderAmount:Number(j.purchaseOrderAmount||0),lineItems:j.lineItems||[],relatedOrders:j.relatedOrders||[],deliveryNotes:j.deliveryNotes||'',scopeNotes:j.scopeNotes||'',notesText:j.notesText||'',notesHistory:j.notesHistory||[],haulAway:j.haulAway===true||/haul\s*away/i.test([j.extendedOrderText,...(j.lineItems||[]).map(x=>x.description||'')].filter(Boolean).join(' | ')),extendedOrderText:j.extendedOrderText||'',extendedOrderRows:j.extendedOrderRows||[],detailError:j.detailError||'',isStoreStop:j.isStoreStop===true,instaraAutoStore:j.instaraAutoStore===true,instaraDraftOnly:j.instaraDraftOnly===true}}
   function isExplicitCalendarStoreStop(e){
     if(!e)return false;
@@ -7158,6 +7144,20 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   function storeNumber(job){return String(job.storeNumber||job.sellerStoreNumber||'').replace(/^0+/,'')}
   function stableId(job){return 'cio_'+String(job.orderViewId||job.jobNumber||job.purchaseOrderNumber||job.eventId||Date.now()).replace(/\W+/g,'_')}
   function lineText(job){return (job.lineItems||[]).map(x=>String(x.description||'')).join(' | ')}
+  // RC135: clasifica CADA ticket de CiO por el texto real de su status (en vez de exigir
+  // imsStatus==='scheduled' && jobStatus==='scheduled' para dejarlo entrar). Así TODOS los
+  // tickets se importan a la bitácora, solo cambia el estado con el que entran:
+  //  - "Past Paid PO ..."      -> cerrado y pagado
+  //  - "Complete Installation" -> cerrado, todavía sin pagar
+  //  - "Scheduled Installation"-> futuro / listo para instalar
+  //  - cancelado / anulado     -> cancelado
+  function classifyBridgeStatus(j){
+    const text=[j.imsStatus,j.jobStatus,j.displayStatus,j.lowesActivity,j.confirmationReason,j.raw?.barColor,j.laborCategory].filter(Boolean).join(' ').toLowerCase();
+    if(/cancel|void|declin/.test(text))return 'cancelled';
+    if(/payment received|past paid/.test(text))return 'paid';
+    if(/\bclosed\b|\bcomplete\b|\bcompleted\b|work_complete/.test(text))return 'completed';
+    return 'pending'; // incluye "Scheduled Installation" y cualquier otro texto no reconocido: futuro, listo para instalar
+  }
   function normalizedJob(job){const w=parseWindow(job),cons=operationalConstraints(job),items=job.lineItems||[],amount=Number(job.purchaseOrderAmount||0),store=storeNumber(job),date=isoDate(job.scheduledDate||job.start);return {_cioRaw:{...job},id:stableId(job),date,type:'income',category:job.laborCategory||job.service||job.eventService||'Trabajo Mega',amount,rate:Number(state.rate||90),net:Math.round(amount*(Number(state.rate||90)/100)*100)/100,status:classifyBridgeStatus(job),po:job.purchaseOrderNumber||'',order:9999,isAdditional:/additional|change order|trip charge/i.test(job.laborCategory||''),customerName:job.customerName||job.eventCustomer||'',address:job.customerAddress||'',phone:job.customerPhone||'',email:job.customerEmail||'',store:store?`Store ${store}`:(job.sellerName||''),storeNumber:store,timeStart:cons.earliestArrival||w.start||null,timeEnd:w.end||null,scopeNotes:[job.deliveryNotes,job.scopeNotes].filter(Boolean).join('\n'),notes:job.notesText||'',cioOrderId:String(job.orderViewId||''),cioEventId:String(job.eventId||''),cioJobNumber:job.jobNumber||'',cioProjectNumber:job.projectNumber||'',cioIMSStatus:job.imsStatus||'',cioJobStatus:job.jobStatus||'',cioConfirmed:!!job.confirmed,cioSyncAt:nowIso(),bridgeSource:'CiO Mega Bridge',itemNumbers:items.map(x=>x.itemNumber).filter(Boolean),lineItems:items,haulAway:job.haulAway===true||/haul\s*away/i.test([job.extendedOrderText,lineText(job)].filter(Boolean).join(' | ')),extendedOrderText:job.extendedOrderText||'',extendedOrderRows:job.extendedOrderRows||[],purchaseOrderAmount:amount,relatedOrders:job.relatedOrders||[],cioHistory:job.notesHistory||[],callBeforeMinutes:cons.callBeforeMinutes,earliestArrival:cons.earliestArrival,hasDogs:cons.hasDogs}}
   function addJournal(e,text){e.clientJournal=Array.isArray(e.clientJournal)?e.clientJournal:[];e.clientJournal.push({id:'jn_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),at:nowIso(),text})}
   function nextOrder(date){return Math.max(0,...(state.entries||[]).filter(e=>e.date===date).map(e=>Number(e.orderIndex??e.order??0)))+1}
