@@ -7194,7 +7194,17 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   }
   function showChanges(impact){const modal=document.createElement('div');modal.className='historical-modal';modal.innerHTML=`<div><button class="btn-mini" data-close>CERRAR</button><h2>INSTARA AI · Mega Bridge</h2><div class="historical-full"><b>Ventana:</b> mes anterior + actual + siguiente\n\n<b>Trabajos detectados:</b> ${impact.totalObserved}\n\n<b>Programados (futuros):</b> ${impact.pendingCount||0}\n\n<b>Completados (sin pagar):</b> ${impact.completedCount||0}\n\n<b>Pagados:</b> ${impact.paidCount||0}\n\n<b>Cancelados:</b> ${impact.cancelledCount||0}\n\n<b>Nuevos importados:</b> ${impact.added}\n\n<b>Reprogramados:</b> ${impact.rescheduled}\n\n<b>Actualizados:</b> ${impact.updated}\n\n<b>Terminados preservados:</b> ${impact.preserved}</div></div>`;document.body.appendChild(modal);modal.querySelector('[data-close]').onclick=()=>modal.remove()}
   async function requestSync(){setBridgeStatus('Solicitando ventana móvil de 3 meses a CiO…','Conectando');const res=await request('INSTARA_BRIDGE_REQUEST_SYNC',{reason:'manual'},90000);if(!res?.ok){setBridgeStatus(res?.message||'Mega Bridge no conectado','Sin sync');return res}if(res.payload){const impact=applySnapshot(res.payload);showChanges(impact);return {ok:true,impact,message:res.message}}return {ok:true,message:'Sincronización iniciada.'}}
-  addEventListener('message',ev=>{const d=ev.data;if(!d||d.source!=='INSTARA_BRIDGE')return;connected=true;if(d.requestId&&pending.has(d.requestId)){const p=pending.get(d.requestId);clearTimeout(p.timer);pending.delete(d.requestId);p.resolve(d)}if(d.type==='INSTARA_BRIDGE_STATUS'){setBridgeStatus(d.message||'Mega Bridge conectado',d.syncedAt?new Date(d.syncedAt).toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'}):'Conectado')}if(d.type==='INSTARA_BRIDGE_SNAPSHOT'&&d.payload)applySnapshot(d.payload)});
+  addEventListener('message',ev=>{const d=ev.data;if(!d||d.source!=='INSTARA_BRIDGE')return;connected=true;if(d.requestId&&pending.has(d.requestId)){const p=pending.get(d.requestId);clearTimeout(p.timer);pending.delete(d.requestId);p.resolve(d)}if(d.type==='INSTARA_BRIDGE_STATUS'){setBridgeStatus(d.message||'Mega Bridge conectado',d.syncedAt?new Date(d.syncedAt).toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'}):'Conectado')}
+    // RC136 v4: si el usuario pausó la sincronización (p.ej. con "VACIAR TODO POR AHORA"),
+    // ignoramos también los snapshots que lleguen directo de la extensión por postMessage,
+    // no solo los del Sync Hub. Se comprueba localStorage directo porque este bloque vive
+    // en un cierre (script) distinto al que define syncPaused().
+    if(d.type==='INSTARA_BRIDGE_SNAPSHOT'&&d.payload){
+      let paused=false;try{paused=localStorage.getItem('instara-sync-hub-paused-v1')==='1'}catch(_e){}
+      if(!paused)applySnapshot(d.payload);
+      else setBridgeStatus('Mega Bridge envió un snapshot, pero la sincronización está en pausa (VACIAR TODO POR AHORA). Dale a PROBAR HUB para reanudar.','Pausado');
+    }
+  });
   document.addEventListener('DOMContentLoaded',()=>{ping();setTimeout(()=>{if(!connected)setBridgeStatus('Mega Bridge no detectado · instala/conecta la extensión de INSTARA AI','Sin conexión')},1800);const meta=load(BRIDGE_KEY,null);if(meta?.syncedAt)setBridgeStatus(`Último sync · ${meta.totalObserved||0} trabajos · ${meta.totalConfirmed||0} confirmados`,new Date(meta.syncedAt).toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'}))});
   window.InstaraMegaBridge={requestSync,applySnapshot,getLastPayload:()=>lastPayload,isConnected:()=>connected};
 })();
@@ -8846,6 +8856,14 @@ function injectSettings(){
       'NO borra precios, partes, compendio, aprendizaje, geocodificación ni registros manuales que no sean Mega.'
     );
     if(!ok)return;
+
+    setSyncPaused(true); // RC136 v3: pausar YA, antes de cualquier await, para cerrar la
+    // ventana de carrera con los listeners de focus/visibilitychange/interval que podrían
+    // disparar un fetchLatest automático justo cuando el cuadro de confirmación se cierra.
+    if(inflight)await inflight.catch(()=>{}); // si ya había una sincronización en curso
+    // (por ejemplo disparada por el listener de "focus" justo al cerrar el cuadro de
+    // confirmación), esperamos a que termine ANTES de vaciar, para que no llegue tarde
+    // y rellene los tickets otra vez después de vaciar.
 
     const original=btn.textContent;
     btn.disabled=true;
