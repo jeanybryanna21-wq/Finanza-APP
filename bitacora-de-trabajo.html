@@ -2639,7 +2639,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   async function persistEntries(){
     try{
       canonicalizeStateEntries();
-      await window.storage.set('wl:entries', JSON.stringify(state.entries), false);
+      await window.storage.set('wl:entries', JSON.stringify(window.__INSTARA_STATE__.entries), false);
       statusLine.textContent = 'guardado ✓';
     }catch(err){
       statusLine.textContent = 'no se pudo guardar (revisa tu conexión) — el registro sigue visible en esta sesión';
@@ -7100,6 +7100,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   async function syncNow(){const btn=$('instara-mega-sync'),copy=$('instara-sync-copy'),time=$('instara-sync-time');if(!btn)return;btn.disabled=true;btn.textContent='REVISANDO…';copy.textContent=window.InstaraSyncHub?.isConfigured?.()?'Consultando INSTARA Sync Hub…':'Solicitando ventana de 3 meses a INSTARA Mega Bridge…';try{const result=window.InstaraSyncHub?.isConfigured?.()?await window.InstaraSyncHub.syncNow():await window.InstaraMegaBridge?.requestSync?.();if(!result?.ok)copy.textContent=result?.message||'No pude actualizar Mega.'}catch(err){copy.textContent='No pude actualizar: '+(err?.message||'error desconocido')}finally{time.textContent=new Date().toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'});btn.disabled=false;btn.textContent='ACTUALIZAR MEGA';renderCalendar()}}
   document.addEventListener('DOMContentLoaded',()=>{selected=localToday();const sd=new Date(selected+'T12:00:00');cursor=new Date(sd.getFullYear(),sd.getMonth(),1,12);$('schedule-prev')?.addEventListener('click',()=>{cursor.setMonth(cursor.getMonth()-1);renderCalendar()});$('schedule-next')?.addEventListener('click',()=>{cursor.setMonth(cursor.getMonth()+1);renderCalendar()});$('instara-mega-sync')?.addEventListener('click',syncNow);renderCalendar();document.addEventListener('visibilitychange',()=>{if(!document.hidden&&document.body.dataset.activeScreen==='schedule')renderCalendar()})});
   window.InstaraSchedule={refresh:renderCalendar,syncNow,dayRows};
+  window.localToday = localToday;
 })();
 </script>
 
@@ -8345,7 +8346,7 @@ function createPrExceptionTickets(jobs){
       created++;
     }
   }
-  if(created){try{localStorage.setItem('miruta-entries',JSON.stringify(state.entries))}catch(_e){};try{window.render?.()}catch(_e){}}
+  if(created){try{localStorage.setItem('miruta-entries',JSON.stringify(window.__INSTARA_STATE__.entries))}catch(_e){};try{window.render?.()}catch(_e){}}
   return created;
 }
 function enforceObserved(){const jobs=(load(OBSERVED_KEY,[])||[]).map(enforceJob);save(OBSERVED_KEY,jobs);createPrExceptionTickets(jobs);return jobs}
@@ -8752,8 +8753,8 @@ function injectSettings(){
         throw new Error('Motor canónico Mega no disponible. Recarga INSTARA e inténtalo otra vez.');
       }
 
-      const keep=window.InstaraMegaCanonical.dedupe((state.entries||[]).filter(entry=>!window.InstaraMegaCanonical.isMega(entry)));
-      state.entries=keep;
+      const keep=window.InstaraMegaCanonical.dedupe((window.__INSTARA_STATE__.entries||[]).filter(entry=>!window.InstaraMegaCanonical.isMega(entry)));
+      window.__INSTARA_STATE__.entries=keep;
 
       const purgeKeys=[
         'instara-cio-observed-jobs-v2',
@@ -8790,7 +8791,7 @@ function injectSettings(){
 
       await window.InstaraCloudMemory.replaceSharedValueAtomic(
         'wl:entries',
-        JSON.stringify(state.entries)
+        JSON.stringify(window.__INSTARA_STATE__.entries)
       );
 
       try{window.MirutaNav?.finish?.(false)}catch(_e){}
@@ -8798,12 +8799,12 @@ function injectSettings(){
       try{window.InstaraSchedule?.refresh?.()}catch(_e){}
       try{window.updatePremiumDashboard?.()}catch(_e){}
 
-      const todayIso=localToday();
+      const todayIso=window.localToday();
       const viewAudit=window.InstaraCanonicalViewAudit?.(todayIso);
       const todayCount=viewAudit?.counts?.calendar ?? window.InstaraSchedule?.dayRows?.(todayIso)?.length ?? 0;
       const workCount=viewAudit?.counts?.work ?? 0;
       setStatus(
-        `Firebase Mega purgado ✓ ${state.entries.filter(entry=>window.InstaraMegaCanonical.isMega(entry)).length} registros canónicos · hoy ${workCount} trabajos · calendario ${todayCount}`,
+        `Firebase Mega purgado ✓ ${window.__INSTARA_STATE__.entries.filter(entry=>window.InstaraMegaCanonical.isMega(entry)).length} registros canónicos · hoy ${workCount} trabajos · calendario ${todayCount}`,
         'ok'
       );
     }catch(err){
@@ -11170,7 +11171,7 @@ function audit(date){
 }
 window.InstaraRC123={audit};
 window.InstaraMegaCanonicalAudit=function(dateIso){
-  const day=String(dateIso||localToday());
+  const day=String(dateIso||window.localToday());
   const activeRaw=rows().filter(e=>e.date===day&&e.type==='income');
   const observedRaw=(load(OBSERVED_KEY,[])||[]).map(virtualJob).filter(e=>e.date===day);
   const calendar=dayRows(day);
