@@ -8687,9 +8687,13 @@ function setStatus(message,tone='info'){
   const copy=document.getElementById('instara-sync-copy');if(copy)copy.textContent=message;
   const time=document.getElementById('instara-sync-time');if(time&&tone!=='error')time.textContent=new Date().toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'});
 }
+const PAUSE_KEY='instara-sync-hub-paused-v1';
+function syncPaused(){try{return localStorage.getItem(PAUSE_KEY)==='1'}catch(_e){return false}}
+function setSyncPaused(v){try{if(v)localStorage.setItem(PAUSE_KEY,'1');else localStorage.removeItem(PAUSE_KEY)}catch(_e){}}
 async function fetchLatest({manual=false,force=false}={}){
   const c=cfg();
   if(!ready(c))return {ok:false,configured:false,message:'Sync Hub no configurado.'};
+  if(!manual&&syncPaused())return {ok:true,skipped:true,paused:true};
   if(inflight)return inflight;
   if(!force&&!manual&&Date.now()-lastPollAt<25000)return {ok:true,skipped:true};
   lastPollAt=Date.now();
@@ -8740,8 +8744,8 @@ function injectSettings(){
   root.insertBefore(section,root.firstChild);
   const c=cfg();
   document.getElementById('instara-hub-url').value=c.hubUrl||'';document.getElementById('instara-hub-channel').value=c.channelId||'';document.getElementById('instara-hub-read-token').value=c.readToken||'';document.getElementById('instara-hub-sync-key').value=c.syncKey||'';
-  document.getElementById('instara-hub-save').addEventListener('click',()=>{const next={hubUrl:cleanUrl(document.getElementById('instara-hub-url').value),channelId:document.getElementById('instara-hub-channel').value.trim(),readToken:document.getElementById('instara-hub-read-token').value.trim(),syncKey:document.getElementById('instara-hub-sync-key').value.trim()};save(CFG_KEY,next);setStatus(ready(next)?'Sync Hub guardado.':'Faltan datos del Sync Hub.',ready(next)?'ok':'error');if(ready(next))fetchLatest({manual:true,force:true})});
-  document.getElementById('instara-hub-test').addEventListener('click',()=>fetchLatest({manual:true,force:true}));
+  document.getElementById('instara-hub-save').addEventListener('click',()=>{setSyncPaused(false);const next={hubUrl:cleanUrl(document.getElementById('instara-hub-url').value),channelId:document.getElementById('instara-hub-channel').value.trim(),readToken:document.getElementById('instara-hub-read-token').value.trim(),syncKey:document.getElementById('instara-hub-sync-key').value.trim()};save(CFG_KEY,next);setStatus(ready(next)?'Sync Hub guardado.':'Faltan datos del Sync Hub.',ready(next)?'ok':'error');if(ready(next))fetchLatest({manual:true,force:true})});
+  document.getElementById('instara-hub-test').addEventListener('click',()=>{setSyncPaused(false);fetchLatest({manual:true,force:true})});
   document.getElementById('instara-mega-clean-sync').addEventListener('click',async()=>{
     const btn=document.getElementById('instara-mega-clean-sync');
     if(btn?.disabled)return;
@@ -8890,7 +8894,8 @@ function injectSettings(){
       try{window.InstaraSchedule?.refresh?.()}catch(_e){}
       try{window.updatePremiumDashboard?.()}catch(_e){}
 
-      setStatus('App vaciada de Mega ✓ 0 trabajos de Mega. Sincroniza más tarde con "PROBAR HUB" cuando la extensión esté activa.','ok');
+      setSyncPaused(true);
+      setStatus('App vaciada de Mega ✓ 0 trabajos de Mega. La sincronización automática está en pausa — dale a "PROBAR HUB" cuando la extensión esté activa para traer todo fresco.','ok');
     }catch(err){
       console.error('RC135 wipe-only (sin resync)',err);
       setStatus('Vaciado falló: '+(err?.message||'error desconocido'),'error');
