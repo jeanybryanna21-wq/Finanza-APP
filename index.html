@@ -8746,7 +8746,13 @@ async function fetchLatest({manual=false,force=false}={}){
     try{
       if(manual)setStatus('Consultando INSTARA Sync Hub…');
       const state=load(STATE_KEY,{});
-      const url=`${c.hubUrl}/v1/snapshot/${encodeURIComponent(c.channelId)}${state.snapshotVersion?`?after=${encodeURIComponent(state.snapshotVersion)}`:''}`;
+      // RC136 v6: si es forzado, NO mandamos "after" — así el Hub siempre entrega el
+      // snapshot completo y volvemos a aplicarlo, aunque la versión no haya cambiado.
+      // Antes, aun con force:true, se seguía pidiendo "después de la última versión que
+      // vi", y si Cloudflare no tenía nada más nuevo devolvía 304 y la app se quedaba
+      // con "sin cambios" sin darse cuenta de que su copia LOCAL ya se había vaciado
+      // por otro motivo (ej. el canal directo de la extensión, ya desactivado).
+      const url=`${c.hubUrl}/v1/snapshot/${encodeURIComponent(c.channelId)}${(!force&&state.snapshotVersion)?`?after=${encodeURIComponent(state.snapshotVersion)}`:''}`;
       const res=await fetch(url,{method:'GET',headers:{Authorization:`Bearer ${c.readToken}`,Accept:'application/json'},cache:'no-store',signal:ctrl.signal});
       if(res.status===304){setStatus(`Sync Hub conectado · sin cambios desde ${state.syncedAt?new Date(state.syncedAt).toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'}):'último sync'}`);return {ok:true,unchanged:true}}
       if(res.status===404){setStatus('Sync Hub conectado · esperando primer snapshot de Mega.');return {ok:true,empty:true}}
