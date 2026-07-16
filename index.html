@@ -105,7 +105,7 @@
   .count-chip .n{ font-family: 'Jost', sans-serif; font-size: 23px; font-weight: 800; color: var(--ink); text-shadow: 0 1px 4px rgba(0,0,0,0.55); }
   .count-chip .l{ font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--ink-soft); margin-top: 2px; }
   .count-chip.completed .n{ color: var(--gold-deep); }
-  .count-chip.pending .n{ color: var(--slate); }
+  .count-chip.pending .n{ color: #3b82f6; }
   .count-chip.cancelled .n{ color: var(--wine); }
   .count-chip.paid .n{ color: var(--gold); }
   .count-chip.missing .n{ color: var(--wine); }
@@ -1098,7 +1098,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
 .day-head{display:flex!important;justify-content:space-between!important;align-items:center!important;padding:9px 5px 6px!important;border-bottom:1px solid rgba(16,42,56,.2)!important}
 .day-head .day-name{font-size:12px!important;font-weight:900!important}.day-head .day-totals{font-size:10px!important;text-align:right!important;color:var(--rc68-ink-soft)!important}
 .ticket{padding:8px 5px 9px!important;margin:0!important;border:0!important;border-bottom:1px solid rgba(16,42,56,.18)!important;border-radius:0!important;background:transparent!important;box-shadow:none!important}
-.ticket.is-pending{border-left:3px solid var(--rc68-gold)!important;padding-left:8px!important}.ticket.is-cancelled{border-left:3px solid var(--rc68-red)!important;padding-left:8px!important;opacity:.72!important}
+.ticket.is-pending{border-left:3px solid #3b82f6!important;padding-left:8px!important}.ticket.is-cancelled{border-left:3px solid var(--rc68-red)!important;padding-left:8px!important;opacity:.72!important}
 .ticket-top{display:grid!important;grid-template-columns:minmax(0,1fr) 72px 148px!important;gap:8px!important;align-items:center!important}
 .ticket .desc{display:flex!important;flex-direction:column!important;align-items:flex-start!important;gap:2px!important;min-width:0!important;font-size:13px!important}
 .ticket .desc .cat{font-size:13px!important;font-weight:900!important;color:var(--rc68-ink)!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}.ticket .desc .cat::before{display:none!important}
@@ -1107,7 +1107,7 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
 .ticket .amounts{display:grid!important;grid-template-columns:58px 64px 18px!important;gap:4px!important;align-items:center!important;font-size:12px!important}.ticket .gross,.ticket .net{text-align:right!important;font-variant-numeric:tabular-nums!important}.ticket .gross{font-size:11px!important;color:var(--rc68-ink-soft)!important}.ticket .net{font-size:13px!important}.ticket .del{font-size:14px!important;color:rgba(214,47,58,.68)!important;padding:0!important}
 .status-row-quick{display:flex!important;justify-content:flex-start!important;gap:5px!important;padding:6px 0 0!important;margin:0!important;overflow-x:auto!important;scrollbar-width:none}.status-row-quick::-webkit-scrollbar{display:none}
 .status-btn{min-height:27px!important;padding:4px 8px!important;border-radius:8px!important;font-size:9px!important;letter-spacing:.05em!important;flex:0 0 auto!important}
-.status-btn.active.completed,.status-btn.active.paid{color:var(--rc68-green)!important;border-color:var(--rc68-green)!important;background:rgba(8,127,91,.08)!important}.status-btn.active.pending{color:var(--rc68-gold)!important;border-color:var(--rc68-gold)!important;background:rgba(185,134,8,.08)!important}.status-btn.active.cancelled{color:var(--rc68-red)!important;border-color:var(--rc68-red)!important;background:rgba(214,47,58,.08)!important}
+.status-btn.active.completed,.status-btn.active.paid{color:var(--rc68-green)!important;border-color:var(--rc68-green)!important;background:rgba(8,127,91,.08)!important}.status-btn.active.pending{color:#3b82f6!important;border-color:#3b82f6!important;background:rgba(59,130,246,.08)!important}.status-btn.active.cancelled{color:var(--rc68-red)!important;border-color:var(--rc68-red)!important;background:rgba(214,47,58,.08)!important}
 /* Print report: premium, high contrast, still clean */
 #print-report.open{background:#fff!important;color:#102a38!important;border:1px solid rgba(16,42,56,.25)!important;border-radius:16px!important;padding:18px!important;box-shadow:0 18px 50px rgba(0,0,0,.18)!important;margin:14px 0 22px!important;text-shadow:none!important}
 #print-report.open *{text-shadow:none!important}#print-report h1{color:#102a38!important}#print-report h2{color:#102a38!important;border-bottom:2px solid #b98608!important}#print-report th{color:#294554!important}#print-report td{color:#102a38!important}#print-report .totals-line b{color:#087f5b!important}
@@ -1800,7 +1800,15 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     'miruta-return-tasks-v1',
     'miruta-return-flows-v2',
     'wl:gps_favorites',
-    'instara-cio-observed-jobs-v2'
+    'instara-cio-observed-jobs-v2',
+    // RC137: agregados a pedido de Jean para que TODO lo demás de la app (menos la
+    // sesión de GPS activa, que es intencionalmente por dispositivo) quede igual en
+    // teléfono, tablet y computadora.
+    'miruta-readiness-current-v1',
+    'miruta-readiness-ledger-v1',
+    'miruta-decision-memory-v1',
+    'miruta-installer-roster-v1',
+    'miruta-mega-baseline-v1'
   ]);
   const cloudShadow = new Map();
   const localShadow = new Map();
@@ -1961,11 +1969,13 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       applyingRemoteMemory=true;
       try{
         if(typeof loadState==='function')await loadState();
+        try{window.render?.()}catch(_e){}
         try{window.InstaraWorkClock?.refreshUI?.()}catch(_e){}
         try{window.updatePremiumDashboard?.()}catch(_e){}
         try{window.MirutaNav?.refreshRoute?.()}catch(_e){}
         try{window.MirutaAI?.refresh?.()}catch(_e){}
         try{window.InstaraSchedule?.refresh?.()}catch(_e){}
+        try{window.InstaraRC90?.renderFinance?.()}catch(_e){}
         const line=document.getElementById('status-line');
         if(line)line.textContent='memoria compartida actualizada ✓';
         console.info('INSTARA RC130 memory applied',reason);
@@ -7153,7 +7163,9 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   //  - cancelado / anulado     -> cancelado
   function classifyBridgeStatus(j){
     const text=[j.imsStatus,j.jobStatus,j.displayStatus,j.lowesActivity,j.confirmationReason,j.raw?.barColor,j.laborCategory].filter(Boolean).join(' ').toLowerCase();
-    if(/cancel|void|declin/.test(text))return 'cancelled';
+    // "Needs Store Corrections/Info" es, en la práctica de este negocio, lo mismo que un
+    // cliente cancelado — confirmado por Jean, no un estado "pendiente" real.
+    if(/cancel|void|declin|needs store correction/.test(text))return 'cancelled';
     if(/payment received|past paid/.test(text))return 'paid';
     if(/\bclosed\b|\bcomplete\b|\bcompleted\b|work_complete/.test(text))return 'completed';
     return 'pending'; // incluye "Scheduled Installation" y cualquier otro texto no reconocido: futuro, listo para instalar
@@ -7169,8 +7181,10 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
     let jobs=window.InstaraNextDay?.cleanJobs?window.InstaraNextDay.cleanJobs(rawJobs):rawJobs.filter(j=>{
       const text=[j.eventHtml,j.eventCustomer,j.customerName,j.eventService,j.laborCategory,j.service].filter(Boolean).join(' ').toLowerCase();
       const resource=/\b1 man team\b|\bone man team\b|\bmax\s*\d+\s*jobs\b|resource availability|crew availability/.test(text);
-      const service=/(dish\s*washer|dishwasher|microwave|\botr\b|toilet|faucet|disposal|cooktop|range|oven|hood|washer|dryer|installation|trip charge|additional mileage|change order|exception category)/.test(text);
-      return service&&!resource;
+      // RC136 v5: ya no se exige una palabra clave de electrodoméstico específica — solo se
+      // excluyen los bloques de capacidad de cuadrilla. Cualquier ticket con identidad real
+      // pasa, sin importar el tipo de servicio.
+      return !resource;
     });
     // RC131: payload del Warehouse/Hub es la fuente retenida completa.
     // No unir eternamente con OBSERVED_KEY viejo: eso conservaba identidades obsoletas y duplicados.
@@ -7797,7 +7811,7 @@ input::placeholder,textarea::placeholder{color:var(--rc74-blue)!important;opacit
 button,.btn-outline,.btn-mini,.submit-btn,.status-btn,.type-toggle button,
 .bottom-nav button,.route-expand-toggle,.instara-chat-close,#instara-chat-mic,#instara-chat-send{color:var(--rc74-white)!important;text-shadow:none!important}
 .bottom-nav button.active,.bottom-nav button.active .nav-icon,.bottom-nav button.active .nav-label{color:var(--rc74-gold)!important}
-.status-btn.active.pending{color:var(--rc74-gold)!important}
+.status-btn.active.pending{color:#3b82f6!important}
 /* CARD BOUNDS LAW — everything remains inside its card. */
 .route-stop,.ticket,.week-head,.day-head,.form-card,.section-card,.calendar-ticket,.schedule-ticket{overflow:hidden!important;max-width:100%!important}
 .ticket-top{grid-template-columns:minmax(0,1fr) minmax(58px,82px) minmax(118px,145px)!important;gap:7px!important;width:100%!important;max-width:100%!important}
@@ -7865,7 +7879,7 @@ button,.btn-outline,.btn-mini,.submit-btn,.status-btn,.type-toggle button,
 .route-header-row .route-amount{grid-column:3!important;grid-row:1!important;justify-self:end!important}
 .route-header-row .route-expand-toggle{grid-column:4!important;grid-row:1 / span 2!important;align-self:center!important}
 .route-header-row .route-status-badge{grid-column:2!important;grid-row:2!important;justify-self:start!important;align-self:start!important;width:auto!important;min-width:96px!important;max-width:100%!important;padding:7px 10px!important;font-size:clamp(8px,2.45vw,12px)!important;letter-spacing:.01em!important;line-height:1!important;overflow:visible!important;text-overflow:clip!important;white-space:nowrap!important;color:var(--rc74-white)!important;border-color:rgba(255,255,255,.46)!important;background:rgba(5,10,14,.72)!important}
-.route-header-row .route-status-badge.pending{color:var(--rc74-gold)!important;border-color:var(--rc74-gold)!important}
+.route-header-row .route-status-badge.pending{color:#3b82f6!important;border-color:#3b82f6!important}
 .route-header-row .route-status-badge.completed,.route-header-row .route-status-badge.paid{color:var(--rc74-green)!important;border-color:var(--rc74-green)!important}
 .route-header-row .route-status-badge.cancelled{color:var(--rc74-red)!important;border-color:var(--rc74-red)!important}
 .route-actions .status-btn,.status-row-quick .status-btn,.money-extra-row .btn-mini,.journal-add-row .btn-mini{font-size:clamp(8px,2.45vw,12px)!important;padding-left:4px!important;padding-right:4px!important;letter-spacing:0!important;overflow:visible!important;text-overflow:clip!important;white-space:nowrap!important}
@@ -8154,8 +8168,27 @@ const tomorrow=()=>{const d=new Date();d.setDate(d.getDate()+1);return iso(d)};
 const norm=v=>String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 const joined=j=>[j.eventHtml,j.html,j.eventCustomer,j.customerName,j.eventService,j.laborCategory,j.service,j.jobType,j.scheduleDetails,j.deliveryNotes,j.scopeNotes].filter(Boolean).join(' ');
 function durationHours(j){const a=new Date(j.start||j.scheduledDate||''),b=new Date(j.end||'');return Number.isFinite(a.getTime())&&Number.isFinite(b.getTime())?(b-a)/36e5:0}
-function isResourceBlock(j){const t=norm(joined(j));const resource=/\b1 man team\b|\bone man team\b|\bmax\s*\d+\s*jobs\b|\bonly\s+\d{3,4}(?:\s*[,\/]\s*\d{3,4})+|resource availability|crew availability|team #|one man team #/.test(t);const noInstall=!/(dish\s*washer|dishwasher|microwave|\botr\b|toilet|faucet|disposal|cooktop|range|oven|hood|washer|dryer|installation|trip charge|additional mileage|change order|exception category)/.test(t);return (resource&&noInstall)||(durationHours(j)>24&&noInstall)}
-function isOperationalJob(j){if(!j||isResourceBlock(j))return false;const t=norm(joined(j));const service=/(dish\s*washer|dishwasher|microwave|\botr\b|toilet|faucet|disposal|cooktop|range|oven|hood|washer|dryer|installation|trip charge|additional mileage|change order|exception category)/.test(t);const identity=Boolean(j.customerName||j.eventCustomer||j.orderViewId||j.jobNumber||j.purchaseOrderNumber||j.eventId);return service&&identity}
+function isResourceBlock(j){
+  // RC136 v6: antes esto comparaba contra norm(joined(j)), que le quita TODOS los espacios
+  // al texto (ej. "1 MAN TEAM" -> "1manteam"). Como los patrones de abajo buscan espacios
+  // literales, nunca hacían match — solo la duración >24h excluía bloques. Ahora se compara
+  // contra el texto original en minúsculas, con espacios de verdad.
+  const raw=joined(j).toLowerCase();
+  const resource=/\b1\s*man\s*team\b|\bone\s*man\s*team\b|\bmax\s*\d+\s*jobs\b|\bonly\s+\d{3,4}(?:\s*[,\/]\s*\d{3,4})+|resource availability|crew availability|\bteam\s*#|\bschedule\s*block\b|^\s*off\b\s*\d{1,2}\/\d{1,2}\/\d{4}/.test(raw);
+  const noInstall=!/(dish\s*washer|dishwasher|microwave|\botr\b|toilet|faucet|disposal|cooktop|range|oven|hood|washer|dryer|installation|trip charge|additional mileage|change order|exception category)/.test(raw);
+  return (resource&&noInstall)||(durationHours(j)>24&&noInstall);
+}
+function isOperationalJob(j){
+  if(!j||isResourceBlock(j))return false;
+  // RC136 v5: antes se exigía que el texto del ticket contuviera una palabra clave de una
+  // lista fija de electrodomésticos (dishwasher, microwave, otr, etc.). Eso descartaba en
+  // silencio cualquier tipo de trabajo que CiO mandara con otro texto (ej. "ice maker",
+  // "water heater", "wine cooler"...). Ahora solo se exige que NO sea un bloque de
+  // capacidad de cuadrilla y que tenga identidad real (cliente/orden/PO/evento) — así entra
+  // absolutamente todo ticket real, sin importar el tipo de servicio.
+  const identity=Boolean(j.customerName||j.eventCustomer||j.orderViewId||j.jobNumber||j.purchaseOrderNumber||j.eventId);
+  return identity;
+}
 function strictConfirmed(j){if(j?.confirmed===true)return true;const ims=norm(j?.imsStatus),status=norm(j?.jobStatus),date=String(j?.scheduledDate||j?.start||'');return ims==='scheduled'&&status==='scheduled'&&/\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{4}/.test(date)}
 function explicitNonConfirmed(j){const t=norm([j?.imsStatus,j?.jobStatus,j?.confirmationReason].filter(Boolean).join(' '));return /needs office|cancel|closed|payment received|past paid|not confirmed|reschedul/.test(t)}
 function jobKey(j){return String(j?.orderViewId||j?.jobNumber||j?.purchaseOrderNumber||j?.eventId||'')}
@@ -9481,7 +9514,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)install()}
 
 <style id="instara-rc102-historical-payment-accounting-css">
 #screen-schedule .schedule-ticket .payment-state.paid{color:#78e08f!important;border-color:#78e08f!important}
-#screen-schedule .schedule-ticket .payment-state.pending{color:#ffd05a!important;border-color:#ffd05a!important}
+#screen-schedule .schedule-ticket .payment-state.pending{color:#3b82f6!important;border-color:#3b82f6!important}
 #screen-schedule .schedule-ticket.done .pill{color:#78e08f!important;border-color:#78e08f!important}
 </style>
 <script id="instara-rc102-historical-payment-accounting">
@@ -9707,7 +9740,7 @@ window.InstaraRC102={refreshAll,decorateCalendar,mergeObservedIntoEntries,amount
 
 <style id="instara-rc103-evidence-status-css">
 #screen-schedule .schedule-ticket .payment-state.paid{color:#78e08f!important;border-color:#78e08f!important}
-#screen-schedule .schedule-ticket .payment-state.pending{color:#ffd05a!important;border-color:#ffd05a!important}
+#screen-schedule .schedule-ticket .payment-state.pending{color:#3b82f6!important;border-color:#3b82f6!important}
 #screen-schedule .schedule-ticket .payment-state.none{color:#fff!important;border-color:rgba(255,255,255,.45)!important}
 #screen-schedule .schedule-ticket.done .pill{color:#78e08f!important;border-color:#78e08f!important}
 </style>

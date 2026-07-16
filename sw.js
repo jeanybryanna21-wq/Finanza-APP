@@ -1,4 +1,4 @@
-const CACHE='instara-ai-rc136-v4-block-all-auto-sync';
+const CACHE='instara-ai-rc137-full-review-sync-fix';
 const CORE=[
   './','./index.html','./bitacora-de-trabajo.html','./fondo-app.webp','./manifest.webmanifest','./sw.js',
   './assets/leaflet/leaflet.css','./assets/leaflet/leaflet.js','./assets/maplibre/maplibre-gl.css','./assets/maplibre/maplibre-gl.js','./assets/sortable.min.js',
