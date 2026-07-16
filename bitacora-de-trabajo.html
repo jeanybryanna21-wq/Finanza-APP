@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC141">
+  <meta name="instara-ai-version" content="RC142">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -6998,6 +6998,64 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
 
 </html>
 
+
+<script id="instara-rc142-universal-job-date">
+(function(){
+'use strict';
+function parseDate(v){
+  if(v==null||v==='')return '';
+  if(v instanceof Date&&!Number.isNaN(v.getTime())){
+    return `${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}-${String(v.getDate()).padStart(2,'0')}`;
+  }
+  const raw=String(v).trim();
+  let m=raw.match(/(?:^|\D)(20\d{2})[-\/](\d{1,2})[-\/](\d{1,2})(?:\D|$)/);
+  if(m)return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  m=raw.match(/(?:^|\D)(\d{1,2})\/(\d{1,2})\/(20\d{2})(?:\D|$)/);
+  if(m)return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+  const d=new Date(raw);
+  if(Number.isNaN(d.getTime()))return '';
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function resolve(job){
+  if(!job)return '';
+  const preferred=[
+    'scheduledDate','scheduleDate','date','eventDate','appointmentDate','serviceDate',
+    'scheduledStart','scheduleStart','eventStart','startDate','startDateTime',
+    'scheduledFor','appointmentStart','serviceStart','start'
+  ];
+  const holders=[job,job.raw,job._cioRaw,job.event,job.schedule,job.appointment,job.details,job.data].filter(Boolean);
+  for(const holder of holders){
+    for(const key of preferred){
+      const d=parseDate(holder?.[key]);
+      if(d)return d;
+    }
+  }
+  const seen=new Set();
+  function walk(obj,depth){
+    if(!obj||typeof obj!=='object'||depth>3||seen.has(obj))return '';
+    seen.add(obj);
+    for(const [key,val] of Object.entries(obj)){
+      const low=key.toLowerCase();
+      if(/created|updated|modified|synced|fetched|received|timestamp|end|complete|paid/.test(low))continue;
+      if(/scheduled|schedule|appointment|service.?date|event.?start|event.?date|start.?date/.test(low)){
+        const d=parseDate(val);
+        if(d)return d;
+      }
+    }
+    for(const val of Object.values(obj)){
+      if(val&&typeof val==='object'){
+        const d=walk(val,depth+1);
+        if(d)return d;
+      }
+    }
+    return '';
+  }
+  return walk(job,0);
+}
+window.InstaraJobDate={parse:parseDate,resolve};
+})();
+</script>
+
 <script id="rc69-instara-schedule-js">
 (function(){
   const $=id=>document.getElementById(id);
@@ -7014,7 +7072,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   function keyOf(e){return String(e.cioOrderId||e.orderViewId||e.cioJobNumber||e.jobNumber||e.po||e.purchaseOrderNumber||e.eventId||e.cioEventId||'')}
   function isoDate(v){if(!v)return '';const raw=String(v).trim();const direct=raw.match(/^(\d{4}-\d{2}-\d{2})/);if(direct)return direct[1];const m=raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;const d=new Date(raw);return Number.isNaN(d.getTime())?'':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
   function observedStatus(j){const text=[j.imsStatus,j.jobStatus,j.raw?.barColor,j.laborCategory].filter(Boolean).join(' ').toLowerCase();if(j.confirmed)return 'pending';if(/payment received|past paid|paid/.test(text))return 'paid';if(/closed|complete|completed|work_complete/.test(text))return 'completed';if(/cancel|void|declin/.test(text))return 'cancelled';return 'observed'}
-  function virtualJob(j){const status=observedStatus(j),fallbackId=String(j.orderViewId||j.eventId||j.text||'').trim();return {_cioObserved:true,_cioRaw:j,cioOrderId:String(j.orderViewId||''),cioEventId:String(j.eventId||''),date:isoDate(j.scheduledDate||j.date||j.eventDate||j.scheduleDate||j.scheduledStart||j.startDate||j.start),type:'income',status,displayStatus:statusName[status],customerName:j.customerName||j.eventCustomer||(fallbackId?`Ticket Mega #${fallbackId}`:'Ticket Mega sin identidad'),category:j.laborCategory||j.eventService||'Servicio pendiente de detalle',service:j.laborCategory||j.eventService||'Servicio pendiente de detalle',storeNumber:String(j.storeNumber||''),store:j.storeNumber?'Store '+String(j.storeNumber).replace(/^0+/,''):(j.sellerName||''),po:j.purchaseOrderNumber||'',windowStart:j.start||'',scheduledStart:j.start||'',time:j.start||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',jobNumber:j.jobNumber||'',projectNumber:j.projectNumber||'',invoiceNumber:j.invoiceNumber||'',imsStatus:j.imsStatus||'',jobStatus:j.jobStatus||'',purchaseOrderAmount:Number(j.purchaseOrderAmount||0),lineItems:j.lineItems||[],relatedOrders:j.relatedOrders||[],deliveryNotes:j.deliveryNotes||'',scopeNotes:j.scopeNotes||'',notesText:j.notesText||'',notesHistory:j.notesHistory||[],haulAway:j.haulAway===true||/haul\s*away/i.test([j.extendedOrderText,...(j.lineItems||[]).map(x=>x.description||'')].filter(Boolean).join(' | ')),extendedOrderText:j.extendedOrderText||'',extendedOrderRows:j.extendedOrderRows||[],detailError:j.detailError||'',isStoreStop:j.isStoreStop===true,instaraAutoStore:j.instaraAutoStore===true,instaraDraftOnly:j.instaraDraftOnly===true}}
+  function virtualJob(j){const status=observedStatus(j),fallbackId=String(j.orderViewId||j.eventId||j.text||'').trim();return {_cioObserved:true,_cioRaw:j,cioOrderId:String(j.orderViewId||''),cioEventId:String(j.eventId||''),date:(window.InstaraJobDate?.resolve(j)||isoDate(j.scheduledDate||j.start)),type:'income',status,displayStatus:statusName[status],customerName:j.customerName||j.eventCustomer||(fallbackId?`Ticket Mega #${fallbackId}`:'Ticket Mega sin identidad'),category:j.laborCategory||j.eventService||'Servicio pendiente de detalle',service:j.laborCategory||j.eventService||'Servicio pendiente de detalle',storeNumber:String(j.storeNumber||''),store:j.storeNumber?'Store '+String(j.storeNumber).replace(/^0+/,''):(j.sellerName||''),po:j.purchaseOrderNumber||'',windowStart:j.start||'',scheduledStart:j.start||'',time:j.start||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',jobNumber:j.jobNumber||'',projectNumber:j.projectNumber||'',invoiceNumber:j.invoiceNumber||'',imsStatus:j.imsStatus||'',jobStatus:j.jobStatus||'',purchaseOrderAmount:Number(j.purchaseOrderAmount||0),lineItems:j.lineItems||[],relatedOrders:j.relatedOrders||[],deliveryNotes:j.deliveryNotes||'',scopeNotes:j.scopeNotes||'',notesText:j.notesText||'',notesHistory:j.notesHistory||[],haulAway:j.haulAway===true||/haul\s*away/i.test([j.extendedOrderText,...(j.lineItems||[]).map(x=>x.description||'')].filter(Boolean).join(' | ')),extendedOrderText:j.extendedOrderText||'',extendedOrderRows:j.extendedOrderRows||[],detailError:j.detailError||'',isStoreStop:j.isStoreStop===true,instaraAutoStore:j.instaraAutoStore===true,instaraDraftOnly:j.instaraDraftOnly===true}}
   function isExplicitCalendarStoreStop(e){
     if(!e)return false;
 
@@ -7178,34 +7236,13 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
     if(/\bclosed\b|\bcomplete\b|\bcompleted\b|work_complete/.test(text))return 'completed';
     return 'pending'; // incluye "Scheduled Installation" y cualquier otro texto no reconocido: futuro, listo para instalar
   }
-  function normalizedJob(job){const w=parseWindow(job),cons=operationalConstraints(job),items=job.lineItems||[],amount=Number(job.purchaseOrderAmount||0),store=storeNumber(job),date=isoDate(job.scheduledDate||job.date||job.eventDate||job.scheduleDate||job.scheduledStart||job.startDate||job.start);return {_cioRaw:{...job},id:stableId(job),date,type:'income',category:job.laborCategory||job.service||job.eventService||'Trabajo Mega',amount,rate:Number(state.rate||90),net:Math.round(amount*(Number(state.rate||90)/100)*100)/100,status:classifyBridgeStatus(job),po:job.purchaseOrderNumber||'',order:9999,isAdditional:/additional|change order|trip charge/i.test(job.laborCategory||''),customerName:job.customerName||job.eventCustomer||'',address:job.customerAddress||'',phone:job.customerPhone||'',email:job.customerEmail||'',store:store?`Store ${store}`:(job.sellerName||''),storeNumber:store,timeStart:cons.earliestArrival||w.start||null,timeEnd:w.end||null,scopeNotes:[job.deliveryNotes,job.scopeNotes].filter(Boolean).join('\n'),notes:job.notesText||'',cioOrderId:String(job.orderViewId||''),cioEventId:String(job.eventId||''),cioJobNumber:job.jobNumber||'',cioProjectNumber:job.projectNumber||'',cioIMSStatus:job.imsStatus||'',cioJobStatus:job.jobStatus||'',cioConfirmed:!!job.confirmed,cioSyncAt:nowIso(),bridgeSource:'CiO Mega Bridge',itemNumbers:items.map(x=>x.itemNumber).filter(Boolean),lineItems:items,haulAway:job.haulAway===true||/haul\s*away/i.test([job.extendedOrderText,lineText(job)].filter(Boolean).join(' | ')),extendedOrderText:job.extendedOrderText||'',extendedOrderRows:job.extendedOrderRows||[],purchaseOrderAmount:amount,relatedOrders:job.relatedOrders||[],cioHistory:job.notesHistory||[],callBeforeMinutes:cons.callBeforeMinutes,earliestArrival:cons.earliestArrival,hasDogs:cons.hasDogs}}
+  function normalizedJob(job){const w=parseWindow(job),cons=operationalConstraints(job),items=job.lineItems||[],amount=Number(job.purchaseOrderAmount||0),store=storeNumber(job),date=(window.InstaraJobDate?.resolve(job)||isoDate(job.scheduledDate||job.start));return {_cioRaw:{...job},id:stableId(job),date,type:'income',category:job.laborCategory||job.service||job.eventService||'Trabajo Mega',amount,rate:Number(state.rate||90),net:Math.round(amount*(Number(state.rate||90)/100)*100)/100,status:classifyBridgeStatus(job),po:job.purchaseOrderNumber||'',order:9999,isAdditional:/additional|change order|trip charge/i.test(job.laborCategory||''),customerName:job.customerName||job.eventCustomer||'',address:job.customerAddress||'',phone:job.customerPhone||'',email:job.customerEmail||'',store:store?`Store ${store}`:(job.sellerName||''),storeNumber:store,timeStart:cons.earliestArrival||w.start||null,timeEnd:w.end||null,scopeNotes:[job.deliveryNotes,job.scopeNotes].filter(Boolean).join('\n'),notes:job.notesText||'',cioOrderId:String(job.orderViewId||''),cioEventId:String(job.eventId||''),cioJobNumber:job.jobNumber||'',cioProjectNumber:job.projectNumber||'',cioIMSStatus:job.imsStatus||'',cioJobStatus:job.jobStatus||'',cioConfirmed:!!job.confirmed,cioSyncAt:nowIso(),bridgeSource:'CiO Mega Bridge',itemNumbers:items.map(x=>x.itemNumber).filter(Boolean),lineItems:items,haulAway:job.haulAway===true||/haul\s*away/i.test([job.extendedOrderText,lineText(job)].filter(Boolean).join(' | ')),extendedOrderText:job.extendedOrderText||'',extendedOrderRows:job.extendedOrderRows||[],purchaseOrderAmount:amount,relatedOrders:job.relatedOrders||[],cioHistory:job.notesHistory||[],callBeforeMinutes:cons.callBeforeMinutes,earliestArrival:cons.earliestArrival,hasDogs:cons.hasDogs}}
   function addJournal(e,text){e.clientJournal=Array.isArray(e.clientJournal)?e.clientJournal:[];e.clientJournal.push({id:'jn_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),at:nowIso(),text})}
   function nextOrder(date){return Math.max(0,...(state.entries||[]).filter(e=>e.date===date).map(e=>Number(e.orderIndex??e.order??0)))+1}
   function priceEvidence(entry){try{if(!entry.cioConfirmed||!entry.category||!entry.amount)return;const all=load(PRICE_EVIDENCE_KEY,{}),key=String(entry.category).trim().toLowerCase(),bucket=Array.isArray(all[key])?all[key]:[];if(!bucket.some(x=>x.po===entry.po&&x.amount===entry.amount))bucket.push({po:entry.po,amount:entry.amount,at:nowIso(),source:'Purchase Order Amount'});all[key]=bucket.slice(-20);save(PRICE_EVIDENCE_KEY,all);const p=(state.priceList||[]).find(x=>String(x.name||'').trim().toLowerCase()===key);if(!p||Number(p.price)===Number(entry.amount))return;const hits=bucket.filter(x=>Number(x.amount)===Number(entry.amount)).length;if(hits>=3){const oldPrice=Number(p.price||0);p.price=Number(entry.amount);window.persistPriceList();window.MirutaRC68?.logDecision?.('price_intelligence','Tarifa CiO actualizada',`${entry.category}: 3+ tickets confirmados muestran ${money(entry.amount)} en Purchase Order Amount. INSTARA actualizó la referencia desde ${money(oldPrice)}.`,{score:96,evidence:['Crew Payment Tracking','Purchase Order Amount','3 tickets confirmados equivalentes']},'observed')}}catch(_e){}}
   function jobKey(j){return String(j.orderViewId||j.jobNumber||j.purchaseOrderNumber||j.eventId||'')}
   function entryKey(e){return String(e.cioOrderId||e.cioJobNumber||e.po||e.cioEventId||'')}
-  function repairImportedDatesFromRaw(){
-    let repaired=0;
-    for(const entry of (state.entries||[])){
-      if(entry?.type!=='income'||entry?.date)continue;
-      const raw=entry?._cioRaw||{};
-      const recovered=isoDate(
-        raw.scheduledDate||raw.date||raw.eventDate||raw.scheduleDate||
-        raw.scheduledStart||raw.startDate||raw.start
-      );
-      if(recovered){
-        entry.date=recovered;
-        repaired++;
-      }
-    }
-    if(repaired){
-      window.canonicalizeStateEntries?.();
-      window.persistEntries?.();
-    }
-    return repaired;
-  }
   function applySnapshot(payload){
-    repairImportedDatesFromRaw();
     const rawJobs=Array.isArray(payload?.jobs)?payload.jobs:[];
     let jobs=window.InstaraNextDay?.cleanJobs?window.InstaraNextDay.cleanJobs(rawJobs):rawJobs.filter(j=>{
       const text=[j.eventHtml,j.eventCustomer,j.customerName,j.eventService,j.laborCategory,j.service].filter(Boolean).join(' ').toLowerCase();
@@ -7227,7 +7264,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
     const allJobs=jobs,observedById=new Map(jobs.map(j=>[jobKey(j),j]));
     let added=0,rescheduled=0,updated=0,suspended=0,preserved=0;
     for(const job of allJobs){const incoming=normalizedJob(job);const incomingTokens=new Set(window.megaIdentityTokens(incoming));let e=(state.entries||[]).find(x=>window.megaIdentityTokens(x).some(token=>incomingTokens.has(token)));if(!e){incoming.order=nextOrder(incoming.date);incoming.orderIndex=incoming.order;addJournal(incoming,`INSTARA importó este ticket desde CiO (${incoming.status}).`);state.entries.push(incoming);priceEvidence(incoming);added++;continue}if(statusIsDone(e)){Object.assign(e,{cioSyncAt:incoming.cioSyncAt,cioIMSStatus:incoming.cioIMSStatus,cioJobStatus:incoming.cioJobStatus,lineItems:incoming.lineItems,itemNumbers:incoming.itemNumbers,relatedOrders:incoming.relatedOrders,cioHistory:incoming.cioHistory,notes:incoming.notes,scopeNotes:incoming.scopeNotes,haulAway:incoming.haulAway,extendedOrderText:incoming.extendedOrderText,extendedOrderRows:incoming.extendedOrderRows,purchaseOrderAmount:incoming.purchaseOrderAmount,cioObservedOnly:false});preserved++;continue}const oldDate=e.date;if(oldDate!==incoming.date){e.date=incoming.date;e.order=nextOrder(incoming.date);e.orderIndex=e.order;rescheduled++;addJournal(e,`CiO reprogramó el trabajo de ${oldDate} a ${incoming.date}.`)}Object.assign(e,{...incoming,id:e.id,order:e.order,orderIndex:e.orderIndex||e.order,status:incoming.status,cioObservedOnly:false,clientJournal:e.clientJournal||[]});priceEvidence(e);updated++}
-    repairImportedDatesFromRaw();window.canonicalizeStateEntries();window.persistEntries();if(typeof window.render==='function')window.render();window.InstaraSchedule?.refresh?.();
+    window.canonicalizeStateEntries();window.persistEntries();if(typeof window.render==='function')window.render();window.InstaraSchedule?.refresh?.();
     const paidCount=allJobs.filter(j=>classifyBridgeStatus(j)==='paid').length,completedCount=allJobs.filter(j=>classifyBridgeStatus(j)==='completed').length,pendingCount=allJobs.filter(j=>classifyBridgeStatus(j)==='pending').length,cancelledCount=allJobs.filter(j=>classifyBridgeStatus(j)==='cancelled').length;
     const impact={added,rescheduled,updated,suspended,preserved,totalObserved:jobs.length,totalConfirmed:allJobs.length,paidCount,completedCount,pendingCount,cancelledCount,syncedAt:payload.syncedAt||nowIso(),source:payload.source||'CiO',windowFrom:payload.schedule?.windowFrom||'',windowTo:payload.schedule?.windowTo||''};save(BRIDGE_KEY,impact);lastPayload=payload;
     const delta=[];if(added)delta.push(`${added} nuevo${added===1?'':'s'}`);if(rescheduled)delta.push(`${rescheduled} reprogramado${rescheduled===1?'':'s'}`);if(updated)delta.push(`${updated} actualizado${updated===1?'':'s'}`);if(!delta.length)delta.push('sin cambios operativos');const phase=payload?.hydrating?' · cargando detalles…':'';setBridgeStatus(`CiO 3 meses · ${jobs.length} trabajos · ${pendingCount} programados · ${completedCount} completados · ${paidCount} pagados${phase} · ${delta.join(' · ')}`,new Date(impact.syncedAt).toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'}));
@@ -7250,7 +7287,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
     }
   });
   document.addEventListener('DOMContentLoaded',()=>{ping();setTimeout(()=>{if(!connected)setBridgeStatus('Mega Bridge no detectado · instala/conecta la extensión de INSTARA AI','Sin conexión')},1800);const meta=load(BRIDGE_KEY,null);if(meta?.syncedAt)setBridgeStatus(`Último sync · ${meta.totalObserved||0} trabajos · ${meta.totalConfirmed||0} confirmados`,new Date(meta.syncedAt).toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'}))});
-  window.InstaraMegaBridge={repairImportedDatesFromRaw,requestSync,applySnapshot,getLastPayload:()=>lastPayload,isConnected:()=>connected};
+  window.InstaraMegaBridge={requestSync,applySnapshot,getLastPayload:()=>lastPayload,isConnected:()=>connected};
 })();
 </script>
 
@@ -8225,7 +8262,7 @@ function jobKey(j){return String(j?.orderViewId||j?.jobNumber||j?.purchaseOrderN
 function mergeJobs(previous,incoming){const map=new Map((previous||[]).filter(isOperationalJob).map(j=>[jobKey(j),j]));for(const raw of (incoming||[]).filter(isOperationalJob)){const key=jobKey(raw);if(!key)continue;const old=map.get(key)||{};const merged={...old,...raw};if(strictConfirmed(raw))merged.confirmed=true;else if(explicitNonConfirmed(raw))merged.confirmed=false;else if(old.confirmed===true)merged.confirmed=true;map.set(key,merged)}return [...map.values()].filter(isOperationalJob)}
 function cleanJobs(jobs){return (Array.isArray(jobs)?jobs:[]).filter(isOperationalJob).map(j=>({...j,confirmed:strictConfirmed(j),instaraOperationalJob:true}))}
 function stableObserved(payload){const previous=load(OBSERVED_KEY,[]);const incoming=cleanJobs(payload?.jobs||[]);if(!incoming.length&&previous.length)return previous;const merged=mergeJobs(previous,incoming);if(merged.length)save(OBSERVED_KEY,merged);return merged}
-function jobDate(j){const v=j?.scheduledDate||j?.start||'';const d=new Date(v);if(!Number.isNaN(d.getTime()))return d.toISOString().slice(0,10);const m=String(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);return m?`${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`:''}
+function jobDate(j){const universal=window.InstaraJobDate?.resolve(j);if(universal)return universal;const v=j?.scheduledDate||j?.start||'';const d=new Date(v);if(!Number.isNaN(d.getTime()))return d.toISOString().slice(0,10);const m=String(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);return m?`${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`:''}
 function parseWindow(j){const text=[j?.scheduleDetails,j?.deliveryNotes,j?.eventHtml].filter(Boolean).join(' ');const m=text.match(/(\d{1,2}:\d{2}\s*[AP]M)\s*[-–]\s*(\d{1,2}:\d{2}\s*[AP]M)/i);return m?{start:m[1].replace(/\s+/g,' ').toUpperCase(),end:m[2].replace(/\s+/g,' ').toUpperCase()}:{start:'',end:''}}
 function storeNum(j){return String(j?.storeNumber||j?.sellerStoreNumber||'').replace(/^0+/,'')}
 function draftEntry(j,date){const s=appState(),w=parseWindow(j),amount=Number(j.purchaseOrderAmount||0),id=jobKey(j)||Math.random().toString(36).slice(2);return {id:'instara_draft_'+String(id).replace(/\W+/g,'_'),date,type:'income',category:j.laborCategory||j.service||j.eventService||'Ticket Mega',amount,rate:Number(s?.rate||90),net:Math.round(amount*(Number(s?.rate||90)/100)*100)/100,status:'pending',po:j.purchaseOrderNumber||'',order:9999,orderIndex:9999,customerName:j.customerName||j.eventCustomer||`Ticket Mega #${id}`,address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',store:storeNum(j)?`Store ${storeNum(j)}`:(j.sellerName||''),storeNumber:storeNum(j),timeStart:w.start||null,timeEnd:w.end||null,scopeNotes:[j.deliveryNotes,j.scopeNotes].filter(Boolean).join('\n'),notes:j.notesText||'',cioOrderId:String(j.orderViewId||''),cioEventId:String(j.eventId||''),cioJobNumber:j.jobNumber||'',cioProjectNumber:j.projectNumber||'',cioIMSStatus:j.imsStatus||'',cioJobStatus:j.jobStatus||'',cioConfirmed:strictConfirmed(j),cioObservedOnly:!strictConfirmed(j),bridgeSource:'CiO Mega Bridge',haulAway:/haul\s*away/i.test((j.lineItems||[]).map(x=>x.description||'').join(' ')),purchaseOrderAmount:amount,instaraRouteDraft:true}}
@@ -8300,7 +8337,7 @@ function status(j){
   if(/(?:^|\W)(?:cancelled|canceled|void|declined)(?:\W|$)/.test(t))return'cancelled';
   return'active';
 }
-function monthRows(y,m){const prefix=`${y}-${String(m+1).padStart(2,'0')}-`;const app=(window.__INSTARA_STATE__?.entries||[]).filter(e=>e.type==='income'&&String(e.date||'').startsWith(prefix));const seen=new Set(),out=[];for(const e of [...app,...bridgeJobs()]){const d=normDate(e.scheduledDate||e.start||e.date);if(!d.startsWith(prefix))continue;const k=jobKey(e)||[d,e.customerName||e.eventCustomer,e.laborCategory||e.eventService].join('|');if(seen.has(k))continue;seen.add(k);out.push(e)}return out}
+function monthRows(y,m){const prefix=`${y}-${String(m+1).padStart(2,'0')}-`;const app=(window.__INSTARA_STATE__?.entries||[]).filter(e=>e.type==='income'&&String(e.date||'').startsWith(prefix));const seen=new Set(),out=[];for(const e of [...app,...bridgeJobs()]){const d=(window.InstaraJobDate?.resolve(e)||normDate(e.scheduledDate||e.start||e.date));if(!d.startsWith(prefix))continue;const k=jobKey(e)||[d,e.customerName||e.eventCustomer,e.laborCategory||e.eventService].join('|');if(seen.has(k))continue;seen.add(k);out.push(e)}return out}
 function ensureSummary(){const weekdays=document.querySelector('#screen-schedule .schedule-weekdays');if(!weekdays)return null;let box=document.getElementById('instara-month-summary');if(!box){box=document.createElement('section');box.id='instara-month-summary';weekdays.parentNode.insertBefore(box,weekdays)}return box}
 function renderSummary(){
   const box=ensureSummary(),title=document.getElementById('schedule-month-title');
@@ -8321,7 +8358,7 @@ function renderSummary(){
 
   for(let d=1;d<=days;d++){
     const isoDate=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const rowsForDay=typeof schedule?.dayRows==='function'?schedule.dayRows(isoDate):monthRows(y,m).filter(r=>normDate(r.date||r.scheduledDate||r.start)===isoDate);
+    const rowsForDay=typeof schedule?.dayRows==='function'?schedule.dayRows(isoDate):monthRows(y,m).filter(r=>(window.InstaraJobDate?.resolve(r)||normDate(r.date||r.scheduledDate||r.start))===isoDate);
     for(const r of rowsForDay){
       const key=jobKey(r)||[isoDate,r.customerName||r.eventCustomer,r.laborCategory||r.eventService,r.id||''].join('|');
       if(seen.has(key))continue;
@@ -8526,7 +8563,7 @@ function upsertClosedFinance(jobs){
     if(!['completed','paid'].includes(st)||amount<=0)continue;
     const key=keyOf(j); if(!key)continue;
     let e=s.entries.find(x=>keyOf(x)===key);
-    const patch={date:normDate(j.scheduledDate||j.start||j.date),type:'income',category:j.laborCategory||j.eventService||j.category||'Trabajo Mega',amount,purchaseOrderAmount:amount,rate:rate(),net:Math.round(amount*rate())/100,status:st,paymentState:st==='paid'?'completed':'pending',paymentAmountSource:'Crew Payment Tracking · Purchase Order Amount',customerName:j.customerName||j.eventCustomer||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',storeNumber:String(j.storeNumber||''),store:j.storeNumber?`Store ${String(j.storeNumber).replace(/^0+/,'')}`:(j.sellerName||''),po:j.purchaseOrderNumber||'',cioOrderId:String(j.orderViewId||j.cioOrderId||''),cioEventId:String(j.eventId||j.cioEventId||''),cioJobNumber:j.jobNumber||'',cioProjectNumber:j.projectNumber||'',cioIMSStatus:j.imsStatus||'',cioJobStatus:j.jobStatus||'',cioLowesActivity:j.lowesActivity||'',bridgeSource:'CiO Mega Bridge',haulAway:j.haulAway===true,lineItems:j.lineItems||[],extendedOrderRows:j.extendedOrderRows||[],extendedOrderText:j.extendedOrderText||'',itemNumbers:j.itemNumbers||[]};
+    const patch={date:(window.InstaraJobDate?.resolve(j)||normDate(j.scheduledDate||j.start||j.date)),type:'income',category:j.laborCategory||j.eventService||j.category||'Trabajo Mega',amount,purchaseOrderAmount:amount,rate:rate(),net:Math.round(amount*rate())/100,status:st,paymentState:st==='paid'?'completed':'pending',paymentAmountSource:'Crew Payment Tracking · Purchase Order Amount',customerName:j.customerName||j.eventCustomer||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',storeNumber:String(j.storeNumber||''),store:j.storeNumber?`Store ${String(j.storeNumber).replace(/^0+/,'')}`:(j.sellerName||''),po:j.purchaseOrderNumber||'',cioOrderId:String(j.orderViewId||j.cioOrderId||''),cioEventId:String(j.eventId||j.cioEventId||''),cioJobNumber:j.jobNumber||'',cioProjectNumber:j.projectNumber||'',cioIMSStatus:j.imsStatus||'',cioJobStatus:j.jobStatus||'',cioLowesActivity:j.lowesActivity||'',bridgeSource:'CiO Mega Bridge',haulAway:j.haulAway===true,lineItems:j.lineItems||[],extendedOrderRows:j.extendedOrderRows||[],extendedOrderText:j.extendedOrderText||'',itemNumbers:j.itemNumbers||[]};
     if(!e){e={id:'cio_fin_'+key.replace(/\W+/g,'_'),...patch,order:9999,orderIndex:9999,clientJournal:[],instaraHistoricalImport:true};s.entries.push(e);changed++;}
     else {const before=JSON.stringify([e.amount,e.net,e.status,e.paymentState,e.purchaseOrderAmount]);Object.assign(e,patch);if(before!==JSON.stringify([e.amount,e.net,e.status,e.paymentState,e.purchaseOrderAmount]))changed++;}
   }
@@ -9143,7 +9180,7 @@ function isSunday(date){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||'')))return false;
   return new Date(date+'T12:00:00').getDay()===0;
 }
-function sourceDate(job){return canonicalDate(job?.scheduledDate||job?.start||job?.scheduleDate||job?.date)}
+function sourceDate(job){return window.InstaraJobDate?.resolve(job)||canonicalDate(job?.scheduledDate||job?.start||job?.scheduleDate||job?.date)}
 function persist(){
   try{window.persistEntries?.();window.persistentEntries?.()}catch(_e){}
   try{const s=app();if(s?.entries)localStorage.setItem('miruta-entries',JSON.stringify(s.entries))}catch(_e){}
@@ -10176,7 +10213,7 @@ function persist(){
 
 function sourceJobsForToday(payload,dateIso){
   return (Array.isArray(payload?.jobs)?payload.jobs:[])
-    .filter(job=>dateOf(job?.scheduledDate||job?.start||job?.date)===dateIso);
+    .filter(job=>(window.InstaraJobDate?.resolve(job)||dateOf(job?.scheduledDate||job?.start||job?.date))===dateIso);
 }
 
 async function fetchFreshSource(){
@@ -11433,3 +11470,39 @@ window.InstaraRC134PurgeAudit=function(){
 })();
 </script>
 </body>
+
+<script id="instara-rc142-calendar-repair">
+(function(){
+'use strict';
+const OBS='instara-cio-observed-jobs-v2';
+const key=x=>String(x?.cioOrderId||x?.orderViewId||x?.cioJobNumber||x?.jobNumber||x?.po||x?.purchaseOrderNumber||x?.cioEventId||x?.eventId||'');
+function load(k,f){try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch(_e){return f}}
+function repair(){
+  const state=window.__INSTARA_STATE__||window.state;
+  if(!state||!Array.isArray(state.entries))return 0;
+  const observed=load(OBS,[]);
+  const byKey=new Map(observed.map(j=>[key(j),j]).filter(x=>x[0]));
+  let fixed=0;
+  for(const e of state.entries){
+    if(e?.type!=='income')continue;
+    const raw=e._cioRaw||byKey.get(key(e));
+    const date=window.InstaraJobDate?.resolve(raw||e)||'';
+    if(date&&e.date!==date){
+      e.date=date;
+      fixed++;
+    }
+  }
+  if(fixed){
+    try{window.canonicalizeStateEntries?.()}catch(_e){}
+    try{window.persistEntries?.()}catch(_e){}
+    try{localStorage.setItem('miruta-entries',JSON.stringify(state.entries))}catch(_e){}
+  }
+  try{window.render?.()}catch(_e){}
+  try{window.InstaraSchedule?.refresh?.()}catch(_e){}
+  return fixed;
+}
+window.InstaraCalendarDeepRepair=repair;
+function boot(){repair();setTimeout(repair,600);setTimeout(repair,1800)}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
+</script>
