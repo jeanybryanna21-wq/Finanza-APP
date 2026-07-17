@@ -12907,7 +12907,7 @@ async function runVerify(){
     if(!db) throw new Error('Firebase no disponible todavía.');
     const snap=await db.ref('bitacora').once('value');
     const root=snap.val()||{};
-    const all=Object.fromEntries(Object.entries(root).filter(([name])=>isTicketNodeName(name)));
+    const all=Object.fromEntries(Object.entries(root).filter(([name])=>String(name||'').startsWith('ticket:')));
     const totalNodes=Object.keys(all).length;
     const active=Object.values(all).filter(node=>!node?.meta?.deletedAt).length;
     const expected=lastAnalysis?.report?.expectedFinalTotal ?? null;
