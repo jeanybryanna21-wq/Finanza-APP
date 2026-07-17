@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC149">
+  <meta name="instara-ai-version" content="RC150">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -5622,6 +5622,9 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       document.addEventListener('click',e=>{if(e.target!==inputEl && !box.contains(e.target)){box.hidden=true}});
       addrAutocompleteState.set(inputEl,true);
     }
+    // RC150: renderDayCards() uses this helper outside the navigation closure.
+    // Export it explicitly so Safari/iOS can resolve the identifier during Mega import.
+    window.attachAddressAutocomplete = attachAddressAutocomplete;
 
     // ---------- buscador de dirección con sugerencias en vivo (mientras escribes) ----------
     let searchDebounce=null, searchBusy=false, searchLastAt=0, searchSeq=0;
@@ -11412,6 +11415,19 @@ window.InstaraRC134PurgeAudit=function(){
 })();
 </script>
 </body>
+
+
+<script id="instara-rc150-address-autocomplete-scope-fix">
+(function(){
+  if(typeof window.attachAddressAutocomplete!=='function'){
+    window.attachAddressAutocomplete=function(inputEl){
+      if(!inputEl)return;
+      // Temporary no-op until the full navigation helper is exported later.
+      // This prevents rendering/import from aborting.
+    };
+  }
+})();
+</script>
 
 <script id="instara-rc149-event-identity-import-repair">
 (function(){
