@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC142">
+  <meta name="instara-ai-version" content="RC151">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -1825,7 +1825,13 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   const THIS_CLIENT=clientId();
 
   function isSharedKey(key){
-    return String(key||'').startsWith('wl:') || DIRECT_SHARED_KEYS.has(String(key||''));
+    const k=String(key||'');
+    // RC152: wl:entries deja de subirse solo en modo 'tickets-only'. En 'legacy'
+    // y 'dual-write' sigue subiendo como respaldo (nunca se acepta de vuelta, ver
+    // applyRemoteNode/chooseFirstHydrationValue). El modo vive en Firebase
+    // (bitacora/config/ticketSyncMode), no solo en localStorage.
+    if(k==='wl:entries') return (window.__INSTARA_TICKET_SYNC_MODE__||'legacy')!=='tickets-only';
+    return k.startsWith('wl:') || DIRECT_SHARED_KEYS.has(k);
   }
   function localGet(key){
     const value=localStorage.getItem(key);
@@ -1918,8 +1924,12 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   function chooseFirstHydrationValue(key,localValue,remoteInfo){
     if(!remoteInfo)return {value:localValue,source:'local-only'};
     if(localValue===null)return {value:remoteInfo.value,source:'cloud-only'};
+    // RC152: wl:entries nunca se sobrescribe con el remoto en la hidratación
+    // inicial, ni siquiera si viene "cloud-versioned" -- el local siempre gana
+    // mientras dure la transición a bitacora/tickets/{entryKey}.
+    if(key==='wl:entries') return {value:localValue,source:'local-shadow-protected'};
     if(remoteInfo.wrapped&&remoteInfo.updatedAt>0)return {value:remoteInfo.value,source:'cloud-versioned'};
-    if(['wl:entries','instara-work-clock-v1','miruta-mileage-active-v1','miruta-mileage-ledger-v1'].includes(key)){
+    if(['instara-work-clock-v1','miruta-mileage-active-v1','miruta-mileage-ledger-v1'].includes(key)){
       const localScore=migrationScore(key,localValue);
       const remoteScore=migrationScore(key,remoteInfo.value);
       return localScore>remoteScore
@@ -1995,6 +2005,22 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
 
     if(info.clientId===THIS_CLIENT){
       remoteUpdatedAt.set(key,Math.max(remoteUpdatedAt.get(key)||0,info.updatedAt||0));
+      return false;
+    }
+
+    // RC152: wl:entries en modo shadow. Nunca vuelve a reemplazar el estado
+    // local -- solo se registra para diagnóstico. Esto detiene el reemplazo
+    // destructivo desde el primer despliegue, sin esperar a que termine la
+    // migración a bitacora/tickets/{entryKey}.
+    if(key==='wl:entries'){
+      remoteUpdatedAt.set(key,Math.max(remoteUpdatedAt.get(key)||0,info.updatedAt||0));
+      try{
+        window.__INSTARA_WL_ENTRIES_SHADOW__={
+          remoteCount:safeJson(info.value,[]).length,
+          localCount:safeJson(localStorage.getItem('wl:entries'),[]).length,
+          observedAt:new Date().toISOString()
+        };
+      }catch(_e){}
       return false;
     }
 
@@ -2122,6 +2148,12 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
         });
       }
       fbDb=firebase.database();
+      window.fbDb=fbDb; // RC152: expone la instancia REAL ya inicializada para el
+                         // módulo de tickets (script aparte, no ve las variables
+                         // internas de este IIFE). Se hace aqui, justo despues de
+                         // crear la instancia, nunca antes -- si se hiciera antes
+                         // window.fbDb quedaria en null y todo el modulo RC152
+                         // pensaria que Firebase no esta disponible.
       firebaseSyncActive=true;
 
       const hydration=await hydrateBeforeApp();
@@ -2429,22 +2461,38 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
 
   // ---------- RC131: identidad canónica Mega/CiO y deduplicación ----------
   function megaIdentityTokens(item){
-    const pairs=[
-      ['order',item?.cioOrderId||item?.orderViewId],
-      ['job',item?.cioJobNumber||item?.jobNumber],
-      ['po',item?.po||item?.purchaseOrderNumber],
-      ['event',item?.cioEventId||item?.eventId],
-      ['project',item?.cioProjectNumber||item?.projectNumber]
-    ];
-    const tokens=pairs
-      .filter(([,value])=>String(value||'').trim())
-      .map(([kind,value])=>kind+':'+String(value).trim().toLowerCase());
-
     const normValue=value=>String(value||'')
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g,'')
       .replace(/[^a-z0-9]/g,'');
+
+    const eventId=String(item?.cioEventId||item?.eventId||item?._cioRaw?.eventId||'').trim();
+    const tokens=[];
+
+    // RC151: eventId is authoritative for CiO Schedule records.
+    // Never combine it with deep-detail IDs because a contaminated parser result
+    // can repeat the same order/job/PO placeholder across hundreds of events and
+    // chain-merge all of them into one calendar entry.
+    if(eventId){
+      tokens.push('event:'+eventId.toLowerCase());
+    }else{
+      const generic=/^(?:project number|purchase order number|follow up date|year built|n\/a|na|unknown|undefined|null|-|—)$/i;
+      const validId=value=>{
+        const s=String(value||'').trim();
+        return s&&!generic.test(s)&&/[0-9]/.test(s);
+      };
+      const pairs=[
+        ['order',item?.cioOrderId||item?.orderViewId],
+        ['job',item?.cioJobNumber||item?.jobNumber],
+        ['po',item?.po||item?.purchaseOrderNumber],
+        ['project',item?.cioProjectNumber||item?.projectNumber]
+      ];
+      for(const [kind,value] of pairs){
+        if(validId(value))tokens.push(kind+':'+String(value).trim().toLowerCase());
+      }
+    }
+
     const day=String(item?.date||item?.scheduledDate||item?.start||'').match(/20\d{2}-\d{2}-\d{2}/)?.[0]||'';
     const customer=normValue(item?.customerName||item?.eventCustomer||item?.customer||item?.clientName);
     const address=normValue(item?.address||item?.customerAddress);
@@ -2452,15 +2500,19 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     const store=normValue(item?.storeNumber||item?.sellerStoreNumber||item?.store);
     const service=normValue(item?.category||item?.service||item?.laborCategory||item?.eventService);
 
-    if(day&&customer.length>=4&&address.length>=8){
-      tokens.push(`fpca:${day}|${customer}|${address}`);
-      if(service)tokens.push(`fpcas:${day}|${customer}|${address}|${service}`);
-    }
-    if(day&&customer.length>=4&&phone.length>=7){
-      tokens.push(`fpcp:${day}|${customer}|${phone}`);
-    }
-    if(day&&customer.length>=4&&store&&service){
-      tokens.push(`fpcss:${day}|${customer}|${store}|${service}`);
+    // Fingerprints are used only when there is no eventId. With eventId present,
+    // identity must remain isolated to that exact Schedule event.
+    if(!eventId){
+      if(day&&customer.length>=4&&address.length>=8){
+        tokens.push(`fpca:${day}|${customer}|${address}`);
+        if(service)tokens.push(`fpcas:${day}|${customer}|${address}|${service}`);
+      }
+      if(day&&customer.length>=4&&phone.length>=7){
+        tokens.push(`fpcp:${day}|${customer}|${phone}`);
+      }
+      if(day&&customer.length>=4&&store&&service){
+        tokens.push(`fpcss:${day}|${customer}|${store}|${service}`);
+      }
     }
 
     return [...new Set(tokens)];
@@ -3760,14 +3812,19 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     });
 
     wrap.querySelectorAll('.del-additional-inline').forEach(btn=>{
-      btn.addEventListener('click', (ev)=>{
+      btn.addEventListener('click', async (ev)=>{
         ev.stopPropagation();
-        // solo se borra este registro de trabajo adicional; el precio/categoría
-        // sigue guardado en el Inventario de precios para usarlo después.
-        state.entries = state.entries.filter(e=> e.id !== btn.dataset.entryId);
-        persistEntries();
-        render();
-        statusLine.textContent = 'trabajo adicional eliminado (el precio se mantiene guardado en el inventario) ✓';
+        // RC154: el borrado real pasa por explicitDeleteEntry -- confirma,
+        // sincroniza el tombstone en Firebase primero, y solo después lo
+        // quita de state.entries. El precio/categoría del inventario no se toca.
+        const entry=state.entries.find(e=>e.id===btn.dataset.entryId);
+        if(!entry)return;
+        const result=await window.InstaraTicketSync.explicitDeleteEntry(entry,{
+          confirmMessage:`¿ELIMINAR el trabajo adicional "${entry.category||entry.customerName||''}"?\n\nEsto lo borra de TODOS tus dispositivos. El precio/categoría sigue guardado en el Inventario de precios para usarlo después.`
+        });
+        if(result.ok){
+          statusLine.textContent = 'trabajo adicional eliminado (el precio se mantiene guardado en el inventario) ✓';
+        }
       });
     });
 
@@ -3847,12 +3904,16 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     });
 
     wrap.querySelectorAll('.del-compensation-inline').forEach(btn=>{
-      btn.addEventListener('click', (ev)=>{
+      btn.addEventListener('click', async (ev)=>{
         ev.stopPropagation();
-        state.entries = state.entries.filter(e=> e.id !== btn.dataset.entryId);
-        persistEntries();
-        render();
-        statusLine.textContent = 'compensación eliminada (el tiquete original no se tocó) ✓';
+        const entry=state.entries.find(e=>e.id===btn.dataset.entryId);
+        if(!entry)return;
+        const result=await window.InstaraTicketSync.explicitDeleteEntry(entry,{
+          confirmMessage:`¿ELIMINAR esta compensación?\n\nEsto lo borra de TODOS tus dispositivos. El tiquete original no se toca.`
+        });
+        if(result.ok){
+          statusLine.textContent = 'compensación eliminada (el tiquete original no se tocó) ✓';
+        }
       });
     });
 
@@ -4175,11 +4236,11 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     });
 
     container.querySelectorAll('.del').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
+      btn.addEventListener('click', async ()=>{
         const id = btn.dataset.id;
-        state.entries = state.entries.filter(e=> e.id !== id);
-        persistEntries();
-        render();
+        const entry = state.entries.find(e=>e.id===id);
+        if(!entry)return;
+        await window.InstaraTicketSync.explicitDeleteEntry(entry);
       });
     });
 
@@ -4884,7 +4945,14 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
   document.getElementById('export-system-btn').addEventListener('click',exportSystemBackup);
   document.getElementById('purge-quarter-btn').addEventListener('click',showPurgeQuarter);
   document.getElementById('purge-quarter-cancel').addEventListener('click',()=>document.getElementById('purge-quarter-box').style.display='none');
-  document.getElementById('purge-quarter-confirm').addEventListener('click',async function(){const q=previousQuarterInfo();if(this.dataset.mode==='backup'){await exportOperational({...q,label:q.key},true);showPurgeQuarter();return}const meta=archiveMeta();if(meta.lastQuarterArchive?.key!==q.key){showPurgeQuarter();return}state.entries=state.entries.filter(e=>!(e.date>=q.start&&e.date<=q.end));state.partUsage=state.partUsage.filter(e=>!(e.date>=q.start&&e.date<=q.end));await persistEntries();await persistPartUsage();meta.purged=meta.purged||{};meta.purged[q.key]={purgedAt:new Date().toISOString(),archiveExportedAt:meta.lastQuarterArchive.exportedAt};saveArchiveMeta(meta);document.getElementById('purge-quarter-box').style.display='none';render();document.getElementById('backup-msg').textContent=`Depuración ${q.key} completada ✓ solo después del respaldo confirmado.`;});
+  document.getElementById('purge-quarter-confirm').addEventListener('click',async function(){const q=previousQuarterInfo();if(this.dataset.mode==='backup'){await exportOperational({...q,label:q.key},true);showPurgeQuarter();return}const meta=archiveMeta();if(meta.lastQuarterArchive?.key!==q.key){showPurgeQuarter();return}
+    // RC154: la depuración masiva ya pasó por su propia confirmación (el gate
+    // de respaldo obligatorio de arriba); aquí se usa la variante en lote que
+    // igual llama deleteTicket() por cada ticket antes de quitarlo localmente,
+    // sin pedir una segunda confirmación por cada uno.
+    const toPurge=state.entries.filter(e=>e.date>=q.start&&e.date<=q.end);
+    await window.InstaraTicketSync.bulkExplicitDeleteEntries(toPurge);
+    state.partUsage=state.partUsage.filter(e=>!(e.date>=q.start&&e.date<=q.end));await persistPartUsage();meta.purged=meta.purged||{};meta.purged[q.key]={purgedAt:new Date().toISOString(),archiveExportedAt:meta.lastQuarterArchive.exportedAt};saveArchiveMeta(meta);document.getElementById('purge-quarter-box').style.display='none';render();document.getElementById('backup-msg').textContent=`Depuración ${q.key} completada ✓ solo después del respaldo confirmado.`;});
   document.getElementById('copy-export-btn').addEventListener('click',async ()=>{const ta=document.getElementById('export-text-fallback'),msg=document.getElementById('backup-msg');try{await navigator.clipboard.writeText(ta.value);msg.textContent='Copiado al portapapeles ✓'}catch(_e){ta.select();msg.textContent='Selecciona y copia el texto manualmente.'}});
   document.getElementById('import-backup-input').addEventListener('change',function(ev){const file=ev.target.files?.[0],msg=document.getElementById('backup-msg');if(!file){msg.textContent='No se detectó archivo.';return}const reader=new FileReader();reader.onload=()=>{try{applyRestoredData(JSON.parse(reader.result),msg);ev.target.value=''}catch(_e){msg.style.color='var(--wine)';msg.textContent='No se pudo leer ese archivo como respaldo Miruta.'}};reader.readAsText(file)});
   document.getElementById('import-paste-btn').addEventListener('click',()=>{const text=document.getElementById('import-text-paste').value.trim(),msg=document.getElementById('backup-msg');if(!text){msg.textContent='Pega primero el contenido del respaldo.';return}try{if(applyRestoredData(JSON.parse(text),msg))document.getElementById('import-text-paste').value=''}catch(_e){msg.style.color='var(--wine)';msg.textContent='No se pudo leer ese texto como respaldo válido.'}});
@@ -5622,6 +5690,9 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
       document.addEventListener('click',e=>{if(e.target!==inputEl && !box.contains(e.target)){box.hidden=true}});
       addrAutocompleteState.set(inputEl,true);
     }
+    // RC150: renderDayCards() uses this helper outside the navigation closure.
+    // Export it explicitly so Safari/iOS can resolve the identifier during Mega import.
+    window.attachAddressAutocomplete = attachAddressAutocomplete;
 
     // ---------- buscador de dirección con sugerencias en vivo (mientras escribes) ----------
     let searchDebounce=null, searchBusy=false, searchLastAt=0, searchSeq=0;
@@ -6998,64 +7069,6 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
 
 </html>
 
-
-<script id="instara-rc142-universal-job-date">
-(function(){
-'use strict';
-function parseDate(v){
-  if(v==null||v==='')return '';
-  if(v instanceof Date&&!Number.isNaN(v.getTime())){
-    return `${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}-${String(v.getDate()).padStart(2,'0')}`;
-  }
-  const raw=String(v).trim();
-  let m=raw.match(/(?:^|\D)(20\d{2})[-\/](\d{1,2})[-\/](\d{1,2})(?:\D|$)/);
-  if(m)return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
-  m=raw.match(/(?:^|\D)(\d{1,2})\/(\d{1,2})\/(20\d{2})(?:\D|$)/);
-  if(m)return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
-  const d=new Date(raw);
-  if(Number.isNaN(d.getTime()))return '';
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-function resolve(job){
-  if(!job)return '';
-  const preferred=[
-    'scheduledDate','scheduleDate','date','eventDate','appointmentDate','serviceDate',
-    'scheduledStart','scheduleStart','eventStart','startDate','startDateTime',
-    'scheduledFor','appointmentStart','serviceStart','start'
-  ];
-  const holders=[job,job.raw,job._cioRaw,job.event,job.schedule,job.appointment,job.details,job.data].filter(Boolean);
-  for(const holder of holders){
-    for(const key of preferred){
-      const d=parseDate(holder?.[key]);
-      if(d)return d;
-    }
-  }
-  const seen=new Set();
-  function walk(obj,depth){
-    if(!obj||typeof obj!=='object'||depth>3||seen.has(obj))return '';
-    seen.add(obj);
-    for(const [key,val] of Object.entries(obj)){
-      const low=key.toLowerCase();
-      if(/created|updated|modified|synced|fetched|received|timestamp|end|complete|paid/.test(low))continue;
-      if(/scheduled|schedule|appointment|service.?date|event.?start|event.?date|start.?date/.test(low)){
-        const d=parseDate(val);
-        if(d)return d;
-      }
-    }
-    for(const val of Object.values(obj)){
-      if(val&&typeof val==='object'){
-        const d=walk(val,depth+1);
-        if(d)return d;
-      }
-    }
-    return '';
-  }
-  return walk(job,0);
-}
-window.InstaraJobDate={parse:parseDate,resolve};
-})();
-</script>
-
 <script id="rc69-instara-schedule-js">
 (function(){
   const $=id=>document.getElementById(id);
@@ -7072,7 +7085,7 @@ window.InstaraJobDate={parse:parseDate,resolve};
   function keyOf(e){return String(e.cioOrderId||e.orderViewId||e.cioJobNumber||e.jobNumber||e.po||e.purchaseOrderNumber||e.eventId||e.cioEventId||'')}
   function isoDate(v){if(!v)return '';const raw=String(v).trim();const direct=raw.match(/^(\d{4}-\d{2}-\d{2})/);if(direct)return direct[1];const m=raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;const d=new Date(raw);return Number.isNaN(d.getTime())?'':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
   function observedStatus(j){const text=[j.imsStatus,j.jobStatus,j.raw?.barColor,j.laborCategory].filter(Boolean).join(' ').toLowerCase();if(j.confirmed)return 'pending';if(/payment received|past paid|paid/.test(text))return 'paid';if(/closed|complete|completed|work_complete/.test(text))return 'completed';if(/cancel|void|declin/.test(text))return 'cancelled';return 'observed'}
-  function virtualJob(j){const status=observedStatus(j),fallbackId=String(j.orderViewId||j.eventId||j.text||'').trim();return {_cioObserved:true,_cioRaw:j,cioOrderId:String(j.orderViewId||''),cioEventId:String(j.eventId||''),date:(window.InstaraJobDate?.resolve(j)||isoDate(j.scheduledDate||j.start)),type:'income',status,displayStatus:statusName[status],customerName:j.customerName||j.eventCustomer||(fallbackId?`Ticket Mega #${fallbackId}`:'Ticket Mega sin identidad'),category:j.laborCategory||j.eventService||'Servicio pendiente de detalle',service:j.laborCategory||j.eventService||'Servicio pendiente de detalle',storeNumber:String(j.storeNumber||''),store:j.storeNumber?'Store '+String(j.storeNumber).replace(/^0+/,''):(j.sellerName||''),po:j.purchaseOrderNumber||'',windowStart:j.start||'',scheduledStart:j.start||'',time:j.start||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',jobNumber:j.jobNumber||'',projectNumber:j.projectNumber||'',invoiceNumber:j.invoiceNumber||'',imsStatus:j.imsStatus||'',jobStatus:j.jobStatus||'',purchaseOrderAmount:Number(j.purchaseOrderAmount||0),lineItems:j.lineItems||[],relatedOrders:j.relatedOrders||[],deliveryNotes:j.deliveryNotes||'',scopeNotes:j.scopeNotes||'',notesText:j.notesText||'',notesHistory:j.notesHistory||[],haulAway:j.haulAway===true||/haul\s*away/i.test([j.extendedOrderText,...(j.lineItems||[]).map(x=>x.description||'')].filter(Boolean).join(' | ')),extendedOrderText:j.extendedOrderText||'',extendedOrderRows:j.extendedOrderRows||[],detailError:j.detailError||'',isStoreStop:j.isStoreStop===true,instaraAutoStore:j.instaraAutoStore===true,instaraDraftOnly:j.instaraDraftOnly===true}}
+  function virtualJob(j){const status=observedStatus(j),fallbackId=String(j.orderViewId||j.eventId||j.text||'').trim();return {_cioObserved:true,_cioRaw:j,cioOrderId:String(j.orderViewId||''),cioEventId:String(j.eventId||''),date:isoDate(j.scheduledDate||j.start),type:'income',status,displayStatus:statusName[status],customerName:j.customerName||j.eventCustomer||(fallbackId?`Ticket Mega #${fallbackId}`:'Ticket Mega sin identidad'),category:j.laborCategory||j.eventService||'Servicio pendiente de detalle',service:j.laborCategory||j.eventService||'Servicio pendiente de detalle',storeNumber:String(j.storeNumber||''),store:j.storeNumber?'Store '+String(j.storeNumber).replace(/^0+/,''):(j.sellerName||''),po:j.purchaseOrderNumber||'',windowStart:j.start||'',scheduledStart:j.start||'',time:j.start||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',jobNumber:j.jobNumber||'',projectNumber:j.projectNumber||'',invoiceNumber:j.invoiceNumber||'',imsStatus:j.imsStatus||'',jobStatus:j.jobStatus||'',purchaseOrderAmount:Number(j.purchaseOrderAmount||0),lineItems:j.lineItems||[],relatedOrders:j.relatedOrders||[],deliveryNotes:j.deliveryNotes||'',scopeNotes:j.scopeNotes||'',notesText:j.notesText||'',notesHistory:j.notesHistory||[],haulAway:j.haulAway===true||/haul\s*away/i.test([j.extendedOrderText,...(j.lineItems||[]).map(x=>x.description||'')].filter(Boolean).join(' | ')),extendedOrderText:j.extendedOrderText||'',extendedOrderRows:j.extendedOrderRows||[],detailError:j.detailError||'',isStoreStop:j.isStoreStop===true,instaraAutoStore:j.instaraAutoStore===true,instaraDraftOnly:j.instaraDraftOnly===true}}
   function isExplicitCalendarStoreStop(e){
     if(!e)return false;
 
@@ -7236,7 +7249,7 @@ window.InstaraJobDate={parse:parseDate,resolve};
     if(/\bclosed\b|\bcomplete\b|\bcompleted\b|work_complete/.test(text))return 'completed';
     return 'pending'; // incluye "Scheduled Installation" y cualquier otro texto no reconocido: futuro, listo para instalar
   }
-  function normalizedJob(job){const w=parseWindow(job),cons=operationalConstraints(job),items=job.lineItems||[],amount=Number(job.purchaseOrderAmount||0),store=storeNumber(job),date=(window.InstaraJobDate?.resolve(job)||isoDate(job.scheduledDate||job.start));return {_cioRaw:{...job},id:stableId(job),date,type:'income',category:job.laborCategory||job.service||job.eventService||'Trabajo Mega',amount,rate:Number(state.rate||90),net:Math.round(amount*(Number(state.rate||90)/100)*100)/100,status:classifyBridgeStatus(job),po:job.purchaseOrderNumber||'',order:9999,isAdditional:/additional|change order|trip charge/i.test(job.laborCategory||''),customerName:job.customerName||job.eventCustomer||'',address:job.customerAddress||'',phone:job.customerPhone||'',email:job.customerEmail||'',store:store?`Store ${store}`:(job.sellerName||''),storeNumber:store,timeStart:cons.earliestArrival||w.start||null,timeEnd:w.end||null,scopeNotes:[job.deliveryNotes,job.scopeNotes].filter(Boolean).join('\n'),notes:job.notesText||'',cioOrderId:String(job.orderViewId||''),cioEventId:String(job.eventId||''),cioJobNumber:job.jobNumber||'',cioProjectNumber:job.projectNumber||'',cioIMSStatus:job.imsStatus||'',cioJobStatus:job.jobStatus||'',cioConfirmed:!!job.confirmed,cioSyncAt:nowIso(),bridgeSource:'CiO Mega Bridge',itemNumbers:items.map(x=>x.itemNumber).filter(Boolean),lineItems:items,haulAway:job.haulAway===true||/haul\s*away/i.test([job.extendedOrderText,lineText(job)].filter(Boolean).join(' | ')),extendedOrderText:job.extendedOrderText||'',extendedOrderRows:job.extendedOrderRows||[],purchaseOrderAmount:amount,relatedOrders:job.relatedOrders||[],cioHistory:job.notesHistory||[],callBeforeMinutes:cons.callBeforeMinutes,earliestArrival:cons.earliestArrival,hasDogs:cons.hasDogs}}
+  function normalizedJob(job){const w=parseWindow(job),cons=operationalConstraints(job),items=job.lineItems||[],amount=Number(job.purchaseOrderAmount||0),store=storeNumber(job),date=isoDate(job.scheduledDate||job.start);return {_cioRaw:{...job},id:stableId(job),date,type:'income',category:job.laborCategory||job.service||job.eventService||'Trabajo Mega',amount,rate:Number(state.rate||90),net:Math.round(amount*(Number(state.rate||90)/100)*100)/100,status:classifyBridgeStatus(job),po:job.purchaseOrderNumber||'',order:9999,isAdditional:/additional|change order|trip charge/i.test(job.laborCategory||''),customerName:job.customerName||job.eventCustomer||'',address:job.customerAddress||'',phone:job.customerPhone||'',email:job.customerEmail||'',store:store?`Store ${store}`:(job.sellerName||''),storeNumber:store,timeStart:cons.earliestArrival||w.start||null,timeEnd:w.end||null,scopeNotes:[job.deliveryNotes,job.scopeNotes].filter(Boolean).join('\n'),notes:job.notesText||'',cioOrderId:String(job.orderViewId||''),cioEventId:String(job.eventId||''),cioJobNumber:job.jobNumber||'',cioProjectNumber:job.projectNumber||'',cioIMSStatus:job.imsStatus||'',cioJobStatus:job.jobStatus||'',cioConfirmed:!!job.confirmed,cioSyncAt:nowIso(),bridgeSource:'CiO Mega Bridge',itemNumbers:items.map(x=>x.itemNumber).filter(Boolean),lineItems:items,haulAway:job.haulAway===true||/haul\s*away/i.test([job.extendedOrderText,lineText(job)].filter(Boolean).join(' | ')),extendedOrderText:job.extendedOrderText||'',extendedOrderRows:job.extendedOrderRows||[],purchaseOrderAmount:amount,relatedOrders:job.relatedOrders||[],cioHistory:job.notesHistory||[],callBeforeMinutes:cons.callBeforeMinutes,earliestArrival:cons.earliestArrival,hasDogs:cons.hasDogs}}
   function addJournal(e,text){e.clientJournal=Array.isArray(e.clientJournal)?e.clientJournal:[];e.clientJournal.push({id:'jn_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),at:nowIso(),text})}
   function nextOrder(date){return Math.max(0,...(state.entries||[]).filter(e=>e.date===date).map(e=>Number(e.orderIndex??e.order??0)))+1}
   function priceEvidence(entry){try{if(!entry.cioConfirmed||!entry.category||!entry.amount)return;const all=load(PRICE_EVIDENCE_KEY,{}),key=String(entry.category).trim().toLowerCase(),bucket=Array.isArray(all[key])?all[key]:[];if(!bucket.some(x=>x.po===entry.po&&x.amount===entry.amount))bucket.push({po:entry.po,amount:entry.amount,at:nowIso(),source:'Purchase Order Amount'});all[key]=bucket.slice(-20);save(PRICE_EVIDENCE_KEY,all);const p=(state.priceList||[]).find(x=>String(x.name||'').trim().toLowerCase()===key);if(!p||Number(p.price)===Number(entry.amount))return;const hits=bucket.filter(x=>Number(x.amount)===Number(entry.amount)).length;if(hits>=3){const oldPrice=Number(p.price||0);p.price=Number(entry.amount);window.persistPriceList();window.MirutaRC68?.logDecision?.('price_intelligence','Tarifa CiO actualizada',`${entry.category}: 3+ tickets confirmados muestran ${money(entry.amount)} en Purchase Order Amount. INSTARA actualizó la referencia desde ${money(oldPrice)}.`,{score:96,evidence:['Crew Payment Tracking','Purchase Order Amount','3 tickets confirmados equivalentes']},'observed')}}catch(_e){}}
@@ -8262,7 +8275,7 @@ function jobKey(j){return String(j?.orderViewId||j?.jobNumber||j?.purchaseOrderN
 function mergeJobs(previous,incoming){const map=new Map((previous||[]).filter(isOperationalJob).map(j=>[jobKey(j),j]));for(const raw of (incoming||[]).filter(isOperationalJob)){const key=jobKey(raw);if(!key)continue;const old=map.get(key)||{};const merged={...old,...raw};if(strictConfirmed(raw))merged.confirmed=true;else if(explicitNonConfirmed(raw))merged.confirmed=false;else if(old.confirmed===true)merged.confirmed=true;map.set(key,merged)}return [...map.values()].filter(isOperationalJob)}
 function cleanJobs(jobs){return (Array.isArray(jobs)?jobs:[]).filter(isOperationalJob).map(j=>({...j,confirmed:strictConfirmed(j),instaraOperationalJob:true}))}
 function stableObserved(payload){const previous=load(OBSERVED_KEY,[]);const incoming=cleanJobs(payload?.jobs||[]);if(!incoming.length&&previous.length)return previous;const merged=mergeJobs(previous,incoming);if(merged.length)save(OBSERVED_KEY,merged);return merged}
-function jobDate(j){const universal=window.InstaraJobDate?.resolve(j);if(universal)return universal;const v=j?.scheduledDate||j?.start||'';const d=new Date(v);if(!Number.isNaN(d.getTime()))return d.toISOString().slice(0,10);const m=String(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);return m?`${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`:''}
+function jobDate(j){const v=j?.scheduledDate||j?.start||'';const d=new Date(v);if(!Number.isNaN(d.getTime()))return d.toISOString().slice(0,10);const m=String(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);return m?`${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`:''}
 function parseWindow(j){const text=[j?.scheduleDetails,j?.deliveryNotes,j?.eventHtml].filter(Boolean).join(' ');const m=text.match(/(\d{1,2}:\d{2}\s*[AP]M)\s*[-–]\s*(\d{1,2}:\d{2}\s*[AP]M)/i);return m?{start:m[1].replace(/\s+/g,' ').toUpperCase(),end:m[2].replace(/\s+/g,' ').toUpperCase()}:{start:'',end:''}}
 function storeNum(j){return String(j?.storeNumber||j?.sellerStoreNumber||'').replace(/^0+/,'')}
 function draftEntry(j,date){const s=appState(),w=parseWindow(j),amount=Number(j.purchaseOrderAmount||0),id=jobKey(j)||Math.random().toString(36).slice(2);return {id:'instara_draft_'+String(id).replace(/\W+/g,'_'),date,type:'income',category:j.laborCategory||j.service||j.eventService||'Ticket Mega',amount,rate:Number(s?.rate||90),net:Math.round(amount*(Number(s?.rate||90)/100)*100)/100,status:'pending',po:j.purchaseOrderNumber||'',order:9999,orderIndex:9999,customerName:j.customerName||j.eventCustomer||`Ticket Mega #${id}`,address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',store:storeNum(j)?`Store ${storeNum(j)}`:(j.sellerName||''),storeNumber:storeNum(j),timeStart:w.start||null,timeEnd:w.end||null,scopeNotes:[j.deliveryNotes,j.scopeNotes].filter(Boolean).join('\n'),notes:j.notesText||'',cioOrderId:String(j.orderViewId||''),cioEventId:String(j.eventId||''),cioJobNumber:j.jobNumber||'',cioProjectNumber:j.projectNumber||'',cioIMSStatus:j.imsStatus||'',cioJobStatus:j.jobStatus||'',cioConfirmed:strictConfirmed(j),cioObservedOnly:!strictConfirmed(j),bridgeSource:'CiO Mega Bridge',haulAway:/haul\s*away/i.test((j.lineItems||[]).map(x=>x.description||'').join(' ')),purchaseOrderAmount:amount,instaraRouteDraft:true}}
@@ -8337,7 +8350,7 @@ function status(j){
   if(/(?:^|\W)(?:cancelled|canceled|void|declined)(?:\W|$)/.test(t))return'cancelled';
   return'active';
 }
-function monthRows(y,m){const prefix=`${y}-${String(m+1).padStart(2,'0')}-`;const app=(window.__INSTARA_STATE__?.entries||[]).filter(e=>e.type==='income'&&String(e.date||'').startsWith(prefix));const seen=new Set(),out=[];for(const e of [...app,...bridgeJobs()]){const d=(window.InstaraJobDate?.resolve(e)||normDate(e.scheduledDate||e.start||e.date));if(!d.startsWith(prefix))continue;const k=jobKey(e)||[d,e.customerName||e.eventCustomer,e.laborCategory||e.eventService].join('|');if(seen.has(k))continue;seen.add(k);out.push(e)}return out}
+function monthRows(y,m){const prefix=`${y}-${String(m+1).padStart(2,'0')}-`;const app=(window.__INSTARA_STATE__?.entries||[]).filter(e=>e.type==='income'&&String(e.date||'').startsWith(prefix));const seen=new Set(),out=[];for(const e of [...app,...bridgeJobs()]){const d=normDate(e.scheduledDate||e.start||e.date);if(!d.startsWith(prefix))continue;const k=jobKey(e)||[d,e.customerName||e.eventCustomer,e.laborCategory||e.eventService].join('|');if(seen.has(k))continue;seen.add(k);out.push(e)}return out}
 function ensureSummary(){const weekdays=document.querySelector('#screen-schedule .schedule-weekdays');if(!weekdays)return null;let box=document.getElementById('instara-month-summary');if(!box){box=document.createElement('section');box.id='instara-month-summary';weekdays.parentNode.insertBefore(box,weekdays)}return box}
 function renderSummary(){
   const box=ensureSummary(),title=document.getElementById('schedule-month-title');
@@ -8358,7 +8371,7 @@ function renderSummary(){
 
   for(let d=1;d<=days;d++){
     const isoDate=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const rowsForDay=typeof schedule?.dayRows==='function'?schedule.dayRows(isoDate):monthRows(y,m).filter(r=>(window.InstaraJobDate?.resolve(r)||normDate(r.date||r.scheduledDate||r.start))===isoDate);
+    const rowsForDay=typeof schedule?.dayRows==='function'?schedule.dayRows(isoDate):monthRows(y,m).filter(r=>normDate(r.date||r.scheduledDate||r.start)===isoDate);
     for(const r of rowsForDay){
       const key=jobKey(r)||[isoDate,r.customerName||r.eventCustomer,r.laborCategory||r.eventService,r.id||''].join('|');
       if(seen.has(key))continue;
@@ -8563,7 +8576,7 @@ function upsertClosedFinance(jobs){
     if(!['completed','paid'].includes(st)||amount<=0)continue;
     const key=keyOf(j); if(!key)continue;
     let e=s.entries.find(x=>keyOf(x)===key);
-    const patch={date:(window.InstaraJobDate?.resolve(j)||normDate(j.scheduledDate||j.start||j.date)),type:'income',category:j.laborCategory||j.eventService||j.category||'Trabajo Mega',amount,purchaseOrderAmount:amount,rate:rate(),net:Math.round(amount*rate())/100,status:st,paymentState:st==='paid'?'completed':'pending',paymentAmountSource:'Crew Payment Tracking · Purchase Order Amount',customerName:j.customerName||j.eventCustomer||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',storeNumber:String(j.storeNumber||''),store:j.storeNumber?`Store ${String(j.storeNumber).replace(/^0+/,'')}`:(j.sellerName||''),po:j.purchaseOrderNumber||'',cioOrderId:String(j.orderViewId||j.cioOrderId||''),cioEventId:String(j.eventId||j.cioEventId||''),cioJobNumber:j.jobNumber||'',cioProjectNumber:j.projectNumber||'',cioIMSStatus:j.imsStatus||'',cioJobStatus:j.jobStatus||'',cioLowesActivity:j.lowesActivity||'',bridgeSource:'CiO Mega Bridge',haulAway:j.haulAway===true,lineItems:j.lineItems||[],extendedOrderRows:j.extendedOrderRows||[],extendedOrderText:j.extendedOrderText||'',itemNumbers:j.itemNumbers||[]};
+    const patch={date:normDate(j.scheduledDate||j.start||j.date),type:'income',category:j.laborCategory||j.eventService||j.category||'Trabajo Mega',amount,purchaseOrderAmount:amount,rate:rate(),net:Math.round(amount*rate())/100,status:st,paymentState:st==='paid'?'completed':'pending',paymentAmountSource:'Crew Payment Tracking · Purchase Order Amount',customerName:j.customerName||j.eventCustomer||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',storeNumber:String(j.storeNumber||''),store:j.storeNumber?`Store ${String(j.storeNumber).replace(/^0+/,'')}`:(j.sellerName||''),po:j.purchaseOrderNumber||'',cioOrderId:String(j.orderViewId||j.cioOrderId||''),cioEventId:String(j.eventId||j.cioEventId||''),cioJobNumber:j.jobNumber||'',cioProjectNumber:j.projectNumber||'',cioIMSStatus:j.imsStatus||'',cioJobStatus:j.jobStatus||'',cioLowesActivity:j.lowesActivity||'',bridgeSource:'CiO Mega Bridge',haulAway:j.haulAway===true,lineItems:j.lineItems||[],extendedOrderRows:j.extendedOrderRows||[],extendedOrderText:j.extendedOrderText||'',itemNumbers:j.itemNumbers||[]};
     if(!e){e={id:'cio_fin_'+key.replace(/\W+/g,'_'),...patch,order:9999,orderIndex:9999,clientJournal:[],instaraHistoricalImport:true};s.entries.push(e);changed++;}
     else {const before=JSON.stringify([e.amount,e.net,e.status,e.paymentState,e.purchaseOrderAmount]);Object.assign(e,patch);if(before!==JSON.stringify([e.amount,e.net,e.status,e.paymentState,e.purchaseOrderAmount]))changed++;}
   }
@@ -9180,7 +9193,7 @@ function isSunday(date){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date||'')))return false;
   return new Date(date+'T12:00:00').getDay()===0;
 }
-function sourceDate(job){return window.InstaraJobDate?.resolve(job)||canonicalDate(job?.scheduledDate||job?.start||job?.scheduleDate||job?.date)}
+function sourceDate(job){return canonicalDate(job?.scheduledDate||job?.start||job?.scheduleDate||job?.date)}
 function persist(){
   try{window.persistEntries?.();window.persistentEntries?.()}catch(_e){}
   try{const s=app();if(s?.entries)localStorage.setItem('miruta-entries',JSON.stringify(s.entries))}catch(_e){}
@@ -10213,7 +10226,7 @@ function persist(){
 
 function sourceJobsForToday(payload,dateIso){
   return (Array.isArray(payload?.jobs)?payload.jobs:[])
-    .filter(job=>(window.InstaraJobDate?.resolve(job)||dateOf(job?.scheduledDate||job?.start||job?.date))===dateIso);
+    .filter(job=>dateOf(job?.scheduledDate||job?.start||job?.date)===dateIso);
 }
 
 async function fetchFreshSource(){
@@ -11471,38 +11484,970 @@ window.InstaraRC134PurgeAudit=function(){
 </script>
 </body>
 
-<script id="instara-rc142-calendar-repair">
+
+<script id="instara-rc150-address-autocomplete-scope-fix">
+(function(){
+  if(typeof window.attachAddressAutocomplete!=='function'){
+    window.attachAddressAutocomplete=function(inputEl){
+      if(!inputEl)return;
+      // Temporary no-op until the full navigation helper is exported later.
+      // This prevents rendering/import from aborting.
+    };
+  }
+})();
+</script>
+
+<script id="instara-rc149-event-identity-import-repair">
 (function(){
 'use strict';
-const OBS='instara-cio-observed-jobs-v2';
-const key=x=>String(x?.cioOrderId||x?.orderViewId||x?.cioJobNumber||x?.jobNumber||x?.po||x?.purchaseOrderNumber||x?.cioEventId||x?.eventId||'');
-function load(k,f){try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch(_e){return f}}
-function repair(){
-  const state=window.__INSTARA_STATE__||window.state;
-  if(!state||!Array.isArray(state.entries))return 0;
-  const observed=load(OBS,[]);
-  const byKey=new Map(observed.map(j=>[key(j),j]).filter(x=>x[0]));
-  let fixed=0;
-  for(const e of state.entries){
-    if(e?.type!=='income')continue;
-    const raw=e._cioRaw||byKey.get(key(e));
-    const date=window.InstaraJobDate?.resolve(raw||e)||'';
-    if(date&&e.date!==date){
-      e.date=date;
-      fixed++;
-    }
+const VERSION='RC149';
+const OBSERVED_KEY='instara-cio-observed-jobs-v2';
+const CLEANUP_KEY='instara-rc149-cleanup-v1';
+
+function load(k,f){try{const v=JSON.parse(localStorage.getItem(k)||'null');return v??f}catch(_e){return f}}
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(_e){return false}}
+function app(){return window.__INSTARA_STATE__||window.state}
+function clean(v){return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim()}
+function htmlText(v){return String(v||'').replace(/<br\s*\/?>/gi,' ').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()}
+function joined(j){return [
+  htmlText(j?.eventHtml),j?.eventCustomer,j?.customerName,j?.eventService,
+  j?.laborCategory,j?.service,j?.jobType,j?.scheduleDetails,j?.deliveryNotes
+].filter(Boolean).join(' ')}
+
+function isNonOperational(j){
+  if(!j)return true;
+  const raw=joined(j);
+  const t=clean(raw);
+  if(/\b1\s*man\s*team\b|\bone\s*man\s*team\b|\b2\s*man\s*team\b|\btwo\s*man\s*team\b/.test(t))return true;
+  if(/\bmax\s*\d+\s*jobs?\b|\bonly\s+\d{3,4}(?:\s*[,\/.]\s*\d{3,4})+/.test(t))return true;
+  if(/\bresource availability\b|\bcrew availability\b|\bteam\s*#\b|\bschedule block\b/.test(t))return true;
+  if(/(^|\s)off(\s|$)/.test(t)&&/\b20\d{2}\b/.test(t))return true;
+  if(/^off$/i.test(String(j?.eventService||'').trim())||/^off\b/i.test(String(j?.eventCustomer||'').trim()))return true;
+  return false;
+}
+function isRealJob(j){
+  if(!j||isNonOperational(j))return false;
+  const eventId=String(j.eventId||j.cioEventId||'').trim();
+  const date=String(j.start||j.scheduledDate||'').trim();
+  const service=String(j.eventService||j.laborCategory||j.service||'').trim();
+  const customer=String(j.eventCustomer||j.customerName||'').trim();
+  const store=String(j.storeNumber||'').trim();
+  return Boolean(eventId&&date&&(service||customer||store));
+}
+function eventKey(j){
+  const eventId=String(j?.eventId||j?.cioEventId||'').trim();
+  if(eventId)return 'event:'+eventId;
+  const order=String(j?.orderViewId||j?.resolvedOrderViewId||j?.cioOrderId||j?.jobNumber||j?.purchaseOrderNumber||'').trim();
+  if(order)return 'order:'+order;
+  return 'fallback:'+[
+    String(j?.start||j?.scheduledDate||'').slice(0,19),
+    clean(j?.eventCustomer||j?.customerName),
+    clean(j?.eventService||j?.laborCategory),
+    clean(j?.eventLocation||j?.customerAddress)
+  ].join('|');
+}
+function sanitizeJob(j){
+  const copy={...j};
+  const eventId=String(copy.eventId||copy.cioEventId||'').trim();
+
+  // Deep-detail parsing may return the same order page for unrelated events.
+  // Keep the original value only as evidence; make Schedule eventId the primary
+  // identity consumed by all older INSTARA merge layers.
+  if(eventId){
+    copy._detailOrderViewId=copy.resolvedOrderViewId||copy.orderViewId||'';
+    copy.orderViewId='';
+    copy.resolvedOrderViewId='';
+    copy.cioOrderId='';
+    copy.eventId=eventId;
+    copy.cioEventId=eventId;
   }
-  if(fixed){
+  copy.instaraOperationalJob=true;
+  return copy;
+}
+function canonicalIncoming(rows){
+  const out=[],map=new Map();
+  for(const raw of Array.isArray(rows)?rows:[]){
+    if(!isRealJob(raw))continue;
+    const j=sanitizeJob(raw);
+    const key=eventKey(j);
+    const old=map.get(key);
+    if(!old){map.set(key,j);out.push(j)}
+    else Object.assign(old,j,{eventId:old.eventId||j.eventId,cioEventId:old.cioEventId||j.cioEventId});
+  }
+  return out;
+}
+function entryEventKey(e){
+  const id=String(e?.cioEventId||e?._cioRaw?.eventId||'').trim();
+  return id?'event:'+id:'';
+}
+function cleanupContamination(){
+  const s=app();
+  const observed=load(OBSERVED_KEY,[]);
+  const cleanedObserved=canonicalIncoming(observed);
+  save(OBSERVED_KEY,cleanedObserved);
+
+  let removedEntries=0;
+  if(s&&Array.isArray(s.entries)){
+    s.entries=s.entries.filter(e=>{
+      const mega=e?.bridgeSource==='CiO Mega Bridge'||e?.cioEventId||e?.cioOrderId||e?._cioRaw;
+      if(!mega)return true;
+      const source=e?._cioRaw||{
+        eventId:e.cioEventId,
+        eventCustomer:e.customerName,
+        eventService:e.category,
+        start:e.date,
+        scheduledDate:e.date,
+        eventHtml:[e.customerName,e.category,e.date].filter(Boolean).join(' ')
+      };
+      if(isNonOperational(source)){removedEntries++;return false}
+      return true;
+    });
     try{window.canonicalizeStateEntries?.()}catch(_e){}
     try{window.persistEntries?.()}catch(_e){}
-    try{localStorage.setItem('miruta-entries',JSON.stringify(state.entries))}catch(_e){}
+    try{localStorage.setItem('miruta-entries',JSON.stringify(s.entries))}catch(_e){}
   }
-  try{window.render?.()}catch(_e){}
-  try{window.InstaraSchedule?.refresh?.()}catch(_e){}
-  return fixed;
+  save(CLEANUP_KEY,{version:VERSION,at:new Date().toISOString(),observed:cleanedObserved.length,removedEntries});
+  return {observed:cleanedObserved.length,removedEntries};
 }
-window.InstaraCalendarDeepRepair=repair;
-function boot(){repair();setTimeout(repair,600);setTimeout(repair,1800)}
+function install(){
+  const bridge=window.InstaraMegaBridge;
+  if(!bridge?.applySnapshot||bridge.applySnapshot.__rc149)return false;
+  const prior=bridge.applySnapshot.bind(bridge);
+  const wrapped=function(payload){
+    const incoming=canonicalIncoming(payload?.jobs||[]);
+    const previous=canonicalIncoming(load(OBSERVED_KEY,[]));
+    const map=new Map();
+    for(const j of [...previous,...incoming]){
+      const k=eventKey(j);
+      if(!map.has(k))map.set(k,{...j});
+      else Object.assign(map.get(k),j);
+    }
+    const jobs=[...map.values()];
+    save(OBSERVED_KEY,jobs);
+
+    const result=prior({...payload,jobs});
+    cleanupContamination();
+
+    const s=app();
+    const imported=Array.isArray(s?.entries)
+      ? s.entries.filter(e=>e?.bridgeSource==='CiO Mega Bridge'&&entryEventKey(e)).length
+      : 0;
+    window.__INSTARA_RC149_AUDIT__={
+      version:VERSION,
+      payloadJobs:Array.isArray(payload?.jobs)?payload.jobs.length:0,
+      realIncoming:incoming.length,
+      retainedObserved:jobs.length,
+      importedEntries:imported,
+      at:new Date().toISOString()
+    };
+    try{window.render?.()}catch(_e){}
+    try{window.InstaraSchedule?.refresh?.()}catch(_e){}
+    return result&&typeof result==='object'
+      ? {...result,rc149:{realIncoming:incoming.length,retainedObserved:jobs.length,importedEntries:imported}}
+      : result;
+  };
+  wrapped.__rc149=true;
+  bridge.applySnapshot=wrapped;
+  return true;
+}
+function boot(){
+  cleanupContamination();
+  let tries=0;
+  const timer=setInterval(()=>{
+    if(install()||++tries>80)clearInterval(timer);
+  },250);
+}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
+</script>
+
+
+<script id="instara-rc151-event-isolation-audit">
+(function(){
+  window.__INSTARA_RC151__={
+    version:'RC151',
+    rule:'CiO eventId isolated; deep-detail placeholders ignored',
+    loadedAt:new Date().toISOString()
+  };
+})();
+</script>
+<script id="instara-rc152-tickets-sync">
+(function(){
+'use strict';
+const VERSION='RC152';
+
+// ---------- Identidad de sesión ----------
+const SESSION_ID_KEY='instara-session-id-v1';
+function sessionId(){
+  try{
+    let id=sessionStorage.getItem(SESSION_ID_KEY);
+    if(!id){ id='s_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); sessionStorage.setItem(SESSION_ID_KEY,id); }
+    return id;
+  }catch(_e){ return 's_'+Math.random().toString(36).slice(2,8); }
+}
+function thisClientInstance(){
+  const device=localStorage.getItem('instara-cloud-client-id-v1')||'unknown';
+  return device+'::'+sessionId();
+}
+const THIS_CLIENT_INSTANCE=thisClientInstance();
+
+// ---------- Identidad universal de entradas ----------
+function sanitizeFirebaseKey(v){
+  return String(v||'').trim().replace(/[.#$[\]/]/g,'_').replace(/[^A-Za-z0-9_-]/g,'_').slice(0,180);
+}
+function looksLikeMegaEntry(entry){
+  return Boolean(entry?.bridgeSource==='CiO Mega Bridge' || entry?._cioRaw || entry?.cioOrderId || entry?.cioJobNumber);
+}
+function isMegaWithoutEventId(entry){
+  const eventId=String(entry?.cioEventId||entry?.eventId||entry?._cioRaw?.eventId||'').trim();
+  return looksLikeMegaEntry(entry) && !eventId;
+}
+function entryKey(entry){
+  const eventId=String(entry?.cioEventId||entry?.eventId||entry?._cioRaw?.eventId||'').trim();
+  if(eventId) return 'event_'+sanitizeFirebaseKey(eventId);
+  if(looksLikeMegaEntry(entry)) return null; // megaWithoutEventId: nunca cae a manual_
+  const localId=String(entry?.id||'').trim();
+  if(localId) return 'manual_'+sanitizeFirebaseKey(localId);
+  return null;
+}
+
+// ---------- Esquema canónico + autoridad por campo ----------
+const BRIDGE_OWNED_FIELDS=[
+  'customerName','address','phone','email',
+  'store','storeNumber',
+  'po','cioOrderId','cioEventId','cioJobNumber','cioProjectNumber',
+  'timeStart','timeEnd','originalScheduledDate','originalService',
+  'cioIMSStatus','cioJobStatus','cioConfirmed','cioSyncAt','bridgeSource',
+  'purchaseOrderAmount','scopeNotes',
+  'callBeforeMinutes','earliestArrival','hasDogs',
+  'lineItems','itemNumbers','relatedOrders'
+];
+const USER_OWNED_FIELDS=[
+  'status','statusSetByUser','manualCompletion',
+  'amount','rate','net',
+  'notes','clientJournal',
+  'orderIndex','routeExcluded','routeExcludedReason','manualRouteOverride',
+  'haulAway','isAdditional','order','type'
+];
+const NEUTRAL_FIELDS=['id','date','category'];
+const ENTRY_FIELDS=[...BRIDGE_OWNED_FIELDS,...USER_OWNED_FIELDS,...NEUTRAL_FIELDS];
+
+function toCanonicalTicket(entry){
+  const out={};
+  for(const field of ENTRY_FIELDS){
+    let value=entry?.[field];
+    if(field==='originalService' && (value===undefined||value===null||value==='')){
+      value=entry?.originalService || entry?.category || undefined;
+    }
+    if(value===undefined||value===null||value==='') continue;
+    out[field]=value;
+  }
+  if(Array.isArray(out.lineItems)){
+    out.lineItems=out.lineItems.slice(0,100).map(li=>({
+      itemNumber:String(li.itemNumber||''),
+      description:String(li.description||'').slice(0,200),
+      qty:Number(li.qty||li.Qty||0)
+    }));
+  }
+  if(Array.isArray(out.itemNumbers)) out.itemNumbers=out.itemNumbers.slice(0,100).map(String);
+  if(Array.isArray(out.relatedOrders)) out.relatedOrders=out.relatedOrders.slice(0,50).map(String);
+  if(typeof out.scopeNotes==='string') out.scopeNotes=out.scopeNotes.slice(0,2000);
+  if(typeof out.notes==='string') out.notes=out.notes.slice(0,2000);
+  return out;
+}
+
+function isNonOperationalEntry(j){
+  if(typeof window.isNonOperational==='function') return window.isNonOperational(j);
+  return false;
+}
+
+// ---------- Espera activa a que Firebase esté REALMENTE listo ----------
+// window.fbDb solo existe despues de que enableCloudSync() -> InstaraCloudMemory.boot()
+// termine. Esperamos ese momento real en vez de asumir que ya esta listo al cargar
+// este script (que se ejecuta mucho antes, al final del <body>).
+function waitForFirebase(timeoutMs=30000){
+  return new Promise(resolve=>{
+    if(window.fbDb){ resolve(window.fbDb); return; }
+    const start=Date.now();
+    const timer=setInterval(()=>{
+      if(window.fbDb){ clearInterval(timer); resolve(window.fbDb); return; }
+      if(Date.now()-start>timeoutMs){ clearInterval(timer); resolve(null); }
+    },200);
+  });
+}
+
+// ---------- Upsert atómico con autoridad de campo ----------
+let applyingRemoteTickets=false;
+
+async function upsertTicket(entry,{source}={}){
+  const key=entryKey(entry);
+  if(!key){
+    return {ok:false, reason: isMegaWithoutEventId(entry) ? 'mega-without-eventid' : 'no-identity'};
+  }
+  if(applyingRemoteTickets) return {ok:false, reason:'remote-hydration-active'};
+  const db=window.fbDb;
+  if(!db) return {ok:false, reason:'no-firebase'};
+
+  const canonical=toCanonicalTicket(entry);
+  // NEUTRAL_FIELDS (id/date/category) se permiten en ambas autoridades: no hay
+  // conflicto real de propiedad, y sin esto un ticket nuevo se sincronizaria sin
+  // fecha ni categoria (bug encontrado en pruebas).
+  const allowedFields = source==='bridge' ? [...BRIDGE_OWNED_FIELDS,...NEUTRAL_FIELDS]
+                       : source==='user'   ? [...USER_OWNED_FIELDS,...NEUTRAL_FIELDS]
+                       : ENTRY_FIELDS; // 'migration': una sola vez, todo permitido
+
+  const ref=db.ref(`bitacora/tickets/${key}`);
+  let aborted=false;
+  const result=await ref.transaction(current=>{
+    const node=current||{};
+    const currentData=node.data||{};
+    const currentMeta=node.meta||{};
+    if(currentMeta.deletedAt){ aborted=true; return; }
+
+    const mergedData={...currentData};
+    for(const field of allowedFields){
+      const value=canonical[field];
+      if(value===undefined||value===null||value==='') continue;
+      if(field==='status' && source==='bridge' && currentData.statusSetByUser) continue;
+      mergedData[field]=value;
+      if(field==='status' && source==='user') mergedData.statusSetByUser=true;
+    }
+
+    return {
+      data:mergedData,
+      meta:{
+        ...currentMeta,
+        revision:Number(currentMeta.revision||0)+1,
+        updatedAt:firebase.database.ServerValue.TIMESTAMP,
+        updatedBy:THIS_CLIENT_INSTANCE,
+        schemaVersion:1,
+        deletedAt:currentMeta.deletedAt||null,
+        deletedBy:currentMeta.deletedBy||null
+      }
+    };
+  });
+
+  if(aborted) return {ok:false, reason:'ticket-deleted', key};
+  return {ok:Boolean(result.committed), key};
+}
+
+async function deleteTicket(entryOrKey){
+  const key=typeof entryOrKey==='string' ? entryOrKey : entryKey(entryOrKey);
+  const db=window.fbDb;
+  if(!key || !db) return {ok:false, reason:'no-identity'};
+  const ref=db.ref(`bitacora/tickets/${key}`);
+  const result=await ref.transaction(current=>{
+    if(!current){
+      return {
+        data:{},
+        meta:{
+          revision:1,
+          updatedAt:firebase.database.ServerValue.TIMESTAMP,
+          updatedBy:THIS_CLIENT_INSTANCE,
+          schemaVersion:1,
+          deletedAt:firebase.database.ServerValue.TIMESTAMP,
+          deletedBy:THIS_CLIENT_INSTANCE
+        }
+      };
+    }
+    const meta=current.meta||{};
+    return {
+      ...current,
+      meta:{
+        ...meta,
+        revision:Number(meta.revision||0)+1,
+        updatedAt:firebase.database.ServerValue.TIMESTAMP,
+        updatedBy:THIS_CLIENT_INSTANCE,
+        schemaVersion:1,
+        deletedAt:firebase.database.ServerValue.TIMESTAMP,
+        deletedBy:THIS_CLIENT_INSTANCE
+      }
+    };
+  });
+  return {ok:Boolean(result.committed), key};
+}
+
+async function undeleteTicket(entryOrKey){
+  const key=typeof entryOrKey==='string' ? entryOrKey : entryKey(entryOrKey);
+  const db=window.fbDb;
+  if(!key || !db) return {ok:false, reason:'no-identity'};
+  const ref=db.ref(`bitacora/tickets/${key}`);
+  const result=await ref.transaction(current=>{
+    if(!current) return;
+    const meta=current.meta||{};
+    return {
+      ...current,
+      meta:{
+        ...meta,
+        revision:Number(meta.revision||0)+1,
+        updatedAt:firebase.database.ServerValue.TIMESTAMP,
+        updatedBy:THIS_CLIENT_INSTANCE,
+        schemaVersion:1,
+        deletedAt:null,
+        deletedBy:null,
+        undeletedAt:firebase.database.ServerValue.TIMESTAMP,
+        undeletedBy:THIS_CLIENT_INSTANCE
+      }
+    };
+  });
+  return {ok:Boolean(result.committed), key};
+}
+
+// ---------- Merge remoto en memoria ----------
+function computeSyncFingerprint(entry){
+  const relevant={};
+  for(const f of ENTRY_FIELDS) relevant[f]=entry?.[f];
+  return JSON.stringify(relevant);
+}
+const lastSyncedFingerprint=new Map(); // entryKey -> fingerprint ya reflejado en Firebase
+let lastKnownTicketKeys=new Set();
+
+function mergeRemoteEntryInMemory(key,node){
+  const st=window.state;
+  if(!st || !Array.isArray(st.entries) || !node || !node.data) return;
+
+  const remoteMeta=node.meta||{};
+  let entry=st.entries.find(item=>entryKey(item)===key);
+
+  if(remoteMeta.deletedAt){
+    // El tombstone vive en Firebase; la entrada deja de mostrarse como activa.
+    // No se interpreta ausencia local como borrado y no se elimina el nodo remoto.
+    // RC154: se quita el registro localmente (splice) directamente -- ya no se
+    // necesita marcar _syncDeleted porque, al salir del array, nada vuelve a
+    // leer esa bandera (era código muerto).
+    if(entry){
+      const idx=st.entries.indexOf(entry);
+      if(idx>=0) st.entries.splice(idx,1);
+    }
+    lastSyncedFingerprint.delete(key);
+    return;
+  }
+
+  if(!entry){
+    const data={...node.data};
+    if(key.startsWith('manual_') && !data.id) data.id=key.slice('manual_'.length);
+    entry={...data,_syncMeta:remoteMeta};
+    st.entries.push(entry);
+  }else{
+    const localRevision=Number(entry?._syncMeta?.revision||0);
+    const remoteRevision=Number(remoteMeta.revision||0);
+    if(remoteRevision>=localRevision){
+      Object.assign(entry,node.data,{_syncMeta:remoteMeta});
+    }
+  }
+  // Registra la huella ya reflejada para que el hook de persistEntries() no
+  // vuelva a subir de inmediato lo que acabamos de bajar de Firebase.
+  lastSyncedFingerprint.set(key,computeSyncFingerprint(entry));
+}
+
+// ---------- Hidratación de una sola vez + listeners incrementales idempotentes ----------
+let ticketListenersInstalled=false;
+let ticketsRef=null;
+let childAddedCb=null;
+let childChangedCb=null;
+let ticketHydrationDone=false;
+let hydratedTicketKeys=new Set();
+let ticketRenderTimer=null;
+
+function scheduleTicketRender(){
+  clearTimeout(ticketRenderTimer);
+  ticketRenderTimer=setTimeout(async ()=>{
+    try{ window.canonicalizeStateEntries?.() }catch(_e){}
+    try{ await window.persistEntries?.() }catch(_e){}
+    try{ window.render?.(); window.InstaraSchedule?.refresh?.(); window.updatePremiumDashboard?.() }catch(_e){}
+  },100);
+}
+
+async function hydrateTicketsOnce(){
+  const db=window.fbDb;
+  if(!db) return;
+  applyingRemoteTickets=true;
+  try{
+    const snap=await db.ref('bitacora/tickets').once('value');
+    const remote=snap.val()||{};
+    hydratedTicketKeys=new Set(Object.keys(remote));
+    for(const [key,node] of Object.entries(remote)) mergeRemoteEntryInMemory(key,node);
+    const st=window.state;
+    if(st && Array.isArray(st.entries)){
+      lastKnownTicketKeys=new Set(st.entries.map(e=>entryKey(e)).filter(Boolean));
+    }
+    try{ window.canonicalizeStateEntries?.() }catch(_e){}
+    try{ await window.persistEntries?.() }catch(_e){}
+    try{ window.render?.(); window.InstaraSchedule?.refresh?.(); window.updatePremiumDashboard?.() }catch(_e){}
+  }finally{
+    applyingRemoteTickets=false;
+  }
+  installTicketListeners();
+}
+
+function installTicketListeners(){
+  const db=window.fbDb;
+  if(ticketListenersInstalled || !db) return;
+  ticketsRef=db.ref('bitacora/tickets');
+  childAddedCb=snap=>{
+    if(hydratedTicketKeys.delete(snap.key)) return;
+    mergeRemoteEntryInMemory(snap.key,snap.val());
+    lastKnownTicketKeys.add(snap.key);
+    scheduleTicketRender();
+  };
+  childChangedCb=snap=>{
+    mergeRemoteEntryInMemory(snap.key,snap.val());
+    scheduleTicketRender();
+  };
+  ticketsRef.on('child_added',childAddedCb);
+  ticketsRef.on('child_changed',childChangedCb);
+  ticketListenersInstalled=true;
+}
+
+function uninstallTicketListeners(){
+  if(ticketsRef){
+    if(childAddedCb) ticketsRef.off('child_added',childAddedCb);
+    if(childChangedCb) ticketsRef.off('child_changed',childChangedCb);
+  }
+  ticketListenersInstalled=false;
+  childAddedCb=null; childChangedCb=null; ticketsRef=null;
+}
+
+async function applyTicketSyncMode(mode){
+  window.__INSTARA_TICKET_SYNC_MODE__=mode;
+  if(mode==='legacy'){
+    uninstallTicketListeners();
+    return;
+  }
+  const db=await waitForFirebase();
+  if(!db) return; // Firebase no disponible todavia (offline, etc.) -- se reintentara
+                   // en el proximo cambio de valor del listener de modo.
+  if(!ticketHydrationDone){
+    await hydrateTicketsOnce();
+    ticketHydrationDone=true;
+  }else if(!ticketListenersInstalled){
+    installTicketListeners();
+  }
+}
+
+// ---------- Modo centralizado en Firebase ----------
+const ALLOWED_MODES=new Set(['legacy','dual-write','tickets-only']);
+window.__INSTARA_TICKET_SYNC_MODE__=localStorage.getItem('instara-sync-mode-v1')||'legacy';
+let modeListenerInstalled=false;
+
+function installModeListener(){
+  const db=window.fbDb;
+  if(modeListenerInstalled || !db) return false;
+  db.ref('bitacora/config/ticketSyncMode').on('value',snap=>{
+    const next=String(snap.val()||'legacy');
+    const mode=ALLOWED_MODES.has(next)?next:'legacy';
+    localStorage.setItem('instara-sync-mode-v1',mode);
+    applyTicketSyncMode(mode).catch(err=>console.warn('[RC153] applyTicketSyncMode failed',err));
+  });
+  modeListenerInstalled=true;
+  return true;
+}
+
+// ---------- Enganche al ciclo real de inicialización de Firebase ----------
+// window.InstaraCloudMemory.boot() es la señal autoritativa de "Firebase ya está
+// listo" (llama a enableCloudSync(), que es quien crea fbDb). Se engancha aquí
+// -- sin tocar su definición -- exactamente como ya hace RC149 con
+// bridge.applySnapshot: se envuelve la función existente, se llama al original,
+// y DESPUÉS se instala lo que necesitamos. Idempotente vía __rc152Wrapped.
+function hookCloudMemoryBoot(){
+  const cm=window.InstaraCloudMemory;
+  if(!cm || typeof cm.boot!=='function') return false;
+  if(cm.boot.__rc152Wrapped) return true;
+  const original=cm.boot.bind(cm);
+  const wrapped=async function(...args){
+    const result=await original(...args);
+    try{
+      if(window.fbDb) installModeListener();
+    }catch(err){ console.warn('[RC153] installModeListener failed after boot',err); }
+    return result;
+  };
+  wrapped.__rc152Wrapped=true;
+  cm.boot=wrapped;
+  return true;
+}
+
+// ---------- Sincronización universal de ediciones locales ----------
+// En vez de enganchar cada uno de los ~10 sitios dispersos donde la app edita
+// tickets (completar/reabrir, notas, pago, ruta, fecha/categoría, manuales,
+// eliminación), se envuelve window.persistEntries -- la función que TODOS esos
+// flujos ya llaman (44 veces en el archivo) despues de mutar state.entries.
+// La autoridad de campo (BRIDGE_OWNED_FIELDS / USER_OWNED_FIELDS) dentro de
+// upsertTicket ya garantiza que esto es seguro: cualquier campo que no le
+// corresponda a 'user' simplemente no se escribe, sin importar qué haya en el
+// objeto local.
+async function reconcileEntriesForTicketSync(){
+  if((window.__INSTARA_TICKET_SYNC_MODE__||'legacy')==='legacy') return;
+  if(applyingRemoteTickets) return;
+  if(!window.fbDb) return;
+  const st=window.state;
+  if(!st || !Array.isArray(st.entries)) return;
+
+  const currentKeys=new Set();
+  const pending=[];
+  for(const entry of st.entries){
+    const key=entryKey(entry);
+    if(!key) continue; // sin identidad (p.ej. megaWithoutEventId): no se sincroniza
+    currentKeys.add(key);
+    const fp=computeSyncFingerprint(entry);
+    if(lastSyncedFingerprint.get(key)===fp) continue; // sin cambios reales
+    lastSyncedFingerprint.set(key,fp);
+    entry._syncPending=true;
+    entry._syncError=null;
+    pending.push(entry);
+  }
+
+  // La ausencia local JAMÁS es una señal de borrado. Un snapshot o estado parcial
+  // no puede crear tombstones. deleteTicket() queda reservado a acciones explícitas.
+  lastKnownTicketKeys=new Set([...lastKnownTicketKeys,...currentKeys]);
+
+  for(const entry of pending){
+    upsertTicket(entry,{source:'user'}).then(result=>{
+      const problem=!result?.ok && result?.reason!=='no-identity' && result?.reason!=='mega-without-eventid';
+      entry._syncPending=Boolean(problem);
+      entry._syncError=problem ? String(result?.reason||'unknown') : null;
+      try{ window.render?.() }catch(_e){}
+    }).catch(err=>{
+      entry._syncPending=true;
+      entry._syncError=String(err?.message||err||'unknown');
+      console.warn('[RC153] user sync failed',entryKey(entry),err);
+      try{ window.render?.() }catch(_e){}
+    });
+  }
+}
+
+
+// ---------- Escritura autoritativa exclusiva del Bridge ----------
+// Solo el flujo real applySnapshot() puede escribir campos propiedad de CiO.
+function hookBridgeTicketSync(){
+  const bridge=window.InstaraMegaBridge;
+  if(!bridge?.applySnapshot) return false;
+  if(bridge.applySnapshot.__rc153TicketBridgeSync) return true;
+  const original=bridge.applySnapshot.bind(bridge);
+  const wrapped=function(payload){
+    const result=original(payload);
+    try{
+      const mode=window.__INSTARA_TICKET_SYNC_MODE__||'legacy';
+      if(mode!=='legacy' && window.fbDb){
+        const incomingIds=new Set((Array.isArray(payload?.jobs)?payload.jobs:[])
+          .map(j=>String(j?.eventId||'').trim()).filter(Boolean));
+        const entries=Array.isArray(window.state?.entries)?window.state.entries:[];
+        for(const entry of entries){
+          const eventId=String(entry?.cioEventId||entry?.eventId||entry?._cioRaw?.eventId||'').trim();
+          if(!eventId || !incomingIds.has(eventId)) continue;
+          upsertTicket(entry,{source:'bridge'}).catch(err=>
+            console.warn('[RC153] bridge ticket sync failed',eventId,err));
+        }
+      }
+    }catch(err){
+      console.warn('[RC153] bridge applySnapshot hook failed',err);
+    }
+    return result;
+  };
+  wrapped.__rc153TicketBridgeSync=true;
+  bridge.applySnapshot=wrapped;
+  return true;
+}
+
+function hookPersistEntries(){
+  if(typeof window.persistEntries!=='function') return false;
+  if(window.persistEntries.__rc152Wrapped) return true;
+  const original=window.persistEntries;
+  const wrapped=async function(...args){
+    const result=await original.apply(this,args);
+    try{ reconcileEntriesForTicketSync(); }catch(err){ console.warn('[RC153] reconcile failed',err); }
+    return result;
+  };
+  wrapped.__rc152Wrapped=true;
+  window.persistEntries=wrapped;
+  return true;
+}
+
+// ---------- Actualización optimista explícita (uso directo opcional) ----------
+function editEntryLocally(idOrEntry,patch){
+  const st=window.state;
+  if(!st || !Array.isArray(st.entries)) return null;
+  const entry=typeof idOrEntry==='string' ? st.entries.find(e=>e.id===idOrEntry) : idOrEntry;
+  if(!entry) return null;
+  Object.assign(entry,patch);
+  try{ window.canonicalizeStateEntries?.() }catch(_e){}
+  try{ window.persistEntries?.() }catch(_e){} // dispara el hook de arriba automáticamente
+  try{ window.render?.() }catch(_e){}
+  return entry;
+}
+
+// ---------- Resolución de conflictos (entradas manuales, solo migración) ----------
+function fieldFilled(e,f){ return e && e[f]!==undefined && e[f]!==null && e[f]!==''; }
+
+function resolveManualConflict(remoteEntry,localEntry){
+  const remoteTime=Number(remoteEntry?.updatedAt || (remoteEntry?.cioSyncAt && Date.parse(remoteEntry.cioSyncAt)) || 0);
+  const localTime=Number(localEntry?.updatedAt || (localEntry?.cioSyncAt && Date.parse(localEntry.cioSyncAt)) || 0);
+
+  let base,other,resolution;
+  if(remoteTime && localTime && remoteTime!==localTime){
+    [base,other] = remoteTime>localTime ? [remoteEntry,localEntry] : [localEntry,remoteEntry];
+    resolution='by-timestamp';
+  }else{
+    const countFilled=e=>ENTRY_FIELDS.filter(f=>fieldFilled(e,f)).length;
+    const rc=countFilled(remoteEntry), lc=countFilled(localEntry);
+    if(rc!==lc){
+      [base,other] = rc>lc ? [remoteEntry,localEntry] : [localEntry,remoteEntry];
+      resolution='by-field-count';
+    }else{
+      base=remoteEntry; other=localEntry;
+      resolution='tie-remote-base';
+    }
+  }
+
+  const merged={...base};
+  for(const f of new Set([...Object.keys(remoteEntry||{}),...Object.keys(localEntry||{})])){
+    if(!fieldFilled(merged,f) && fieldFilled(other,f)) merged[f]=other[f];
+  }
+
+  const sensitiveDiffer=['amount','category','date'].some(f=>
+    fieldFilled(remoteEntry,f) && fieldFilled(localEntry,f) && String(remoteEntry[f])!==String(localEntry[f])
+  );
+  const needsReview = resolution==='tie-remote-base' && sensitiveDiffer;
+
+  return {merged,resolution,needsReview};
+}
+
+// ---------- Reporte de conteo (dry run) ----------
+function migrationDryRun(warehouseJobs,remoteManualEntries,localManualEntries){
+  const jobsArr=Object.values(warehouseJobs||{});
+  const total=jobsArr.length;
+  const operational=jobsArr.filter(j=>!isNonOperationalEntry(j));
+  const rejectedNonOperational=total-operational.length;
+
+  const megaWithoutEventIdList=operational.filter(j=>isMegaWithoutEventId(j));
+  const withEventId=operational.filter(j=>!isMegaWithoutEventId(j) && String(j.eventId||j.cioEventId||'').trim());
+  const validEventId=withEventId.length;
+  const uniqueIds=new Set(withEventId.map(j=>'event_'+sanitizeFirebaseKey(j.eventId||j.cioEventId)));
+  const uniqueEventId=uniqueIds.size;
+  const duplicates=validEventId-uniqueEventId;
+
+  const remoteById=new Map((remoteManualEntries||[]).map(e=>[e.id,e]));
+  const localById=new Map((localManualEntries||[]).map(e=>[e.id,e]));
+  const allManualIds=new Set([...remoteById.keys(),...localById.keys()]);
+
+  let manualConflictsDetected=0, manualConflictsMerged=0, manualConflictsRequiringReview=0;
+  for(const id of allManualIds){
+    const r=remoteById.get(id), l=localById.get(id);
+    if(r && l && JSON.stringify(r)!==JSON.stringify(l)){
+      manualConflictsDetected++;
+      const {needsReview}=resolveManualConflict(r,l);
+      manualConflictsMerged++;
+      if(needsReview) manualConflictsRequiringReview++;
+    }
+  }
+
+  const sample=withEventId.slice(0,50).map(j=>toCanonicalTicket(typeof window.normalizedJob==='function'?window.normalizedJob(j):j));
+  const avgBytes=sample.length ? sample.reduce((s,t)=>s+JSON.stringify(t).length,0)/sample.length : 0;
+  const estimatedPayloadBytes=Math.round(avgBytes*(uniqueEventId+allManualIds.size));
+
+  return {
+    warehouseTotal:total,
+    rejectedNonOperational,
+    megaWithoutEventId:megaWithoutEventIdList.length,
+    validEventId,
+    uniqueEventId,
+    duplicates,
+    manualEntriesRemote:remoteById.size,
+    manualEntriesLocal:localById.size,
+    manualEntriesUnique:allManualIds.size,
+    manualConflictsDetected,
+    manualConflictsMerged,
+    manualConflictsRequiringReview,
+    estimatedPayloadBytes,
+    expectedFinalTotal:uniqueEventId+allManualIds.size
+  };
+}
+
+// ---------- Respaldo previo ----------
+async function backupBeforeMigration(){
+  const db=await waitForFirebase();
+  if(!db) throw new Error('Firebase no disponible');
+  const snap=await db.ref('bitacora').once('value');
+  const payload=snap.val()||{};
+  const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+  await db.ref(`instara_backups/${stamp}`).set({
+    bitacora:payload,
+    createdAt:firebase.database.ServerValue.TIMESTAMP,
+    createdBy:THIS_CLIENT_INSTANCE,
+    schemaVersion:1
+  });
+  try{
+    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`instara-backup-${stamp}.json`;
+    a.click();
+  }catch(_e){}
+  return stamp;
+}
+
+// ---------- Migración inicial ----------
+async function runMigration({warehouseJobs,remoteManualEntries,localManualEntries}){
+  const report=migrationDryRun(warehouseJobs,remoteManualEntries,localManualEntries);
+  const jobsArr=Object.values(warehouseJobs||{});
+  const operational=jobsArr.filter(j=>!isNonOperationalEntry(j) && !isMegaWithoutEventId(j) && String(j.eventId||j.cioEventId||'').trim());
+
+  const seen=new Set();
+  let migratedMega=0, skipped=0;
+  for(const job of operational){
+    const normalized=typeof window.normalizedJob==='function' ? window.normalizedJob(job) : job;
+    const key=entryKey(normalized);
+    if(!key || seen.has(key)){ skipped++; continue; }
+    seen.add(key);
+    const res=await upsertTicket(normalized,{source:'migration'});
+    if(res.ok) migratedMega++; else skipped++;
+  }
+
+  const remoteById=new Map((remoteManualEntries||[]).map(e=>[e.id,e]));
+  const localById=new Map((localManualEntries||[]).map(e=>[e.id,e]));
+  const allManualIds=new Set([...remoteById.keys(),...localById.keys()]);
+  let migratedManual=0;
+  for(const id of allManualIds){
+    const r=remoteById.get(id), l=localById.get(id);
+    let toWrite;
+    if(r && l) toWrite=resolveManualConflict(r,l).merged;
+    else toWrite=r||l;
+    if(!toWrite) continue;
+    const res=await upsertTicket(toWrite,{source:'migration'});
+    if(res.ok) migratedManual++;
+  }
+
+  const summary={
+    ...report,
+    migratedMega,
+    migratedManual,
+    migratedCount:migratedMega+migratedManual,
+    skippedNoIdentity:skipped,
+    startedAt:new Date().toISOString(),
+    completedAt:new Date().toISOString()
+  };
+
+  const db=window.fbDb;
+  if(db) await db.ref('bitacora/migrations/ticket-migration-v1').set(summary);
+  return summary;
+}
+
+// ---------- Eliminación explícita (RC154) ----------
+// Única puerta de entrada para borrar un ticket de verdad. Nunca se infiere
+// por ausencia: siempre es una acción deliberada del usuario, con confirmación,
+// que primero confirma el tombstone en Firebase y SOLO DESPUÉS quita la
+// entrada de state.entries. Si Firebase falla, el ticket NO se borra localmente.
+async function explicitDeleteEntry(entry,{skipConfirm=false,confirmMessage=null}={}){
+  if(!entry) return {ok:false,reason:'no-entry'};
+  const label=entry.customerName||entry.category||'este ticket';
+
+  if(!skipConfirm){
+    const msg=confirmMessage||
+      `¿ELIMINAR "${label}" definitivamente?\n\n`+
+      `Esto lo borra de TODOS tus dispositivos, no solo de este.\n\n`+
+      `Si solo quieres que deje de aparecer en la ruta de hoy sin borrarlo, `+
+      `cancela esto y usa el botón "Quitar de la ruta" en su lugar.`;
+    if(!window.confirm(msg)) return {ok:false,reason:'cancelled'};
+  }
+
+  const key=entryKey(entry);
+  const mode=window.__INSTARA_TICKET_SYNC_MODE__||'legacy';
+
+  if(key && window.fbDb){
+    let result;
+    try{
+      result=await deleteTicket(entry);
+    }catch(err){
+      window.alert(`No se pudo eliminar "${label}" en Firebase:\n${err?.message||err}\n\nEl ticket NO se borró — sigue en tu lista. Intenta de nuevo.`);
+      return {ok:false,reason:'firebase-error',error:err};
+    }
+    if(!result?.ok){
+      window.alert(`No se pudo confirmar la eliminación de "${label}" en Firebase (${result?.reason||'motivo desconocido'}).\n\nEl ticket NO se borró — sigue en tu lista. Intenta de nuevo.`);
+      return {ok:false,reason:result?.reason||'unknown'};
+    }
+  }else if(key && !window.fbDb && mode!=='legacy'){
+    // Se esperaba sincronizar pero Firebase no está disponible ahora mismo
+    // (offline, etc.) -- no se borra localmente para no perder el tombstone.
+    window.alert(`No se pudo eliminar "${label}": sin conexión a Firebase en este momento.\n\nEl ticket NO se borró — intenta de nuevo cuando tengas conexión.`);
+    return {ok:false,reason:'no-firebase'};
+  }
+  // Si no hay 'key' (sin identidad sincronizable) o el modo es 'legacy' sin
+  // Firebase todavía conectado, se permite el borrado local únicamente --
+  // no hay nada que sincronizar todavía.
+
+  const st=window.state;
+  if(st && Array.isArray(st.entries)){
+    const idx=st.entries.indexOf(entry);
+    if(idx>=0) st.entries.splice(idx,1);
+  }
+  try{ window.canonicalizeStateEntries?.() }catch(_e){}
+  try{ await window.persistEntries?.() }catch(_e){}
+  try{ window.render?.() }catch(_e){}
+  return {ok:true};
+}
+
+// Variante en lote para la depuración trimestral (ya protegida por su propio
+// respaldo obligatorio) -- confirma una sola vez para todo el lote, no una
+// por ticket, y sigue llamando deleteTicket() para cada uno antes de quitarlos.
+async function bulkExplicitDeleteEntries(entries,{confirmMessage=null}={}){
+  const list=Array.isArray(entries)?entries.filter(Boolean):[];
+  if(!list.length) return {ok:true,deleted:0,failed:0};
+
+  if(confirmMessage && !window.confirm(confirmMessage)) return {ok:false,reason:'cancelled'};
+
+  let deleted=0,failed=0;
+  const stillHere=[];
+  for(const entry of list){
+    const key=entryKey(entry);
+    if(key && window.fbDb){
+      try{
+        const result=await deleteTicket(entry);
+        if(!result?.ok){ failed++; stillHere.push(entry); continue; }
+      }catch(_e){ failed++; stillHere.push(entry); continue; }
+    }
+    deleted++;
+  }
+
+  const st=window.state;
+  if(st && Array.isArray(st.entries)){
+    const keepSet=new Set(stillHere);
+    st.entries=st.entries.filter(e=>!list.includes(e)||keepSet.has(e));
+  }
+  try{ window.canonicalizeStateEntries?.() }catch(_e){}
+  try{ await window.persistEntries?.() }catch(_e){}
+  try{ window.render?.() }catch(_e){}
+  return {ok:failed===0,deleted,failed};
+}
+
+// ---------- API pública para consola/admin ----------
+window.InstaraTicketSync={
+  version:VERSION,
+  entryKey, isMegaWithoutEventId, toCanonicalTicket,
+  upsertTicket, deleteTicket, undeleteTicket,
+  editEntryLocally, explicitDeleteEntry, bulkExplicitDeleteEntries,
+  migrationDryRun, backupBeforeMigration, runMigration,
+  setMode:async (mode)=>{
+    if(!ALLOWED_MODES.has(mode)) throw new Error('Modo inválido: '+mode);
+    const db=await waitForFirebase();
+    if(!db) throw new Error('Firebase no disponible');
+    return db.ref('bitacora/config/ticketSyncMode').set(mode);
+  },
+  getMode:()=>window.__INSTARA_TICKET_SYNC_MODE__||'legacy',
+  waitForFirebase
+};
+
+// ---------- Arranque ----------
+function boot(){
+  let tries=0;
+  const timer=setInterval(()=>{
+    const hookedBoot=hookCloudMemoryBoot();
+    const hookedPersist=hookPersistEntries();
+  hookBridgeTicketSync();
+    // Si Firebase YA estaba listo antes de que enganchemos (carrera improbable
+    // pero posible), instala el listener de modo directamente también.
+    if(window.fbDb) installModeListener();
+    if((hookedBoot && hookedPersist) || ++tries>120) clearInterval(timer);
+  },250);
+}
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true}); else boot();
 })();
 </script>
