@@ -11773,11 +11773,40 @@ function sanitizeFirebaseKey(v){
 function looksLikeMegaEntry(entry){
   return Boolean(entry?.bridgeSource==='CiO Mega Bridge' || entry?._cioRaw || entry?.cioOrderId || entry?.cioJobNumber);
 }
+function storeStopCode(entry){
+  const raw=[
+    entry?.storeNumber,entry?.sellerStoreNumber,entry?.store,entry?.storeName,
+    entry?.category,entry?.customerName,entry?.id
+  ].filter(Boolean).join(' ');
+  const m=raw.match(/(?:store\s*#?|lowe'?s?\s*(?:store\s*)?#?|instara_store_)(0*\d{3,4})(?:\D|$)/i);
+  return m?String(parseInt(m[1],10)):'';
+}
+function looksLikeStoreStop(entry){
+  const code=storeStopCode(entry);
+  if(!code) return false;
+  if(entry?.isStoreStop===true || entry?.instaraAutoStore===true) return true;
+  if(/^instara_store_/i.test(String(entry?.id||''))) return true;
+  if(/lowe'?s\s+store\s*#?\s*\d{3,4}/i.test(String(entry?.category||''))) return true;
+  if(/lowe'?s\s+store\s*#?\s*\d{3,4}/i.test(String(entry?.customerName||''))) return true;
+  const generic=/^(?:cliente\s+sin\s+nombre|sin\s+nombre|lowe'?s\s+store(?:\s*\d{3,4})?)?$/i
+    .test(String(entry?.customerName||'').trim());
+  return generic && Number(entry?.amount||0)===0 && Boolean(entry?.store||entry?.storeNumber);
+}
+function storeStopKey(entry){
+  const code=storeStopCode(entry);
+  const date=String(entry?.date||'').trim();
+  if(!code || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  return 'store_'+sanitizeFirebaseKey(date.replace(/-/g,''))+'_'+sanitizeFirebaseKey(code);
+}
 function isMegaWithoutEventId(entry){
   const eventId=String(entry?.cioEventId||entry?.eventId||entry?._cioRaw?.eventId||'').trim();
   return looksLikeMegaEntry(entry) && !eventId;
 }
 function entryKey(entry){
+  if(looksLikeStoreStop(entry)){
+    const key=storeStopKey(entry);
+    if(key) return key;
+  }
   const eventId=String(entry?.cioEventId||entry?.eventId||entry?._cioRaw?.eventId||'').trim();
   if(eventId) return 'event_'+sanitizeFirebaseKey(eventId);
   if(looksLikeMegaEntry(entry)) return null; // megaWithoutEventId: nunca cae a manual_
@@ -11804,8 +11833,12 @@ const USER_OWNED_FIELDS=[
   'orderIndex','routeExcluded','routeExcludedReason','manualRouteOverride',
   'haulAway','isAdditional','order','type'
 ];
+const STORE_STOP_FIELDS=[
+  'isStoreStop','instaraAutoStore','customerName','address',
+  'store','storeNumber','date','category','id','createdAt'
+];
 const NEUTRAL_FIELDS=['id','date','category'];
-const ENTRY_FIELDS=[...BRIDGE_OWNED_FIELDS,...USER_OWNED_FIELDS,...NEUTRAL_FIELDS];
+const ENTRY_FIELDS=[...BRIDGE_OWNED_FIELDS,...USER_OWNED_FIELDS,...STORE_STOP_FIELDS,...NEUTRAL_FIELDS];
 
 function toCanonicalTicket(entry){
   const out={};
@@ -11874,7 +11907,11 @@ async function upsertTicket(entry,{source}={}){
   // conflicto real de propiedad, y sin esto un ticket nuevo se sincronizaria sin
   // fecha ni categoria (bug encontrado en pruebas).
   const allowedFields = source==='bridge' ? [...BRIDGE_OWNED_FIELDS,...NEUTRAL_FIELDS]
-                       : source==='user'   ? [...USER_OWNED_FIELDS,...NEUTRAL_FIELDS]
+                       : source==='user'   ? [
+                           ...USER_OWNED_FIELDS,
+                           ...NEUTRAL_FIELDS,
+                           ...(looksLikeStoreStop(entry)?STORE_STOP_FIELDS:[])
+                         ]
                        : ENTRY_FIELDS; // 'migration': una sola vez, todo permitido
 
   const ref=db.ref(ticketNodePath(key));
@@ -11974,6 +12011,101 @@ async function undeleteTicket(entryOrKey){
   return {ok:Boolean(result.committed), key};
 }
 
+
+// ---------- Reparación y deduplicación de paradas automáticas Lowe's ----------
+const KNOWN_STORE_ADDRESSES_RC157={
+  '664':'4224 Valley Ave, Roanoke, VA 24018',
+  '419':'5040 Rutgers St NW, Roanoke, VA 24012',
+  '1764':'4520 Challenger Ave NE, Roanoke, VA 24012',
+  '2939':'840 W Main St, Salem, VA 24153',
+  '2217':'800 Old Franklin Turnpike, Rocky Mount, VA 24151',
+  '2809':'1820 E Lynchburg Salem Turnpike, Bedford, VA 24523'
+};
+function knownStoreAddressRC157(code){
+  const st=window.state;
+  return String(
+    st?.storeAddresses?.['store:'+code] ||
+    st?.storeAddresses?.[code] ||
+    KNOWN_STORE_ADDRESSES_RC157[code] ||
+    ''
+  ).trim();
+}
+function normalizeStoreStop(entry){
+  if(!entry || !looksLikeStoreStop(entry)) return entry;
+  const code=storeStopCode(entry);
+  const date=String(entry.date||'').trim();
+  if(!code || !date) return entry;
+
+  const stableId='instara_store_'+code+'_'+date.replace(/-/g,'');
+  const knownAddress=knownStoreAddressRC157(code);
+  const currentAddress=String(entry.address||'').trim();
+  const badAddress=!currentAddress || /direcci[oó]n no cargada|cliente sin nombre/i.test(currentAddress);
+
+  entry.id=stableId;
+  entry.isStoreStop=true;
+  entry.instaraAutoStore=true;
+  entry.type='income';
+  entry.category=`Lowe's Store ${code}`;
+  entry.customerName=`Lowe's Store ${code}`;
+  entry.store=`Store ${code}`;
+  entry.storeNumber=code;
+  if(badAddress && knownAddress) entry.address=knownAddress;
+  entry.amount=0;
+  entry.net=0;
+  if(!entry.status) entry.status='pending';
+  return entry;
+}
+function storeStopQuality(entry){
+  let score=0;
+  if(entry?.isStoreStop) score+=20;
+  if(entry?.instaraAutoStore) score+=20;
+  if(String(entry?.address||'').trim()) score+=15;
+  if(String(entry?.customerName||'').trim() && !/cliente sin nombre/i.test(String(entry.customerName))) score+=10;
+  if(String(entry?.storeNumber||'').trim()) score+=10;
+  if(String(entry?.category||'').trim()) score+=5;
+  score+=Object.values(entry||{}).filter(v=>v!==undefined&&v!==null&&v!=='').length;
+  return score;
+}
+function repairStoreStopsInMemory(){
+  const st=window.state;
+  if(!st || !Array.isArray(st.entries)) return {changed:false,removed:0,repaired:0};
+
+  const groups=new Map();
+  for(const entry of st.entries){
+    if(!looksLikeStoreStop(entry)) continue;
+    normalizeStoreStop(entry);
+    const key=storeStopKey(entry);
+    if(!key) continue;
+    if(!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(entry);
+  }
+
+  let changed=false,removed=0,repaired=0;
+  for(const group of groups.values()){
+    group.sort((a,b)=>storeStopQuality(b)-storeStopQuality(a));
+    const keeper=group[0];
+    normalizeStoreStop(keeper);
+    repaired++;
+
+    for(const duplicate of group.slice(1)){
+      for(const [field,value] of Object.entries(duplicate||{})){
+        if((keeper[field]===undefined||keeper[field]===null||keeper[field]==='') &&
+           value!==undefined&&value!==null&&value!==''){
+          keeper[field]=value;
+        }
+      }
+      const idx=st.entries.indexOf(duplicate);
+      if(idx>=0){
+        st.entries.splice(idx,1);
+        removed++;
+        changed=true;
+      }
+    }
+    normalizeStoreStop(keeper);
+  }
+  return {changed,removed,repaired};
+}
+
 // ---------- Merge remoto en memoria ----------
 function computeSyncFingerprint(entry){
   const relevant={};
@@ -11988,7 +12120,8 @@ function mergeRemoteEntryInMemory(key,node){
   if(!st || !Array.isArray(st.entries) || !node || !node.data) return;
 
   const remoteMeta=node.meta||{};
-  let entry=st.entries.find(item=>entryKey(item)===key);
+  const canonicalKey=entryKey(node.data)||key;
+  let entry=st.entries.find(item=>entryKey(item)===canonicalKey);
 
   if(remoteMeta.deletedAt){
     // El tombstone vive en Firebase; la entrada deja de mostrarse como activa.
@@ -12008,6 +12141,7 @@ function mergeRemoteEntryInMemory(key,node){
     const data={...node.data};
     if(key.startsWith('manual_') && !data.id) data.id=key.slice('manual_'.length);
     entry={...data,_syncMeta:remoteMeta};
+    normalizeStoreStop(entry);
     st.entries.push(entry);
   }else{
     const localRevision=Number(entry?._syncMeta?.revision||0);
@@ -12015,10 +12149,11 @@ function mergeRemoteEntryInMemory(key,node){
     if(remoteRevision>=localRevision){
       Object.assign(entry,node.data,{_syncMeta:remoteMeta});
     }
+    normalizeStoreStop(entry);
   }
   // Registra la huella ya reflejada para que el hook de persistEntries() no
   // vuelva a subir de inmediato lo que acabamos de bajar de Firebase.
-  lastSyncedFingerprint.set(key,computeSyncFingerprint(entry));
+  lastSyncedFingerprint.set(canonicalKey,computeSyncFingerprint(entry));
 }
 
 // ---------- Hidratación de una sola vez + listeners incrementales idempotentes ----------
@@ -12049,6 +12184,7 @@ async function hydrateTicketsOnce(){
     const remote=Object.fromEntries(Object.entries(root).filter(([name])=>isTicketNodeName(name)).map(([name,node])=>[ticketKeyFromNodeName(name),node]));
     hydratedTicketKeys=new Set(Object.keys(remote));
     for(const [key,node] of Object.entries(remote)) mergeRemoteEntryInMemory(key,node);
+    repairStoreStopsInMemory();
     const st=window.state;
     if(st && Array.isArray(st.entries)){
       lastKnownTicketKeys=new Set(st.entries.map(e=>entryKey(e)).filter(Boolean));
@@ -12168,6 +12304,7 @@ async function reconcileEntriesForTicketSync(){
   const st=window.state;
   if(!st || !Array.isArray(st.entries)) return;
 
+  repairStoreStopsInMemory();
   const currentKeys=new Set();
   const pending=[];
   for(const entry of st.entries){
