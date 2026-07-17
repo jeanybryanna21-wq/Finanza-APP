@@ -12282,6 +12282,89 @@ function resolveManualConflict(remoteEntry,localEntry){
   return {merged,resolution,needsReview};
 }
 
+// ---------- Fusión determinística de duplicados Mega ----------
+function megaRecordTimestamp(entry){
+  const candidates=[
+    entry?.updatedAt,
+    entry?.cioSyncAt,
+    entry?.syncedAt,
+    entry?.serverReceivedAt,
+    entry?.snapshotVersion,
+    entry?._cioRaw?.updatedAt,
+    entry?._cioRaw?.syncedAt
+  ];
+  for(const value of candidates){
+    if(value===undefined||value===null||value==='') continue;
+    const n=Number(value);
+    if(Number.isFinite(n) && n>0) return n;
+    const parsed=Date.parse(String(value));
+    if(Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
+function canonicalFilledCount(entry){
+  const c=toCanonicalTicket(entry);
+  return Object.values(c).filter(v=>v!==undefined&&v!==null&&v!=='' && !(Array.isArray(v)&&v.length===0)).length;
+}
+
+function mergeMegaDuplicateGroup(group){
+  const normalized=(group||[]).map(raw=>
+    typeof window.InstaraMegaBridge?.normalizeJob==='function'
+      ? window.InstaraMegaBridge.normalizeJob(raw)
+      : raw
+  ).filter(Boolean);
+  if(!normalized.length) return null;
+
+  normalized.sort((a,b)=>{
+    const td=megaRecordTimestamp(b)-megaRecordTimestamp(a);
+    if(td) return td;
+    return canonicalFilledCount(b)-canonicalFilledCount(a);
+  });
+
+  const base={...normalized[0]};
+  for(const other of normalized.slice(1)){
+    for(const [field,value] of Object.entries(other||{})){
+      const empty=value===undefined||value===null||value===''||(Array.isArray(value)&&value.length===0);
+      if(empty) continue;
+      const current=base[field];
+      const currentEmpty=current===undefined||current===null||current===''||(Array.isArray(current)&&current.length===0);
+      if(currentEmpty){ base[field]=value; continue; }
+      // Materiales: unión estable, sin perder elementos ya capturados.
+      if(['lineItems','itemNumbers','relatedOrders'].includes(field) && Array.isArray(current) && Array.isArray(value)){
+        const seen=new Set();
+        base[field]=[...current,...value].filter(item=>{
+          let key;
+          try{ key=typeof item==='string'?item:JSON.stringify(item); }catch(_e){ key=String(item); }
+          if(seen.has(key)) return false;
+          seen.add(key); return true;
+        });
+      }
+    }
+  }
+  return base;
+}
+
+function collapseMegaDuplicates(warehouseJobs){
+  const groups=new Map();
+  for(const job of Object.values(warehouseJobs||{})){
+    if(isNonOperationalEntry(job)||isMegaWithoutEventId(job)) continue;
+    const id=String(job?.eventId||job?.cioEventId||'').trim();
+    if(!id) continue;
+    const key='event_'+sanitizeFirebaseKey(id);
+    if(!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(job);
+  }
+  const merged=[];
+  let duplicateGroups=0;
+  for(const group of groups.values()){
+    if(group.length>1) duplicateGroups++;
+    const item=mergeMegaDuplicateGroup(group);
+    if(item) merged.push(item);
+  }
+  return {merged,duplicateGroups};
+}
+
 // ---------- Reporte de conteo (dry run) ----------
 function migrationDryRun(warehouseJobs,remoteManualEntries,localManualEntries){
   const jobsArr=Object.values(warehouseJobs||{});
@@ -12338,37 +12421,77 @@ async function backupBeforeMigration(){
   const db=await waitForFirebase();
   if(!db) throw new Error('Firebase no disponible');
   const snap=await db.ref('bitacora').once('value');
-  const payload=snap.val()||{};
+  const source=snap.val()||{};
+  // Evita respaldos recursivos: nunca incluir copias anteriores ni probes.
+  const payload={...source};
+  delete payload._backups;
+  delete payload._migration_permission_probe;
   const stamp=new Date().toISOString().replace(/[:.]/g,'-');
-  await db.ref(`instara_backups/${stamp}`).set({
-    bitacora:payload,
-    createdAt:firebase.database.ServerValue.TIMESTAMP,
-    createdBy:THIS_CLIENT_INSTANCE,
-    schemaVersion:1
-  });
+
+  let localDownloaded=false;
   try{
-    const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+    const blob=new Blob([JSON.stringify({bitacora:payload,createdAt:new Date().toISOString(),schemaVersion:1},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
     const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
+    a.href=url;
     a.download=`instara-backup-${stamp}.json`;
+    document.body.appendChild(a);
     a.click();
-  }catch(_e){}
-  return stamp;
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1500);
+    localDownloaded=true;
+  }catch(err){
+    throw new Error('No se pudo descargar el respaldo local: '+String(err?.message||err));
+  }
+
+  let remoteSaved=false, remoteWarning='';
+  try{
+    await db.ref(`bitacora/_backups/${stamp}`).set({
+      bitacora:payload,
+      createdAt:firebase.database.ServerValue.TIMESTAMP,
+      createdBy:THIS_CLIENT_INSTANCE,
+      schemaVersion:1
+    });
+    remoteSaved=true;
+  }catch(err){
+    remoteWarning=String(err?.message||err||'PERMISSION_DENIED');
+  }
+
+  return {stamp,localDownloaded,remoteSaved,remoteWarning};
+}
+
+async function preflightMigrationPermissions(){
+  const db=await waitForFirebase();
+  if(!db) throw new Error('Firebase no disponible');
+  const probe='probe_'+sanitizeFirebaseKey(THIS_CLIENT_INSTANCE)+'_'+Date.now();
+  const paths=[
+    `bitacora/tickets/${probe}`,
+    `bitacora/config/${probe}`,
+    `bitacora/migrations/${probe}`,
+    `bitacora/_backups/${probe}`
+  ];
+  const results=[];
+  for(const path of paths){
+    try{
+      await db.ref(path).set({probe:true,at:firebase.database.ServerValue.TIMESTAMP});
+      await db.ref(path).remove();
+      results.push({path,ok:true});
+    }catch(err){
+      results.push({path,ok:false,error:String(err?.message||err)});
+    }
+  }
+  return {ok:results.every(x=>x.ok),results};
 }
 
 // ---------- Migración inicial ----------
 async function runMigration({warehouseJobs,remoteManualEntries,localManualEntries}){
   const report=migrationDryRun(warehouseJobs,remoteManualEntries,localManualEntries);
-  const jobsArr=Object.values(warehouseJobs||{});
-  const operational=jobsArr.filter(j=>!isNonOperationalEntry(j) && !isMegaWithoutEventId(j) && String(j.eventId||j.cioEventId||'').trim());
+  const {merged:operationalMerged}=collapseMegaDuplicates(warehouseJobs);
 
-  const seen=new Set();
   let migratedMega=0, skipped=0;
-  for(const job of operational){
-    const normalized=typeof window.InstaraMegaBridge?.normalizeJob==='function' ? window.InstaraMegaBridge.normalizeJob(job) : job;
+  for(const normalized of operationalMerged){
     const key=entryKey(normalized);
-    if(!key || seen.has(key)){ skipped++; continue; }
-    seen.add(key);
+    if(!key){ skipped++; continue; }
     const res=await upsertTicket(normalized,{source:'migration'});
     if(res.ok) migratedMega++; else skipped++;
   }
@@ -12495,7 +12618,7 @@ window.InstaraTicketSync={
   entryKey, isMegaWithoutEventId, toCanonicalTicket,
   upsertTicket, deleteTicket, undeleteTicket,
   editEntryLocally, explicitDeleteEntry, bulkExplicitDeleteEntries,
-  migrationDryRun, backupBeforeMigration, runMigration,
+  migrationDryRun, backupBeforeMigration, preflightMigrationPermissions, runMigration,
   setMode:async (mode)=>{
     if(!ALLOWED_MODES.has(mode)) throw new Error('Modo inválido: '+mode);
     const db=await waitForFirebase();
@@ -12691,9 +12814,32 @@ async function runBackup(){
   setBtn('mig-backup',true);
   setBackupStatus('Creando respaldo…');
   try{
-    const stamp=await window.InstaraTicketSync.backupBeforeMigration();
-    lastBackupStamp=stamp;
-    setBackupStatus('✅ Respaldo creado: instara_backups/'+stamp+' (Firebase) + JSON descargado a este dispositivo.','ok');
+    const backup=await window.InstaraTicketSync.backupBeforeMigration();
+    if(!backup?.localDownloaded) throw new Error('El archivo JSON local no se descargó.');
+
+    const permissions=await window.InstaraTicketSync.preflightMigrationPermissions();
+    if(!permissions.ok){
+      const denied=permissions.results.filter(x=>!x.ok).map(x=>x.path+': '+x.error).join('\n');
+      lastBackupStamp=null;
+      setBackupStatus(
+        '✅ Respaldo JSON descargado al dispositivo.\n\n'+
+        (backup.remoteSaved?'✅ Copia remota creada.':'⚠️ Copia remota no creada: '+backup.remoteWarning)+
+        '\n\n❌ MIGRACIÓN BLOQUEADA POR PERMISOS:\n'+denied,
+        'error'
+      );
+      evaluateRunGate();
+      return;
+    }
+
+    lastBackupStamp=backup.stamp;
+    setBackupStatus(
+      '✅ Respaldo JSON descargado al dispositivo.\n'+
+      (backup.remoteSaved
+        ? '✅ Copia remota creada en bitacora/_backups/'+backup.stamp+'.\n'
+        : '⚠️ Copia remota no creada: '+backup.remoteWarning+'\n')+
+      '✅ Permisos de tickets/config/migrations/backups verificados.',
+      backup.remoteSaved?'ok':'info'
+    );
     evaluateRunGate();
   }catch(err){
     setBackupStatus('❌ No se pudo crear el respaldo: '+(err?.message||err),'error');
