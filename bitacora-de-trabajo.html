@@ -12661,7 +12661,12 @@ function boot(){
     // Si Firebase YA estaba listo antes de que enganchemos (carrera improbable
     // pero posible), instala el listener de modo directamente también.
     if(window.fbDb) installModeListener();
-    if((hookedBoot && hookedPersist) || ++tries>120) clearInterval(timer);
+    // No detener el sondeo solo porque los hooks ya quedaron instalados:
+    // en iOS/PWA Firebase puede inicializarse antes o después de este módulo.
+    // El sondeo termina únicamente cuando el listener central del modo quedó
+    // realmente conectado. Así la app instalada recibe dual-write/tickets-only
+    // desde Firebase aunque arranque más rápido que Safari.
+    if((hookedPersist && modeListenerInstalled) || ++tries>1200) clearInterval(timer);
   },250);
 }
 
