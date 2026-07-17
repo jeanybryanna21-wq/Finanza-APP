@@ -7300,7 +7300,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
     }
   });
   document.addEventListener('DOMContentLoaded',()=>{ping();setTimeout(()=>{if(!connected)setBridgeStatus('Mega Bridge no detectado · instala/conecta la extensión de INSTARA AI','Sin conexión')},1800);const meta=load(BRIDGE_KEY,null);if(meta?.syncedAt)setBridgeStatus(`Último sync · ${meta.totalObserved||0} trabajos · ${meta.totalConfirmed||0} confirmados`,new Date(meta.syncedAt).toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'}))});
-  window.InstaraMegaBridge={requestSync,applySnapshot,getLastPayload:()=>lastPayload,isConnected:()=>connected};
+  window.InstaraMegaBridge={requestSync,applySnapshot,normalizeJob:normalizedJob,getLastPayload:()=>lastPayload,isConnected:()=>connected};
 })();
 </script>
 
@@ -8875,21 +8875,120 @@ function injectSettings(){
   document.getElementById('instara-hub-url').value=c.hubUrl||'';document.getElementById('instara-hub-channel').value=c.channelId||'';document.getElementById('instara-hub-read-token').value=c.readToken||'';document.getElementById('instara-hub-sync-key').value=c.syncKey||'';
   document.getElementById('instara-hub-save').addEventListener('click',()=>{setSyncPaused(false);const next={hubUrl:cleanUrl(document.getElementById('instara-hub-url').value),channelId:document.getElementById('instara-hub-channel').value.trim(),readToken:document.getElementById('instara-hub-read-token').value.trim(),syncKey:document.getElementById('instara-hub-sync-key').value.trim()};save(CFG_KEY,next);setStatus(ready(next)?'Sync Hub guardado.':'Faltan datos del Sync Hub.',ready(next)?'ok':'error');if(ready(next))fetchLatest({manual:true,force:true})});
   document.getElementById('instara-hub-test').addEventListener('click',()=>{setSyncPaused(false);fetchLatest({manual:true,force:true})});
+
+  async function rc1552CreatePurgeBackup(actionLabel){
+    const db=window.fbDb;
+    if(!db)throw new Error('Firebase no está disponible; la purga se cancela sin borrar nada.');
+
+    // Preferimos el respaldo central ya incluido por la migración. Si no estuviera
+    // disponible, hacemos un respaldo equivalente aquí mismo.
+    if(window.InstaraTicketSync?.backupBeforeMigration){
+      const stamp=await window.InstaraTicketSync.backupBeforeMigration();
+      if(!stamp)throw new Error('Firebase no confirmó el respaldo obligatorio.');
+      return stamp;
+    }
+
+    const snap=await db.ref('bitacora').once('value');
+    const payload=snap.val()||{};
+    const stamp=new Date().toISOString().replace(/[.:]/g,'-');
+    await db.ref(`instara_backups/${stamp}`).set({
+      bitacora:payload,
+      createdAt:firebase.database.ServerValue.TIMESTAMP,
+      createdBy:'manual-purge-rc155.2',
+      schemaVersion:1,
+      action:String(actionLabel||'manual-purge')
+    });
+
+    try{
+      const blob=new Blob([JSON.stringify({bitacora:payload,createdAt:new Date().toISOString(),action:actionLabel},null,2)],{type:'application/json'});
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download=`instara-backup-${stamp}.json`;
+      a.click();
+      setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+    }catch(_e){}
+    return stamp;
+  }
+
+  async function rc1552FirebaseMegaCount(){
+    const db=window.fbDb;
+    if(!db)return 0;
+    const snap=await db.ref('bitacora/tickets').once('value');
+    const nodes=snap.val()||{};
+    return Object.keys(nodes).filter(key=>String(key).startsWith('event_')).length;
+  }
+
+  async function rc1552HardDeleteMegaTicketNodes(){
+    const db=window.fbDb;
+    if(!db)return {deleted:0};
+    const snap=await db.ref('bitacora/tickets').once('value');
+    const nodes=snap.val()||{};
+    const updates={};
+    let deleted=0;
+    for(const key of Object.keys(nodes)){
+      if(!String(key).startsWith('event_'))continue;
+      updates[`bitacora/tickets/${key}`]=null;
+      deleted++;
+    }
+    if(deleted)await db.ref().update(updates);
+    return {deleted};
+  }
+
+  async function rc1552RepublishMegaTickets(){
+    const sync=window.InstaraTicketSync;
+    const canonical=window.InstaraMegaCanonical;
+    const entries=window.__INSTARA_STATE__?.entries||[];
+    if(!sync?.upsertTicket||!canonical?.isMega)return {published:0,failed:0};
+    const mega=entries.filter(entry=>canonical.isMega(entry));
+    let published=0,failed=0;
+    for(let i=0;i<mega.length;i+=20){
+      const batch=mega.slice(i,i+20);
+      const results=await Promise.allSettled(batch.map(entry=>sync.upsertTicket(entry,{source:'bridge'})));
+      for(const result of results){
+        if(result.status==='fulfilled'&&result.value?.ok)published++;
+        else failed++;
+      }
+    }
+    return {published,failed};
+  }
+
+  async function rc1552ConfirmDangerousAction({title,description,phrase}){
+    const localMega=(window.__INSTARA_STATE__?.entries||[]).filter(entry=>window.InstaraMegaCanonical?.isMega?.(entry)).length;
+    const firebaseMega=await rc1552FirebaseMegaCount().catch(()=>0);
+    const ok=window.confirm(
+      `${title}\n\n${description}\n\n`+
+      `Mega visibles en este dispositivo: ${localMega}\n`+
+      `Tickets Mega por-evento en Firebase: ${firebaseMega}\n\n`+
+      `Antes de borrar, INSTARA creará un respaldo completo en Firebase y descargará un JSON.\n\n`+
+      `Esta acción es MANUAL y no se ejecutará por ausencia de tickets.`
+    );
+    if(!ok)return {ok:false,reason:'cancelled'};
+    const typed=window.prompt(`CONFIRMACIÓN FINAL\n\nEscribe exactamente: ${phrase}`,'');
+    if(String(typed||'').trim()!==phrase){
+      window.alert('Frase incorrecta. No se borró nada.');
+      return {ok:false,reason:'phrase-mismatch'};
+    }
+    return {ok:true,localMega,firebaseMega};
+  }
+
   document.getElementById('instara-mega-clean-sync').addEventListener('click',async()=>{
     const btn=document.getElementById('instara-mega-clean-sync');
     if(btn?.disabled)return;
-    const ok=confirm(
-      '¿PURGAR FIREBASE MEGA Y RESINCRONIZAR?\n\n'+
-      'INSTARA reemplazará la memoria Mega compartida en Firebase, verificará que quedó limpia y solo después descargará una copia fresca del Sync Hub.\n\n'+
-      'NO borra precios, partes, compendio, aprendizaje, geocodificación ni registros manuales que no sean Mega.'
-    );
-    if(!ok)return;
+
+    const confirmed=await rc1552ConfirmDangerousAction({
+      title:'¿PURGAR FIREBASE MEGA Y RESINCRONIZAR?',
+      description:'Se eliminarán únicamente los tickets Mega de la memoria compartida y del nodo por-evento. Las entradas manuales, precios, partes, compendio, aprendizaje, geocodificación y finanzas no se tocarán. Después se descargará una copia fresca del Sync Hub.',
+      phrase:'PURGAR MEGA'
+    });
+    if(!confirmed.ok)return;
 
     const original=btn.textContent;
     btn.disabled=true;
-    btn.textContent='PURGANDO FIREBASE…';
+    btn.textContent='CREANDO RESPALDO…';
+    setSyncPaused(true);
 
     try{
+      if(inflight)await inflight.catch(()=>{});
       if(
         !window.InstaraMegaCanonical?.dedupe ||
         !window.InstaraMegaCanonical?.isMega ||
@@ -8898,28 +8997,22 @@ function injectSettings(){
         throw new Error('Motor canónico Mega no disponible. Recarga INSTARA e inténtalo otra vez.');
       }
 
+      const backupStamp=await rc1552CreatePurgeBackup('purge-mega-and-resync');
+      btn.textContent='PURGANDO MEGA…';
+
       const keep=window.InstaraMegaCanonical.dedupe((window.__INSTARA_STATE__.entries||[]).filter(entry=>!window.InstaraMegaCanonical.isMega(entry)));
       window.__INSTARA_STATE__.entries=keep;
 
       const purgeKeys=[
-        'instara-cio-observed-jobs-v2',
-        'instara-mega-bridge-state-v2',
-        'instara-sync-hub-state-v1',
-        'instara-route-active-v1',
-        'miruta-route-order-v1',
-        'instara-gps-session-v1',
-        'instara-route-manual-impact-v1',
-        'miruta-route-current-plan-v1',
-        'miruta-route-plan-v1',
-        'instara-tomorrow-plan-v1',
-        'instara-next-day-plan-v1'
+        'instara-cio-observed-jobs-v2','instara-mega-bridge-state-v2','instara-sync-hub-state-v1',
+        'instara-route-active-v1','miruta-route-order-v1','instara-gps-session-v1',
+        'instara-route-manual-impact-v1','miruta-route-current-plan-v1','miruta-route-plan-v1',
+        'instara-tomorrow-plan-v1','instara-next-day-plan-v1'
       ];
       purgeKeys.forEach(key=>{try{localStorage.removeItem(key)}catch(_e){}});
 
-      const atomic=await window.InstaraCloudMemory.replaceSharedValueAtomic(
-        'wl:entries',
-        JSON.stringify(keep)
-      );
+      const removedNodes=await rc1552HardDeleteMegaTicketNodes();
+      const atomic=await window.InstaraCloudMemory.replaceSharedValueAtomic('wl:entries',JSON.stringify(keep));
       if(!atomic?.ok)throw new Error('Firebase no confirmó la purga de wl:entries.');
 
       await window.InstaraCloudMemory.forcePull();
@@ -8927,39 +9020,30 @@ function injectSettings(){
       window.InstaraMegaCanonical.canonicalizeStateEntries();
 
       btn.textContent='DESCARGANDO HUB FRESCO…';
-
+      setSyncPaused(false);
       const result=await fetchLatest({manual:true,force:true});
       if(!result?.ok)throw new Error(result?.message||'El Hub no respondió.');
 
       window.InstaraMegaCanonical.canonicalizeStateEntries();
       await window.persistEntries();
+      await window.InstaraCloudMemory.replaceSharedValueAtomic('wl:entries',JSON.stringify(window.__INSTARA_STATE__.entries));
 
-      await window.InstaraCloudMemory.replaceSharedValueAtomic(
-        'wl:entries',
-        JSON.stringify(window.__INSTARA_STATE__.entries)
-      );
+      btn.textContent='PUBLICANDO TICKETS…';
+      const republished=await rc1552RepublishMegaTickets();
+      if(republished.failed)throw new Error(`La resincronización importó datos, pero ${republished.failed} tickets no pudieron publicarse por-evento.`);
 
       try{window.MirutaNav?.finish?.(false)}catch(_e){}
       try{window.render?.()}catch(_e){}
       try{window.InstaraSchedule?.refresh?.()}catch(_e){}
       try{window.updatePremiumDashboard?.()}catch(_e){}
 
-      const todayIso=window.localToday();
-      const viewAudit=window.InstaraCanonicalViewAudit?.(todayIso);
-      const todayCount=viewAudit?.counts?.calendar ?? window.InstaraSchedule?.dayRows?.(todayIso)?.length ?? 0;
-      const workCount=viewAudit?.counts?.work ?? 0;
-      setStatus(
-        `Firebase Mega purgado ✓ ${window.__INSTARA_STATE__.entries.filter(entry=>window.InstaraMegaCanonical.isMega(entry)).length} registros canónicos · hoy ${workCount} trabajos · calendario ${todayCount}`,
-        'ok'
-      );
+      const megaNow=(window.__INSTARA_STATE__.entries||[]).filter(entry=>window.InstaraMegaCanonical.isMega(entry)).length;
+      setStatus(`Purga manual completada ✓ respaldo ${backupStamp} · ${removedNodes.deleted} nodos Mega eliminados · ${megaNow} tickets frescos · ${republished.published} publicados por-evento`,'ok');
     }catch(err){
-      console.error('RC134 atomic Firebase Mega purge',err);
-      setStatus('Purga Firebase falló: '+(err?.message||'error desconocido'),'error');
-      alert(
-        'INSTARA NO TERMINÓ LA PURGA DE FIREBASE\n\n'+
-        (err?.message||'Error desconocido')+
-        '\n\nNo continuaré mezclando la memoria vieja con una sincronización nueva.'
-      );
+      console.error('RC155.2 protected manual Mega purge',err);
+      setSyncPaused(true);
+      setStatus('Purga manual detenida: '+(err?.message||'error desconocido'),'error');
+      alert('INSTARA DETUVO LA PURGA\n\n'+(err?.message||'Error desconocido')+'\n\nSe creó un respaldo antes de borrar. La sincronización automática queda en pausa para evitar mezclas; revisa el estado antes de pulsar PROBAR HUB.');
     }finally{
       btn.disabled=false;
       btn.textContent=original;
@@ -8968,25 +9052,20 @@ function injectSettings(){
   document.getElementById('instara-mega-wipe-only')?.addEventListener('click',async()=>{
     const btn=document.getElementById('instara-mega-wipe-only');
     if(btn?.disabled)return;
-    const ok=confirm(
-      '¿VACIAR TODOS LOS TRABAJOS DE MEGA AHORA MISMO?\n\n'+
-      'INSTARA borrará todos los tickets de Mega Bridge de este dispositivo y de Firebase, y NO descargará nada nuevo del Sync Hub todavía. '+
-      'La app quedará sin trabajos de Mega hasta que vuelvas a sincronizar manualmente (por ejemplo cuando la extensión esté activa en la computadora).\n\n'+
-      'NO borra precios, partes, compendio, aprendizaje, geocodificación ni registros manuales que no sean Mega.'
-    );
-    if(!ok)return;
 
-    setSyncPaused(true); // RC136 v3: pausar YA, antes de cualquier await, para cerrar la
-    // ventana de carrera con los listeners de focus/visibilitychange/interval que podrían
-    // disparar un fetchLatest automático justo cuando el cuadro de confirmación se cierra.
-    if(inflight)await inflight.catch(()=>{}); // si ya había una sincronización en curso
-    // (por ejemplo disparada por el listener de "focus" justo al cerrar el cuadro de
-    // confirmación), esperamos a que termine ANTES de vaciar, para que no llegue tarde
-    // y rellene los tickets otra vez después de vaciar.
+    const confirmed=await rc1552ConfirmDangerousAction({
+      title:'¿VACIAR TODOS LOS TRABAJOS DE MEGA AHORA MISMO?',
+      description:'Se eliminarán únicamente los tickets Mega de este dispositivo, de wl:entries compartido y del nodo por-evento. NO se descargará nada nuevo. Las entradas manuales y las demás áreas de INSTARA permanecen intactas.',
+      phrase:'VACIAR MEGA'
+    });
+    if(!confirmed.ok)return;
+
+    setSyncPaused(true);
+    if(inflight)await inflight.catch(()=>{});
 
     const original=btn.textContent;
     btn.disabled=true;
-    btn.textContent='VACIANDO…';
+    btn.textContent='CREANDO RESPALDO…';
 
     try{
       if(
@@ -8997,28 +9076,22 @@ function injectSettings(){
         throw new Error('Motor canónico Mega no disponible. Recarga INSTARA e inténtalo otra vez.');
       }
 
+      const backupStamp=await rc1552CreatePurgeBackup('wipe-mega-without-resync');
+      btn.textContent='VACIANDO MEGA…';
+
       const keep=window.InstaraMegaCanonical.dedupe((window.__INSTARA_STATE__.entries||[]).filter(entry=>!window.InstaraMegaCanonical.isMega(entry)));
       window.__INSTARA_STATE__.entries=keep;
 
       const purgeKeys=[
-        'instara-cio-observed-jobs-v2',
-        'instara-mega-bridge-state-v2',
-        'instara-sync-hub-state-v1',
-        'instara-route-active-v1',
-        'miruta-route-order-v1',
-        'instara-gps-session-v1',
-        'instara-route-manual-impact-v1',
-        'miruta-route-current-plan-v1',
-        'miruta-route-plan-v1',
-        'instara-tomorrow-plan-v1',
-        'instara-next-day-plan-v1'
+        'instara-cio-observed-jobs-v2','instara-mega-bridge-state-v2','instara-sync-hub-state-v1',
+        'instara-route-active-v1','miruta-route-order-v1','instara-gps-session-v1',
+        'instara-route-manual-impact-v1','miruta-route-current-plan-v1','miruta-route-plan-v1',
+        'instara-tomorrow-plan-v1','instara-next-day-plan-v1'
       ];
       purgeKeys.forEach(key=>{try{localStorage.removeItem(key)}catch(_e){}});
 
-      const atomic=await window.InstaraCloudMemory.replaceSharedValueAtomic(
-        'wl:entries',
-        JSON.stringify(keep)
-      );
+      const removedNodes=await rc1552HardDeleteMegaTicketNodes();
+      const atomic=await window.InstaraCloudMemory.replaceSharedValueAtomic('wl:entries',JSON.stringify(keep));
       if(!atomic?.ok)throw new Error('Firebase no confirmó la limpieza de wl:entries.');
 
       await window.InstaraCloudMemory.forcePull();
@@ -9032,14 +9105,12 @@ function injectSettings(){
       try{window.updatePremiumDashboard?.()}catch(_e){}
 
       setSyncPaused(true);
-      setStatus('App vaciada de Mega ✓ 0 trabajos de Mega. La sincronización automática está en pausa — dale a "PROBAR HUB" cuando la extensión esté activa para traer todo fresco.','ok');
+      setStatus(`Vaciado manual completado ✓ respaldo ${backupStamp} · ${removedNodes.deleted} nodos Mega eliminados · sincronización automática en pausa. Pulsa PROBAR HUB cuando quieras recuperar los trabajos.`,'ok');
     }catch(err){
-      console.error('RC135 wipe-only (sin resync)',err);
-      setStatus('Vaciado falló: '+(err?.message||'error desconocido'),'error');
-      alert(
-        'INSTARA NO TERMINÓ DE VACIAR\n\n'+
-        (err?.message||'Error desconocido')
-      );
+      console.error('RC155.2 protected wipe-only',err);
+      setSyncPaused(true);
+      setStatus('Vaciado manual detenido: '+(err?.message||'error desconocido'),'error');
+      alert('INSTARA DETUVO EL VACIADO\n\n'+(err?.message||'Error desconocido')+'\n\nLa sincronización automática queda en pausa para evitar mezclas.');
     }finally{
       btn.disabled=false;
       btn.textContent=original;
@@ -12240,7 +12311,7 @@ function migrationDryRun(warehouseJobs,remoteManualEntries,localManualEntries){
     }
   }
 
-  const sample=withEventId.slice(0,50).map(j=>toCanonicalTicket(typeof window.normalizedJob==='function'?window.normalizedJob(j):j));
+  const sample=withEventId.slice(0,50).map(j=>toCanonicalTicket(typeof window.InstaraMegaBridge?.normalizeJob==='function'?window.InstaraMegaBridge.normalizeJob(j):j));
   const avgBytes=sample.length ? sample.reduce((s,t)=>s+JSON.stringify(t).length,0)/sample.length : 0;
   const estimatedPayloadBytes=Math.round(avgBytes*(uniqueEventId+allManualIds.size));
 
@@ -12294,7 +12365,7 @@ async function runMigration({warehouseJobs,remoteManualEntries,localManualEntrie
   const seen=new Set();
   let migratedMega=0, skipped=0;
   for(const job of operational){
-    const normalized=typeof window.normalizedJob==='function' ? window.normalizedJob(job) : job;
+    const normalized=typeof window.InstaraMegaBridge?.normalizeJob==='function' ? window.InstaraMegaBridge.normalizeJob(job) : job;
     const key=entryKey(normalized);
     if(!key || seen.has(key)){ skipped++; continue; }
     seen.add(key);
@@ -12446,6 +12517,353 @@ function boot(){
     // pero posible), instala el listener de modo directamente también.
     if(window.fbDb) installModeListener();
     if((hookedBoot && hookedPersist) || ++tries>120) clearInterval(timer);
+  },250);
+}
+
+if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true}); else boot();
+})();
+</script>
+<script id="instara-rc1551-disable-legacy-destructive-controls">
+(function(){
+  'use strict';
+  function disableLegacyDangerousControls(){
+    for(const id of ['instara-mega-clean-sync','instara-mega-wipe-only']){
+      const el=document.getElementById(id);
+      if(!el) continue;
+      el.disabled=true;
+      el.hidden=true;
+      el.setAttribute('aria-hidden','true');
+      el.title='Desactivado en RC155.1: la migración nueva es merge-only y nunca debe purgar wl:entries automáticamente.';
+    }
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',disableLegacyDangerousControls,{once:true});
+  else disableLegacyDangerousControls();
+  new MutationObserver(disableLegacyDangerousControls).observe(document.documentElement,{childList:true,subtree:true});
+})();
+</script>
+<script id="instara-rc155-migration-panel">
+(function(){
+'use strict';
+
+function unwrapLegacyCloudValue(node){
+  if(node && typeof node==='object' && Number(node.__instaraSync)===2 && Object.prototype.hasOwnProperty.call(node,'value')){
+    return String(node.value ?? '');
+  }
+  if(node===null || node===undefined) return null;
+  return String(node);
+}
+
+function getLocalManualEntries(){
+  const st=window.state||window.__INSTARA_STATE__;
+  if(!st || !Array.isArray(st.entries)) return [];
+  const isMega=window.InstaraMegaCanonical?.isMega || (()=>false);
+  return st.entries.filter(e=>!isMega(e));
+}
+
+async function getRemoteManualEntries(){
+  const db=window.fbDb;
+  if(!db) return [];
+  const snap=await db.ref('bitacora/wl:entries').once('value');
+  const raw=unwrapLegacyCloudValue(snap.val());
+  if(!raw) return [];
+  let arr;
+  try{ arr=JSON.parse(raw); }catch(_e){ return []; }
+  if(!Array.isArray(arr)) return [];
+  const isMega=window.InstaraMegaCanonical?.isMega || (()=>false);
+  return arr.filter(e=>!isMega(e));
+}
+
+async function fetchWarehouseFromHub(){
+  if(!window.InstaraSyncHub?.fetchLatest){
+    throw new Error('El Sync Hub no está disponible en esta página todavía. Recarga INSTARA.');
+  }
+  if(!window.InstaraSyncHub.isConfigured?.()){
+    throw new Error('El Sync Hub no está configurado (ver sección "INSTARA SYNC HUB" arriba en Ajustes).');
+  }
+  const result=await window.InstaraSyncHub.fetchLatest({manual:true,force:true});
+  if(!result?.ok){
+    throw new Error(result?.message || 'El Sync Hub no respondió.');
+  }
+  if(result.empty){
+    throw new Error('El Sync Hub todavía no tiene ningún snapshot del Bridge.');
+  }
+  if(!result.payload || !Array.isArray(result.payload.jobs)){
+    if(result.unchanged){
+      throw new Error('El Sync Hub dice "sin cambios" pero no hay un snapshot ya cargado para reutilizar. Presiona "PROBAR HUB" arriba primero y vuelve a intentar.');
+    }
+    throw new Error('El snapshot del Sync Hub no trae trabajos.');
+  }
+  return result.payload.jobs;
+}
+
+function reportIsConsistent(r){
+  const eventIdMath=(r.uniqueEventId + r.duplicates) === r.validEventId;
+  const totalMath=(r.validEventId + r.megaWithoutEventId + r.rejectedNonOperational) === r.warehouseTotal;
+  return eventIdMath && totalMath;
+}
+
+function formatReport(r){
+  return [
+    `Warehouse total (Sync Hub): ${r.warehouseTotal}`,
+    `Rechazados (no operativos, ej. "1 MAN TEAM"): ${r.rejectedNonOperational}`,
+    `Mega sin eventId válido (fuera de la migración, revisar aparte): ${r.megaWithoutEventId}`,
+    `Mega con eventId válido: ${r.validEventId}`,
+    `  · únicos: ${r.uniqueEventId}`,
+    `  · duplicados (mismo eventId repetido): ${r.duplicates}`,
+    `Entradas manuales — remotas: ${r.manualEntriesRemote} · locales: ${r.manualEntriesLocal} · únicas: ${r.manualEntriesUnique}`,
+    `Conflictos entre entradas manuales: ${r.manualConflictsDetected} detectados, ${r.manualConflictsMerged} fusionados automáticamente, ${r.manualConflictsRequiringReview} necesitan tu revisión`,
+    `Tamaño estimado del payload: ~${(r.estimatedPayloadBytes/1024).toFixed(1)} KB`,
+    `TOTAL FINAL ESPERADO: ${r.expectedFinalTotal}`
+  ].join('\n');
+}
+
+let lastAnalysis=null;
+let lastBackupStamp=null;
+let lastVerification=null;
+
+function $id(id){ return document.getElementById(id); }
+function setReport(text,tone='info'){
+  const el=$id('mig-report');
+  if(!el)return;
+  el.textContent=text;
+  el.dataset.tone=tone;
+}
+function setBackupStatus(text,tone='info'){
+  const el=$id('mig-backup-status');
+  if(!el)return;
+  el.textContent=text;
+  el.dataset.tone=tone;
+}
+function setVerifyStatus(text,tone='info'){
+  const el=$id('mig-verify-status');
+  if(!el)return;
+  el.textContent=text;
+  el.dataset.tone=tone;
+}
+function setBtn(id,disabled){
+  const el=$id(id);
+  if(el) el.disabled=disabled;
+}
+function reviewAckChecked(){
+  const el=$id('mig-review-ack-checkbox');
+  return el ? el.checked : false;
+}
+
+function evaluateRunGate(){
+  if(!lastAnalysis){ setBtn('mig-run',true); return; }
+  const r=lastAnalysis.report;
+  const consistent=reportIsConsistent(r);
+  const hasTotals=r.warehouseTotal>0 && r.expectedFinalTotal>0;
+  const needsAck=r.manualConflictsRequiringReview>0;
+  const ackBox=$id('mig-review-ack');
+  if(ackBox) ackBox.style.display=needsAck?'flex':'none';
+  const ackOk=!needsAck || reviewAckChecked();
+  setBtn('mig-run', !(consistent && hasTotals && lastBackupStamp && ackOk));
+}
+
+async function runAnalysis(){
+  setBtn('mig-analyze',true);
+  setReport('Analizando… obteniendo Warehouse del Sync Hub y entradas manuales…');
+  try{
+    const warehouseJobs=await fetchWarehouseFromHub();
+    const remoteManualEntries=await getRemoteManualEntries();
+    const localManualEntries=getLocalManualEntries();
+    const report=window.InstaraTicketSync.migrationDryRun(warehouseJobs,remoteManualEntries,localManualEntries);
+
+    lastAnalysis={report,warehouseJobs,remoteManualEntries,localManualEntries,analyzedAt:new Date().toISOString()};
+
+    let text=formatReport(report);
+    if(!reportIsConsistent(report)){
+      text='⚠️ LOS NÚMEROS NO CUADRAN INTERNAMENTE — migración bloqueada, algo salió mal en el conteo.\n\n'+text;
+    }
+    setReport(text, reportIsConsistent(report)?'info':'error');
+    evaluateRunGate();
+  }catch(err){
+    setReport('❌ No se pudo analizar: '+(err?.message||err),'error');
+    lastAnalysis=null;
+    evaluateRunGate();
+  }finally{
+    setBtn('mig-analyze',false);
+  }
+}
+
+async function runBackup(){
+  setBtn('mig-backup',true);
+  setBackupStatus('Creando respaldo…');
+  try{
+    const stamp=await window.InstaraTicketSync.backupBeforeMigration();
+    lastBackupStamp=stamp;
+    setBackupStatus('✅ Respaldo creado: instara_backups/'+stamp+' (Firebase) + JSON descargado a este dispositivo.','ok');
+    evaluateRunGate();
+  }catch(err){
+    setBackupStatus('❌ No se pudo crear el respaldo: '+(err?.message||err),'error');
+  }finally{
+    setBtn('mig-backup',false);
+  }
+}
+
+async function runMigrationButton(){
+  if(!lastAnalysis){ setReport('Corre "1. Analizar migración" primero.','error'); return; }
+  if(!lastBackupStamp){ setReport('Corre "2. Crear respaldo" primero — es obligatorio antes de migrar.','error'); return; }
+  const r=lastAnalysis.report;
+  if(!(r.warehouseTotal>0 && r.expectedFinalTotal>0) || !reportIsConsistent(r)){
+    setReport('Los conteos no cuadran. Migración BLOQUEADA.','error');
+    return;
+  }
+  if(r.manualConflictsRequiringReview>0 && !reviewAckChecked()){
+    setReport('Hay conflictos de entradas manuales sin revisar. Marca la casilla de confirmación antes de migrar.','error');
+    return;
+  }
+  if(!window.confirm(
+    `¿Migrar ${r.expectedFinalTotal} tickets (${r.uniqueEventId} de Mega + ${r.manualEntriesUnique} manuales) a bitacora/tickets?\n\n`+
+    `Esto es aditivo: wl:entries NO se toca ni se borra. Puedes revertir cambiando el modo a "legacy".`
+  )) return;
+
+  setBtn('mig-run',true);
+  setReport('Migrando… esto puede tardar un momento…');
+  try{
+    const summary=await window.InstaraTicketSync.runMigration({
+      warehouseJobs:lastAnalysis.warehouseJobs,
+      remoteManualEntries:lastAnalysis.remoteManualEntries,
+      localManualEntries:lastAnalysis.localManualEntries
+    });
+    const matchesExpected=summary.migratedCount===lastAnalysis.report.expectedFinalTotal;
+    setReport(
+      `✅ Migración completada.\n\n`+
+      `Migrados — Mega: ${summary.migratedMega} · Manuales: ${summary.migratedManual} · Total: ${summary.migratedCount}\n`+
+      `Omitidos (sin identidad válida): ${summary.skippedNoIdentity}\n\n`+
+      (matchesExpected
+        ? '✅ Coincide exactamente con lo esperado del análisis.'
+        : `⚠️ El total migrado (${summary.migratedCount}) no coincide con lo esperado (${lastAnalysis.report.expectedFinalTotal}) — corre "4. Verificar conteo" y revisa antes de activar dual-write.`),
+      matchesExpected?'ok':'error'
+    );
+  }catch(err){
+    setReport('❌ Error durante la migración: '+(err?.message||err),'error');
+  }finally{
+    setBtn('mig-run',false);
+  }
+}
+
+async function runVerify(){
+  setBtn('mig-verify',true);
+  setVerifyStatus('Verificando…');
+  try{
+    const db=window.fbDb;
+    if(!db) throw new Error('Firebase no disponible todavía.');
+    const snap=await db.ref('bitacora/tickets').once('value');
+    const all=snap.val()||{};
+    const totalNodes=Object.keys(all).length;
+    const active=Object.values(all).filter(node=>!node?.meta?.deletedAt).length;
+    const expected=lastAnalysis?.report?.expectedFinalTotal ?? null;
+    const matches=expected!=null && active===expected;
+
+    lastVerification={active,totalNodes,expected,matches,verifiedAt:new Date().toISOString()};
+
+    setVerifyStatus(
+      `Tickets activos en Firebase: ${active} (+ ${totalNodes-active} eliminados/tombstone)\n`+
+      (expected!=null
+        ? (matches ? `✅ Coincide con lo esperado (${expected}).` : `⚠️ NO coincide con lo esperado (${expected}). Revisa antes de activar dual-write.`)
+        : 'No hay un análisis previo con qué comparar — corre "1. Analizar migración" primero.'),
+      matches?'ok':(expected!=null?'error':'info')
+    );
+    setBtn('mig-dualwrite', !matches);
+  }catch(err){
+    setVerifyStatus('❌ No se pudo verificar: '+(err?.message||err),'error');
+  }finally{
+    setBtn('mig-verify',false);
+  }
+}
+
+async function runActivateDualWrite(){
+  if(!lastVerification?.matches){
+    setReport('Corre "4. Verificar conteo" primero y confirma que coincide antes de activar dual-write.','error');
+    return;
+  }
+  if(!window.confirm(
+    `¿Activar modo dual-write en TODOS tus dispositivos?\n\n`+
+    `A partir de ahora cada edición se escribirá tanto a wl:entries (respaldo) como a bitacora/tickets (autoritativo). `+
+    `wl:entries sigue protegido en modo shadow y no se puede usar para reducir el estado. Puedes revertir esto en cualquier momento.`
+  )) return;
+  setBtn('mig-dualwrite',true);
+  try{
+    await window.InstaraTicketSync.setMode('dual-write');
+    setReport('✅ Modo dual-write activado en todos los dispositivos. Monitorea al menos una semana (checklist en INSTRUCCIONES.md) antes de pasar a tickets-only.','ok');
+  }catch(err){
+    setReport('❌ No se pudo activar dual-write: '+(err?.message||err),'error');
+  }finally{
+    setBtn('mig-dualwrite',false);
+  }
+}
+
+function injectMigrationPanel(){
+  const root=document.getElementById('screen-ajustes');
+  if(!root || document.getElementById('instara-migration-panel')) return;
+
+  const section=document.createElement('div');
+  section.id='instara-migration-panel';
+  section.className='section-card';
+  section.innerHTML=`
+    <button class="section-toggle" type="button"><span>MIGRACIÓN DE TICKETS (PANEL TEMPORAL)</span><span class="chev">▾</span></button>
+    <div class="section-body">
+      <p style="font-size:13px;opacity:.8;margin:0 0 10px">
+        Migra los tickets de <code>wl:entries</code> al nuevo sistema por-ticket (<code>bitacora/tickets</code>).
+        No requiere consola ni PC. Sigue el orden 1→2→3→4→5.
+      </p>
+      <div class="form-row">
+        <button class="btn-mini" id="mig-analyze" type="button">1. ANALIZAR MIGRACIÓN</button>
+        <button class="btn-mini" id="mig-backup" type="button">2. CREAR RESPALDO</button>
+      </div>
+      <div id="mig-backup-status" class="preview" data-tone="info" style="margin-bottom:10px">Aún no se ha creado ningún respaldo en esta sesión.</div>
+      <div id="mig-report" class="preview" data-tone="info" style="white-space:pre-line;margin-bottom:10px">Presiona "1. Analizar migración" para empezar.</div>
+      <label id="mig-review-ack" style="display:none;align-items:flex-start;gap:8px;font-size:13px;margin-bottom:10px">
+        <input type="checkbox" id="mig-review-ack-checkbox" style="margin-top:3px">
+        <span>He revisado los conflictos de entradas manuales señalados arriba y quiero continuar de todas formas.</span>
+      </label>
+      <div class="form-row">
+        <button class="btn-mini" id="mig-run" type="button" disabled>3. MIGRAR TICKETS</button>
+        <button class="btn-mini" id="mig-verify" type="button">4. VERIFICAR CONTEO</button>
+      </div>
+      <div id="mig-verify-status" class="preview" data-tone="info" style="white-space:pre-line;margin-bottom:10px">Aún no se ha verificado nada.</div>
+      <div class="form-row">
+        <button class="btn-outline" id="mig-dualwrite" type="button" disabled style="width:100%">5. ACTIVAR DUAL-WRITE (todos los dispositivos)</button>
+      </div>
+      <div class="preview" data-tone="info" style="margin-top:10px;font-size:12px">
+        Modo actual: <b id="mig-current-mode">—</b>
+      </div>
+    </div>
+  `;
+  root.insertBefore(section, root.firstChild);
+
+  $id('mig-analyze').addEventListener('click',runAnalysis);
+  $id('mig-backup').addEventListener('click',runBackup);
+  $id('mig-run').addEventListener('click',runMigrationButton);
+  $id('mig-verify').addEventListener('click',runVerify);
+  $id('mig-dualwrite').addEventListener('click',runActivateDualWrite);
+  $id('mig-review-ack-checkbox').addEventListener('change',evaluateRunGate);
+
+  const toggleBtn=section.querySelector('.section-toggle');
+  const body=section.querySelector('.section-body');
+  toggleBtn.addEventListener('click',()=>{
+    toggleBtn.classList.toggle('open');
+    body.classList.toggle('open');
+  });
+
+  const modeLabel=$id('mig-current-mode');
+  if(modeLabel) modeLabel.textContent=window.InstaraTicketSync?.getMode?.() || 'legacy';
+  setInterval(()=>{
+    if(modeLabel) modeLabel.textContent=window.InstaraTicketSync?.getMode?.() || 'legacy';
+  },2000);
+}
+
+function boot(){
+  let tries=0;
+  const timer=setInterval(()=>{
+    if(document.getElementById('screen-ajustes') && window.InstaraTicketSync){
+      injectMigrationPanel();
+      clearInterval(timer);
+    }else if(++tries>120){
+      clearInterval(timer);
+    }
   },250);
 }
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true}); else boot();
