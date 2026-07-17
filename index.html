@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC151">
+  <meta name="instara-ai-version" content="RC156">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -8789,6 +8789,7 @@ const STATE_KEY='instara-sync-hub-state-v1';
 const STATUS_ID='instara-hub-status';
 let inflight=null;
 let lastPollAt=0;
+let lastPayload=null;
 
 function load(k,fallback){try{const v=JSON.parse(localStorage.getItem(k)||'null');return v??fallback}catch(_e){return fallback}}
 function save(k,v){localStorage.setItem(k,JSON.stringify(v));return v}
@@ -8833,14 +8834,15 @@ async function fetchLatest({manual=false,force=false}={}){
       // por otro motivo (ej. el canal directo de la extensión, ya desactivado).
       const url=`${c.hubUrl}/v1/snapshot/${encodeURIComponent(c.channelId)}${(!force&&state.snapshotVersion)?`?after=${encodeURIComponent(state.snapshotVersion)}`:''}`;
       const res=await fetch(url,{method:'GET',headers:{Authorization:`Bearer ${c.readToken}`,Accept:'application/json'},cache:'no-store',signal:ctrl.signal});
-      if(res.status===304){setStatus(`Sync Hub conectado · sin cambios desde ${state.syncedAt?new Date(state.syncedAt).toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'}):'último sync'}`);return {ok:true,unchanged:true}}
+      if(res.status===304){setStatus(`Sync Hub conectado · sin cambios desde ${state.syncedAt?new Date(state.syncedAt).toLocaleTimeString('es-US',{hour:'numeric',minute:'2-digit'}):'último sync'}`);return {ok:true,unchanged:true,payload:lastPayload||window.InstaraMegaBridge?.getLastPayload?.()||null,source:'hub'}}
       if(res.status===404){setStatus('Sync Hub conectado · esperando primer snapshot de Mega.');return {ok:true,empty:true}}
       if(!res.ok){const body=await res.json().catch(()=>({}));throw new Error(body.error||`Sync Hub HTTP ${res.status}`)}
       const envelope=await res.json();
       const payload=await decryptEnvelope(envelope,c);
+      lastPayload=payload;
       const version=Number(envelope.snapshotVersion||0);
       const prev=load(STATE_KEY,{});
-      if(prev.snapshotVersion&&version&&version<Number(prev.snapshotVersion))return {ok:true,ignored:true};
+      if(prev.snapshotVersion&&version&&version<Number(prev.snapshotVersion))return {ok:true,ignored:true,payload,source:'hub'};
       if(!window.InstaraMegaBridge?.applySnapshot)throw new Error('INSTARA todavía no cargó el motor de Schedule.');
       const impact=window.InstaraMegaBridge.applySnapshot(payload);
       save(STATE_KEY,{snapshotVersion:version,snapshotId:envelope.snapshotId||'',syncedAt:envelope.syncedAt||payload.syncedAt||new Date().toISOString(),receivedAt:new Date().toISOString(),jobs:payload.jobs.length});
@@ -8883,15 +8885,15 @@ function injectSettings(){
     // Preferimos el respaldo central ya incluido por la migración. Si no estuviera
     // disponible, hacemos un respaldo equivalente aquí mismo.
     if(window.InstaraTicketSync?.backupBeforeMigration){
-      const stamp=await window.InstaraTicketSync.backupBeforeMigration();
-      if(!stamp)throw new Error('Firebase no confirmó el respaldo obligatorio.');
-      return stamp;
+      const backup=await window.InstaraTicketSync.backupBeforeMigration();
+      if(!backup?.localDownloaded)throw new Error('No se pudo descargar el respaldo obligatorio.');
+      return backup;
     }
 
     const snap=await db.ref('bitacora').once('value');
     const payload=snap.val()||{};
     const stamp=new Date().toISOString().replace(/[.:]/g,'-');
-    await db.ref(`instara_backups/${stamp}`).set({
+    await db.ref('bitacora/instara-ticket-backup-'+stamp).set({
       bitacora:payload,
       createdAt:firebase.database.ServerValue.TIMESTAMP,
       createdBy:'manual-purge-rc155.2',
@@ -8913,21 +8915,21 @@ function injectSettings(){
   async function rc1552FirebaseMegaCount(){
     const db=window.fbDb;
     if(!db)return 0;
-    const snap=await db.ref('bitacora/tickets').once('value');
+    const snap=await db.ref('bitacora').once('value');
     const nodes=snap.val()||{};
-    return Object.keys(nodes).filter(key=>String(key).startsWith('event_')).length;
+    return Object.keys(nodes).filter(key=>String(key).startsWith('ticket:event_')).length;
   }
 
   async function rc1552HardDeleteMegaTicketNodes(){
     const db=window.fbDb;
     if(!db)return {deleted:0};
-    const snap=await db.ref('bitacora/tickets').once('value');
+    const snap=await db.ref('bitacora').once('value');
     const nodes=snap.val()||{};
     const updates={};
     let deleted=0;
     for(const key of Object.keys(nodes)){
-      if(!String(key).startsWith('event_'))continue;
-      updates[`bitacora/tickets/${key}`]=null;
+      if(!String(key).startsWith('ticket:event_'))continue;
+      updates[`bitacora/${key}`]=null;
       deleted++;
     }
     if(deleted)await db.ref().update(updates);
@@ -8997,7 +8999,8 @@ function injectSettings(){
         throw new Error('Motor canónico Mega no disponible. Recarga INSTARA e inténtalo otra vez.');
       }
 
-      const backupStamp=await rc1552CreatePurgeBackup('purge-mega-and-resync');
+      const backupInfo=await rc1552CreatePurgeBackup('purge-mega-and-resync');
+      const backupStamp=backupInfo?.stamp||backupInfo;
       btn.textContent='PURGANDO MEGA…';
 
       const keep=window.InstaraMegaCanonical.dedupe((window.__INSTARA_STATE__.entries||[]).filter(entry=>!window.InstaraMegaCanonical.isMega(entry)));
@@ -9076,7 +9079,8 @@ function injectSettings(){
         throw new Error('Motor canónico Mega no disponible. Recarga INSTARA e inténtalo otra vez.');
       }
 
-      const backupStamp=await rc1552CreatePurgeBackup('wipe-mega-without-resync');
+      const backupInfo=await rc1552CreatePurgeBackup('wipe-mega-without-resync');
+      const backupStamp=backupInfo?.stamp||backupInfo;
       btn.textContent='VACIANDO MEGA…';
 
       const keep=window.InstaraMegaCanonical.dedupe((window.__INSTARA_STATE__.entries||[]).filter(entry=>!window.InstaraMegaCanonical.isMega(entry)));
@@ -9120,7 +9124,7 @@ function injectSettings(){
 }
 function installButtonInterceptor(){document.addEventListener('click',ev=>{const btn=ev.target?.closest?.('#instara-mega-sync');if(!btn)return;const c=cfg();if(!ready(c))return;ev.preventDefault();ev.stopImmediatePropagation();btn.disabled=true;btn.textContent='REVISANDO…';syncNow().finally(()=>{btn.disabled=false;btn.textContent='ACTUALIZAR MEGA'})},true)}
 function boot(){injectSettings();installButtonInterceptor();setTimeout(()=>fetchLatest({force:true}),900);setInterval(()=>{if(!document.hidden)fetchLatest()},60000);addEventListener('focus',()=>fetchLatest({force:true}));addEventListener('online',()=>fetchLatest({force:true}));document.addEventListener('visibilitychange',()=>{if(!document.hidden)fetchLatest({force:true})})}
-window.InstaraSyncHub={syncNow,fetchLatest,getConfig:cfg,isConfigured:()=>ready(cfg()),saveConfig:c=>save(CFG_KEY,c)};
+window.InstaraSyncHub={syncNow,fetchLatest,getConfig:cfg,isConfigured:()=>ready(cfg()),saveConfig:c=>save(CFG_KEY,c),getLastPayload:()=>lastPayload};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();
 </script>
@@ -11742,10 +11746,10 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   };
 })();
 </script>
-<script id="instara-rc152-tickets-sync">
+<script id="instara-rc156-tickets-sync">
 (function(){
 'use strict';
-const VERSION='RC152';
+const VERSION='RC156';
 
 // ---------- Identidad de sesión ----------
 const SESSION_ID_KEY='instara-session-id-v1';
@@ -11849,6 +11853,12 @@ function waitForFirebase(timeoutMs=30000){
 
 // ---------- Upsert atómico con autoridad de campo ----------
 let applyingRemoteTickets=false;
+const TICKET_NODE_PREFIX='ticket:';
+const MODE_NODE_KEY='instara-ticket-sync-mode-v1';
+const MIGRATION_NODE_KEY='instara-ticket-migration-v1';
+function ticketNodePath(key){ return 'bitacora/'+TICKET_NODE_PREFIX+key; }
+function isTicketNodeName(name){ return String(name||'').startsWith(TICKET_NODE_PREFIX); }
+function ticketKeyFromNodeName(name){ return String(name||'').slice(TICKET_NODE_PREFIX.length); }
 
 async function upsertTicket(entry,{source}={}){
   const key=entryKey(entry);
@@ -11867,7 +11877,7 @@ async function upsertTicket(entry,{source}={}){
                        : source==='user'   ? [...USER_OWNED_FIELDS,...NEUTRAL_FIELDS]
                        : ENTRY_FIELDS; // 'migration': una sola vez, todo permitido
 
-  const ref=db.ref(`bitacora/tickets/${key}`);
+  const ref=db.ref(ticketNodePath(key));
   let aborted=false;
   const result=await ref.transaction(current=>{
     const node=current||{};
@@ -11906,7 +11916,7 @@ async function deleteTicket(entryOrKey){
   const key=typeof entryOrKey==='string' ? entryOrKey : entryKey(entryOrKey);
   const db=window.fbDb;
   if(!key || !db) return {ok:false, reason:'no-identity'};
-  const ref=db.ref(`bitacora/tickets/${key}`);
+  const ref=db.ref(ticketNodePath(key));
   const result=await ref.transaction(current=>{
     if(!current){
       return {
@@ -11942,7 +11952,7 @@ async function undeleteTicket(entryOrKey){
   const key=typeof entryOrKey==='string' ? entryOrKey : entryKey(entryOrKey);
   const db=window.fbDb;
   if(!key || !db) return {ok:false, reason:'no-identity'};
-  const ref=db.ref(`bitacora/tickets/${key}`);
+  const ref=db.ref(ticketNodePath(key));
   const result=await ref.transaction(current=>{
     if(!current) return;
     const meta=current.meta||{};
@@ -12034,8 +12044,9 @@ async function hydrateTicketsOnce(){
   if(!db) return;
   applyingRemoteTickets=true;
   try{
-    const snap=await db.ref('bitacora/tickets').once('value');
-    const remote=snap.val()||{};
+    const snap=await db.ref('bitacora').once('value');
+    const root=snap.val()||{};
+    const remote=Object.fromEntries(Object.entries(root).filter(([name])=>isTicketNodeName(name)).map(([name,node])=>[ticketKeyFromNodeName(name),node]));
     hydratedTicketKeys=new Set(Object.keys(remote));
     for(const [key,node] of Object.entries(remote)) mergeRemoteEntryInMemory(key,node);
     const st=window.state;
@@ -12054,15 +12065,19 @@ async function hydrateTicketsOnce(){
 function installTicketListeners(){
   const db=window.fbDb;
   if(ticketListenersInstalled || !db) return;
-  ticketsRef=db.ref('bitacora/tickets');
+  ticketsRef=db.ref('bitacora');
   childAddedCb=snap=>{
-    if(hydratedTicketKeys.delete(snap.key)) return;
-    mergeRemoteEntryInMemory(snap.key,snap.val());
-    lastKnownTicketKeys.add(snap.key);
+    if(!isTicketNodeName(snap.key)) return;
+    const key=ticketKeyFromNodeName(snap.key);
+    if(hydratedTicketKeys.delete(key)) return;
+    mergeRemoteEntryInMemory(key,snap.val());
+    lastKnownTicketKeys.add(key);
     scheduleTicketRender();
   };
   childChangedCb=snap=>{
-    mergeRemoteEntryInMemory(snap.key,snap.val());
+    if(!isTicketNodeName(snap.key)) return;
+    const key=ticketKeyFromNodeName(snap.key);
+    mergeRemoteEntryInMemory(key,snap.val());
     scheduleTicketRender();
   };
   ticketsRef.on('child_added',childAddedCb);
@@ -12104,7 +12119,7 @@ let modeListenerInstalled=false;
 function installModeListener(){
   const db=window.fbDb;
   if(modeListenerInstalled || !db) return false;
-  db.ref('bitacora/config/ticketSyncMode').on('value',snap=>{
+  db.ref('bitacora/'+MODE_NODE_KEY).on('value',snap=>{
     const next=String(snap.val()||'legacy');
     const mode=ALLOWED_MODES.has(next)?next:'legacy';
     localStorage.setItem('instara-sync-mode-v1',mode);
@@ -12424,8 +12439,9 @@ async function backupBeforeMigration(){
   const source=snap.val()||{};
   // Evita respaldos recursivos: nunca incluir copias anteriores ni probes.
   const payload={...source};
-  delete payload._backups;
-  delete payload._migration_permission_probe;
+  for(const k of Object.keys(payload)){
+    if(String(k).startsWith('instara-ticket-backup-') || String(k).startsWith('instara-permission-probe-')) delete payload[k];
+  }
   const stamp=new Date().toISOString().replace(/[:.]/g,'-');
 
   let localDownloaded=false;
@@ -12446,7 +12462,7 @@ async function backupBeforeMigration(){
 
   let remoteSaved=false, remoteWarning='';
   try{
-    await db.ref(`bitacora/_backups/${stamp}`).set({
+    await db.ref('bitacora/instara-ticket-backup-'+sanitizeFirebaseKey(stamp)).set({
       bitacora:payload,
       createdAt:firebase.database.ServerValue.TIMESTAMP,
       createdBy:THIS_CLIENT_INSTANCE,
@@ -12465,18 +12481,24 @@ async function preflightMigrationPermissions(){
   if(!db) throw new Error('Firebase no disponible');
   const probe='probe_'+sanitizeFirebaseKey(THIS_CLIENT_INSTANCE)+'_'+Date.now();
   const paths=[
-    `bitacora/tickets/${probe}`,
-    `bitacora/config/${probe}`,
-    `bitacora/migrations/${probe}`,
-    `bitacora/_backups/${probe}`
+    `bitacora/${TICKET_NODE_PREFIX}${probe}`,
+    `bitacora/${MODE_NODE_KEY}`,
+    `bitacora/${MIGRATION_NODE_KEY}`,
+    `bitacora/instara-permission-probe-${probe}`
   ];
   const results=[];
   for(const path of paths){
+    const ref=db.ref(path);
+    let priorExists=false, priorValue=null;
     try{
-      await db.ref(path).set({probe:true,at:firebase.database.ServerValue.TIMESTAMP});
-      await db.ref(path).remove();
+      const prior=await ref.once('value');
+      priorExists=prior.exists();
+      priorValue=prior.val();
+      await ref.set({probe:true,at:firebase.database.ServerValue.TIMESTAMP});
+      if(priorExists) await ref.set(priorValue); else await ref.remove();
       results.push({path,ok:true});
     }catch(err){
+      try{ if(priorExists) await ref.set(priorValue); else await ref.remove(); }catch(_e){}
       results.push({path,ok:false,error:String(err?.message||err)});
     }
   }
@@ -12521,7 +12543,7 @@ async function runMigration({warehouseJobs,remoteManualEntries,localManualEntrie
   };
 
   const db=window.fbDb;
-  if(db) await db.ref('bitacora/migrations/ticket-migration-v1').set(summary);
+  if(db) await db.ref('bitacora/'+MIGRATION_NODE_KEY).set(summary);
   return summary;
 }
 
@@ -12623,7 +12645,7 @@ window.InstaraTicketSync={
     if(!ALLOWED_MODES.has(mode)) throw new Error('Modo inválido: '+mode);
     const db=await waitForFirebase();
     if(!db) throw new Error('Firebase no disponible');
-    return db.ref('bitacora/config/ticketSyncMode').set(mode);
+    return db.ref('bitacora/'+MODE_NODE_KEY).set(mode);
   },
   getMode:()=>window.__INSTARA_TICKET_SYNC_MODE__||'legacy',
   waitForFirebase
@@ -12646,24 +12668,7 @@ function boot(){
 if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot,{once:true}); else boot();
 })();
 </script>
-<script id="instara-rc1551-disable-legacy-destructive-controls">
-(function(){
-  'use strict';
-  function disableLegacyDangerousControls(){
-    for(const id of ['instara-mega-clean-sync','instara-mega-wipe-only']){
-      const el=document.getElementById(id);
-      if(!el) continue;
-      el.disabled=true;
-      el.hidden=true;
-      el.setAttribute('aria-hidden','true');
-      el.title='Desactivado en RC155.1: la migración nueva es merge-only y nunca debe purgar wl:entries automáticamente.';
-    }
-  }
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',disableLegacyDangerousControls,{once:true});
-  else disableLegacyDangerousControls();
-  new MutationObserver(disableLegacyDangerousControls).observe(document.documentElement,{childList:true,subtree:true});
-})();
-</script>
+
 <script id="instara-rc155-migration-panel">
 (function(){
 'use strict';
@@ -12710,13 +12715,17 @@ async function fetchWarehouseFromHub(){
   if(result.empty){
     throw new Error('El Sync Hub todavía no tiene ningún snapshot del Bridge.');
   }
-  if(!result.payload || !Array.isArray(result.payload.jobs)){
-    if(result.unchanged){
-      throw new Error('El Sync Hub dice "sin cambios" pero no hay un snapshot ya cargado para reutilizar. Presiona "PROBAR HUB" arriba primero y vuelve a intentar.');
-    }
-    throw new Error('El snapshot del Sync Hub no trae trabajos.');
+  let payload=(result.payload && Array.isArray(result.payload.jobs)) ? result.payload : null;
+  if(!payload) payload=window.InstaraSyncHub.getLastPayload?.()||null;
+  if(!payload) payload=window.InstaraMegaBridge?.getLastPayload?.()||null;
+  if(!payload || !Array.isArray(payload.jobs)){
+    await new Promise(resolve=>setTimeout(resolve,350));
+    payload=window.InstaraSyncHub.getLastPayload?.()||window.InstaraMegaBridge?.getLastPayload?.()||null;
   }
-  return result.payload.jobs;
+  if(!payload || !Array.isArray(payload.jobs)){
+    throw new Error('El snapshot del Sync Hub no está disponible en memoria. Pulsa ACTUALIZAR MEGA, espera a que muestre el conteo y vuelve a analizar.');
+  }
+  return payload.jobs;
 }
 
 function reportIsConsistent(r){
@@ -12835,7 +12844,7 @@ async function runBackup(){
     setBackupStatus(
       '✅ Respaldo JSON descargado al dispositivo.\n'+
       (backup.remoteSaved
-        ? '✅ Copia remota creada en bitacora/_backups/'+backup.stamp+'.\n'
+        ? '✅ Copia remota creada en bitacora/instara-ticket-backup-'+backup.stamp+'.\n'
         : '⚠️ Copia remota no creada: '+backup.remoteWarning+'\n')+
       '✅ Permisos de tickets/config/migrations/backups verificados.',
       backup.remoteSaved?'ok':'info'
@@ -12861,7 +12870,7 @@ async function runMigrationButton(){
     return;
   }
   if(!window.confirm(
-    `¿Migrar ${r.expectedFinalTotal} tickets (${r.uniqueEventId} de Mega + ${r.manualEntriesUnique} manuales) a bitacora/tickets?\n\n`+
+    `¿Migrar ${r.expectedFinalTotal} tickets (${r.uniqueEventId} de Mega + ${r.manualEntriesUnique} manuales) a bitacora/ticket:{entryKey}?\n\n`+
     `Esto es aditivo: wl:entries NO se toca ni se borra. Puedes revertir cambiando el modo a "legacy".`
   )) return;
 
@@ -12896,8 +12905,9 @@ async function runVerify(){
   try{
     const db=window.fbDb;
     if(!db) throw new Error('Firebase no disponible todavía.');
-    const snap=await db.ref('bitacora/tickets').once('value');
-    const all=snap.val()||{};
+    const snap=await db.ref('bitacora').once('value');
+    const root=snap.val()||{};
+    const all=Object.fromEntries(Object.entries(root).filter(([name])=>isTicketNodeName(name)));
     const totalNodes=Object.keys(all).length;
     const active=Object.values(all).filter(node=>!node?.meta?.deletedAt).length;
     const expected=lastAnalysis?.report?.expectedFinalTotal ?? null;
@@ -12927,7 +12937,7 @@ async function runActivateDualWrite(){
   }
   if(!window.confirm(
     `¿Activar modo dual-write en TODOS tus dispositivos?\n\n`+
-    `A partir de ahora cada edición se escribirá tanto a wl:entries (respaldo) como a bitacora/tickets (autoritativo). `+
+    `A partir de ahora cada edición se escribirá tanto a wl:entries (respaldo) como a nodos ticket:* (autoritativos). `+
     `wl:entries sigue protegido en modo shadow y no se puede usar para reducir el estado. Puedes revertir esto en cualquier momento.`
   )) return;
   setBtn('mig-dualwrite',true);
@@ -12952,7 +12962,7 @@ function injectMigrationPanel(){
     <button class="section-toggle" type="button"><span>MIGRACIÓN DE TICKETS (PANEL TEMPORAL)</span><span class="chev">▾</span></button>
     <div class="section-body">
       <p style="font-size:13px;opacity:.8;margin:0 0 10px">
-        Migra los tickets de <code>wl:entries</code> al nuevo sistema por-ticket (<code>bitacora/tickets</code>).
+        Migra los tickets de <code>wl:entries</code> al nuevo sistema por-ticket (<code>bitacora/ticket:{entryKey}</code>).
         No requiere consola ni PC. Sigue el orden 1→2→3→4→5.
       </p>
       <div class="form-row">
