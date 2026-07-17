@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC146">
+  <meta name="instara-ai-version" content="RC149">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -7194,19 +7194,8 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
       // pasa, sin importar el tipo de servicio.
       return !resource;
     });
-    // RC146: IMPORTACIÓN PERSISTENTE Y MERGE-ONLY.
-    // Un snapshot parcial (incluso de 1 ticket) jamás puede reemplazar ni hacer desaparecer
-    // trabajos Mega importados anteriormente. El Hub informa cambios; no es una orden de borrado.
-    const previousObserved=load(OBSERVED_KEY,[]);
-    const retainedFromEntries=(state.entries||[])
-      .filter(e=>e?.bridgeSource==='CiO Mega Bridge'||e?._cioRaw)
-      .map(e=>e?._cioRaw||e)
-      .filter(Boolean);
-    jobs=[
-      ...(Array.isArray(previousObserved)?previousObserved:[]),
-      ...retainedFromEntries,
-      ...jobs
-    ];
+    // RC131: payload del Warehouse/Hub es la fuente retenida completa.
+    // No unir eternamente con OBSERVED_KEY viejo: eso conservaba identidades obsoletas y duplicados.
     jobs=(window.InstaraMegaCanonical?.dedupe?window.InstaraMegaCanonical.dedupe(jobs):jobs);
     save(OBSERVED_KEY,jobs);
     // RC135: ya no se exige "confirmed" (imsStatus/jobStatus==='scheduled') para dejar pasar
@@ -11424,133 +11413,164 @@ window.InstaraRC134PurgeAudit=function(){
 </script>
 </body>
 
-<script id="instara-rc146-authoritative-calendar-merge-repair">
+<script id="instara-rc149-event-identity-import-repair">
 (function(){
 'use strict';
-const VERSION='RC146';
+const VERSION='RC149';
 const OBSERVED_KEY='instara-cio-observed-jobs-v2';
+const CLEANUP_KEY='instara-rc149-cleanup-v1';
 
 function load(k,f){try{const v=JSON.parse(localStorage.getItem(k)||'null');return v??f}catch(_e){return f}}
-function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));return v}catch(_e){return v}}
-function isoDate(v){
-  if(!v)return '';
-  const raw=String(v).trim();
-  let m=raw.match(/^(\d{4}-\d{2}-\d{2})/);if(m)return m[1];
-  m=raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if(m)return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
-  const d=new Date(raw);
-  return Number.isNaN(d.getTime())?'':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(_e){return false}}
+function app(){return window.__INSTARA_STATE__||window.state}
+function clean(v){return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim()}
+function htmlText(v){return String(v||'').replace(/<br\s*\/?>/gi,' ').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim()}
+function joined(j){return [
+  htmlText(j?.eventHtml),j?.eventCustomer,j?.customerName,j?.eventService,
+  j?.laborCategory,j?.service,j?.jobType,j?.scheduleDetails,j?.deliveryNotes
+].filter(Boolean).join(' ')}
+
+function isNonOperational(j){
+  if(!j)return true;
+  const raw=joined(j);
+  const t=clean(raw);
+  if(/\b1\s*man\s*team\b|\bone\s*man\s*team\b|\b2\s*man\s*team\b|\btwo\s*man\s*team\b/.test(t))return true;
+  if(/\bmax\s*\d+\s*jobs?\b|\bonly\s+\d{3,4}(?:\s*[,\/.]\s*\d{3,4})+/.test(t))return true;
+  if(/\bresource availability\b|\bcrew availability\b|\bteam\s*#\b|\bschedule block\b/.test(t))return true;
+  if(/(^|\s)off(\s|$)/.test(t)&&/\b20\d{2}\b/.test(t))return true;
+  if(/^off$/i.test(String(j?.eventService||'').trim())||/^off\b/i.test(String(j?.eventCustomer||'').trim()))return true;
+  return false;
 }
-function tokens(x){
-  if(window.InstaraMegaCanonical?.tokens)return window.InstaraMegaCanonical.tokens(x);
-  return [
-    x?.cioOrderId,x?.orderViewId,x?.cioJobNumber,x?.jobNumber,
-    x?.po,x?.purchaseOrderNumber,x?.cioEventId,x?.eventId,x?.id
-  ].filter(Boolean).map(v=>String(v).trim().toLowerCase());
+function isRealJob(j){
+  if(!j||isNonOperational(j))return false;
+  const eventId=String(j.eventId||j.cioEventId||'').trim();
+  const date=String(j.start||j.scheduledDate||'').trim();
+  const service=String(j.eventService||j.laborCategory||j.service||'').trim();
+  const customer=String(j.eventCustomer||j.customerName||'').trim();
+  const store=String(j.storeNumber||'').trim();
+  return Boolean(eventId&&date&&(service||customer||store));
 }
-function merge(rows){
-  if(window.InstaraMegaCanonical?.dedupe)return window.InstaraMegaCanonical.dedupe(rows.filter(Boolean));
-  const out=[],by=new Map();
-  for(const row of rows.filter(Boolean)){
-    const ts=tokens(row);
-    const key=ts[0]||[
-      isoDate(row.scheduledDate||row.start||row.date),
-      row.customerName||row.eventCustomer||'',
-      row.customerAddress||row.address||''
-    ].join('|').toLowerCase();
-    if(!by.has(key)){const copy={...row};by.set(key,copy);out.push(copy)}
-    else Object.assign(by.get(key),row);
+function eventKey(j){
+  const eventId=String(j?.eventId||j?.cioEventId||'').trim();
+  if(eventId)return 'event:'+eventId;
+  const order=String(j?.orderViewId||j?.resolvedOrderViewId||j?.cioOrderId||j?.jobNumber||j?.purchaseOrderNumber||'').trim();
+  if(order)return 'order:'+order;
+  return 'fallback:'+[
+    String(j?.start||j?.scheduledDate||'').slice(0,19),
+    clean(j?.eventCustomer||j?.customerName),
+    clean(j?.eventService||j?.laborCategory),
+    clean(j?.eventLocation||j?.customerAddress)
+  ].join('|');
+}
+function sanitizeJob(j){
+  const copy={...j};
+  const eventId=String(copy.eventId||copy.cioEventId||'').trim();
+
+  // Deep-detail parsing may return the same order page for unrelated events.
+  // Keep the original value only as evidence; make Schedule eventId the primary
+  // identity consumed by all older INSTARA merge layers.
+  if(eventId){
+    copy._detailOrderViewId=copy.resolvedOrderViewId||copy.orderViewId||'';
+    copy.orderViewId='';
+    copy.resolvedOrderViewId='';
+    copy.cioOrderId='';
+    copy.eventId=eventId;
+    copy.cioEventId=eventId;
+  }
+  copy.instaraOperationalJob=true;
+  return copy;
+}
+function canonicalIncoming(rows){
+  const out=[],map=new Map();
+  for(const raw of Array.isArray(rows)?rows:[]){
+    if(!isRealJob(raw))continue;
+    const j=sanitizeJob(raw);
+    const key=eventKey(j);
+    const old=map.get(key);
+    if(!old){map.set(key,j);out.push(j)}
+    else Object.assign(old,j,{eventId:old.eventId||j.eventId,cioEventId:old.cioEventId||j.cioEventId});
   }
   return out;
 }
-function stateRef(){return window.__INSTARA_STATE__||window.state}
-function isMega(e){return window.InstaraMegaCanonical?.isMega?.(e)||e?.bridgeSource==='CiO Mega Bridge'||!!e?._cioRaw}
-function recoverDate(e){
-  return isoDate(
-    e?.date||e?.scheduledDate||e?.scheduleDate||e?.eventDate||
-    e?.scheduledStart||e?.startDate||e?.start||
-    e?._cioRaw?.scheduledDate||e?._cioRaw?.scheduleDate||e?._cioRaw?.eventDate||
-    e?._cioRaw?.scheduledStart||e?._cioRaw?.startDate||e?._cioRaw?.start
-  );
+function entryEventKey(e){
+  const id=String(e?.cioEventId||e?._cioRaw?.eventId||'').trim();
+  return id?'event:'+id:'';
 }
-function recoverAll(){
-  const st=stateRef();
-  if(!st||!Array.isArray(st.entries))return {entries:0,observed:0,repairedDates:0};
-  let repairedDates=0;
-  for(const e of st.entries){
-    if(!isMega(e))continue;
-    const d=recoverDate(e);
-    if(d&&e.date!==d){e.date=d;repairedDates++}
-  }
+function cleanupContamination(){
+  const s=app();
   const observed=load(OBSERVED_KEY,[]);
-  const fromEntries=st.entries.filter(isMega).map(e=>e._cioRaw||e);
-  const merged=merge([...(Array.isArray(observed)?observed:[]),...fromEntries]);
-  save(OBSERVED_KEY,merged);
-  if(repairedDates){
+  const cleanedObserved=canonicalIncoming(observed);
+  save(OBSERVED_KEY,cleanedObserved);
+
+  let removedEntries=0;
+  if(s&&Array.isArray(s.entries)){
+    s.entries=s.entries.filter(e=>{
+      const mega=e?.bridgeSource==='CiO Mega Bridge'||e?.cioEventId||e?.cioOrderId||e?._cioRaw;
+      if(!mega)return true;
+      const source=e?._cioRaw||{
+        eventId:e.cioEventId,
+        eventCustomer:e.customerName,
+        eventService:e.category,
+        start:e.date,
+        scheduledDate:e.date,
+        eventHtml:[e.customerName,e.category,e.date].filter(Boolean).join(' ')
+      };
+      if(isNonOperational(source)){removedEntries++;return false}
+      return true;
+    });
     try{window.canonicalizeStateEntries?.()}catch(_e){}
     try{window.persistEntries?.()}catch(_e){}
+    try{localStorage.setItem('miruta-entries',JSON.stringify(s.entries))}catch(_e){}
   }
-  return {entries:st.entries.filter(isMega).length,observed:merged.length,repairedDates};
+  save(CLEANUP_KEY,{version:VERSION,at:new Date().toISOString(),observed:cleanedObserved.length,removedEntries});
+  return {observed:cleanedObserved.length,removedEntries};
 }
-function installApplySnapshotGuard(){
+function install(){
   const bridge=window.InstaraMegaBridge;
-  if(!bridge?.applySnapshot||bridge.applySnapshot.__rc146)return false;
-  const original=bridge.applySnapshot.bind(bridge);
+  if(!bridge?.applySnapshot||bridge.applySnapshot.__rc149)return false;
+  const prior=bridge.applySnapshot.bind(bridge);
   const wrapped=function(payload){
-    const st=stateRef();
-    const protectedEntries=Array.isArray(st?.entries)
-      ? st.entries.filter(isMega).map(e=>typeof structuredClone==='function'?structuredClone(e):JSON.parse(JSON.stringify(e)))
-      : [];
-    const previousObserved=load(OBSERVED_KEY,[]);
-    const incoming=Array.isArray(payload?.jobs)?payload.jobs:[];
-    const mergedJobs=merge([
-      ...(Array.isArray(previousObserved)?previousObserved:[]),
-      ...protectedEntries.map(e=>e._cioRaw||e),
-      ...incoming
-    ]);
-    const result=original({...payload,jobs:mergedJobs});
-    const current=stateRef();
-    if(current&&Array.isArray(current.entries)){
-      const currentTokens=new Set(current.entries.flatMap(tokens));
-      for(const old of protectedEntries){
-        const oldTokens=tokens(old);
-        if(!oldTokens.length||!oldTokens.some(t=>currentTokens.has(t))){
-          current.entries.push(old);
-          oldTokens.forEach(t=>currentTokens.add(t));
-        }
-      }
+    const incoming=canonicalIncoming(payload?.jobs||[]);
+    const previous=canonicalIncoming(load(OBSERVED_KEY,[]));
+    const map=new Map();
+    for(const j of [...previous,...incoming]){
+      const k=eventKey(j);
+      if(!map.has(k))map.set(k,{...j});
+      else Object.assign(map.get(k),j);
     }
-    const audit=recoverAll();
-    try{window.canonicalizeStateEntries?.()}catch(_e){}
-    try{window.persistEntries?.()}catch(_e){}
-    try{window.render?.()}catch(_e){}
-    try{window.InstaraSchedule?.refresh?.()}catch(_e){}
-    window.__INSTARA_RC146_AUDIT__={
+    const jobs=[...map.values()];
+    save(OBSERVED_KEY,jobs);
+
+    const result=prior({...payload,jobs});
+    cleanupContamination();
+
+    const s=app();
+    const imported=Array.isArray(s?.entries)
+      ? s.entries.filter(e=>e?.bridgeSource==='CiO Mega Bridge'&&entryEventKey(e)).length
+      : 0;
+    window.__INSTARA_RC149_AUDIT__={
       version:VERSION,
-      incoming:incoming.length,
-      retainedObserved:audit.observed,
-      retainedEntries:audit.entries,
-      repairedDates:audit.repairedDates,
+      payloadJobs:Array.isArray(payload?.jobs)?payload.jobs.length:0,
+      realIncoming:incoming.length,
+      retainedObserved:jobs.length,
+      importedEntries:imported,
       at:new Date().toISOString()
     };
-    return result;
+    try{window.render?.()}catch(_e){}
+    try{window.InstaraSchedule?.refresh?.()}catch(_e){}
+    return result&&typeof result==='object'
+      ? {...result,rc149:{realIncoming:incoming.length,retainedObserved:jobs.length,importedEntries:imported}}
+      : result;
   };
-  wrapped.__rc146=true;
+  wrapped.__rc149=true;
   bridge.applySnapshot=wrapped;
   return true;
 }
 function boot(){
-  recoverAll();
+  cleanupContamination();
   let tries=0;
   const timer=setInterval(()=>{
-    installApplySnapshotGuard();
-    const audit=recoverAll();
-    if(++tries>80)clearInterval(timer);
-    if(tries===4||tries===12){
-      try{window.render?.()}catch(_e){}
-      try{window.InstaraSchedule?.refresh?.()}catch(_e){}
-    }
-    window.__INSTARA_RC146_AUDIT__={version:VERSION,...audit,at:new Date().toISOString()};
+    if(install()||++tries>80)clearInterval(timer);
   },250);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
