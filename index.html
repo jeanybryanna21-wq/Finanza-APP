@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="instara-ai-app" content="true">
-  <meta name="instara-ai-version" content="RC150">
+  <meta name="instara-ai-version" content="RC151">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2429,22 +2429,38 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
 
   // ---------- RC131: identidad canónica Mega/CiO y deduplicación ----------
   function megaIdentityTokens(item){
-    const pairs=[
-      ['order',item?.cioOrderId||item?.orderViewId],
-      ['job',item?.cioJobNumber||item?.jobNumber],
-      ['po',item?.po||item?.purchaseOrderNumber],
-      ['event',item?.cioEventId||item?.eventId],
-      ['project',item?.cioProjectNumber||item?.projectNumber]
-    ];
-    const tokens=pairs
-      .filter(([,value])=>String(value||'').trim())
-      .map(([kind,value])=>kind+':'+String(value).trim().toLowerCase());
-
     const normValue=value=>String(value||'')
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g,'')
       .replace(/[^a-z0-9]/g,'');
+
+    const eventId=String(item?.cioEventId||item?.eventId||item?._cioRaw?.eventId||'').trim();
+    const tokens=[];
+
+    // RC151: eventId is authoritative for CiO Schedule records.
+    // Never combine it with deep-detail IDs because a contaminated parser result
+    // can repeat the same order/job/PO placeholder across hundreds of events and
+    // chain-merge all of them into one calendar entry.
+    if(eventId){
+      tokens.push('event:'+eventId.toLowerCase());
+    }else{
+      const generic=/^(?:project number|purchase order number|follow up date|year built|n\/a|na|unknown|undefined|null|-|—)$/i;
+      const validId=value=>{
+        const s=String(value||'').trim();
+        return s&&!generic.test(s)&&/[0-9]/.test(s);
+      };
+      const pairs=[
+        ['order',item?.cioOrderId||item?.orderViewId],
+        ['job',item?.cioJobNumber||item?.jobNumber],
+        ['po',item?.po||item?.purchaseOrderNumber],
+        ['project',item?.cioProjectNumber||item?.projectNumber]
+      ];
+      for(const [kind,value] of pairs){
+        if(validId(value))tokens.push(kind+':'+String(value).trim().toLowerCase());
+      }
+    }
+
     const day=String(item?.date||item?.scheduledDate||item?.start||'').match(/20\d{2}-\d{2}-\d{2}/)?.[0]||'';
     const customer=normValue(item?.customerName||item?.eventCustomer||item?.customer||item?.clientName);
     const address=normValue(item?.address||item?.customerAddress);
@@ -2452,15 +2468,19 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
     const store=normValue(item?.storeNumber||item?.sellerStoreNumber||item?.store);
     const service=normValue(item?.category||item?.service||item?.laborCategory||item?.eventService);
 
-    if(day&&customer.length>=4&&address.length>=8){
-      tokens.push(`fpca:${day}|${customer}|${address}`);
-      if(service)tokens.push(`fpcas:${day}|${customer}|${address}|${service}`);
-    }
-    if(day&&customer.length>=4&&phone.length>=7){
-      tokens.push(`fpcp:${day}|${customer}|${phone}`);
-    }
-    if(day&&customer.length>=4&&store&&service){
-      tokens.push(`fpcss:${day}|${customer}|${store}|${service}`);
+    // Fingerprints are used only when there is no eventId. With eventId present,
+    // identity must remain isolated to that exact Schedule event.
+    if(!eventId){
+      if(day&&customer.length>=4&&address.length>=8){
+        tokens.push(`fpca:${day}|${customer}|${address}`);
+        if(service)tokens.push(`fpcas:${day}|${customer}|${address}|${service}`);
+      }
+      if(day&&customer.length>=4&&phone.length>=7){
+        tokens.push(`fpcp:${day}|${customer}|${phone}`);
+      }
+      if(day&&customer.length>=4&&store&&service){
+        tokens.push(`fpcss:${day}|${customer}|${store}|${service}`);
+      }
     }
 
     return [...new Set(tokens)];
@@ -11590,5 +11610,16 @@ function boot(){
   },250);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
+</script>
+
+
+<script id="instara-rc151-event-isolation-audit">
+(function(){
+  window.__INSTARA_RC151__={
+    version:'RC151',
+    rule:'CiO eventId isolated; deep-detail placeholders ignored',
+    loadedAt:new Date().toISOString()
+  };
 })();
 </script>
