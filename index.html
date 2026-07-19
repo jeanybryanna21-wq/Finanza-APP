@@ -11557,6 +11557,181 @@ window.InstaraRC134PurgeAudit=function(){
 };
 })();
 </script>
+
+<script id="instara-rc158-forced-finance-history">
+(function(){
+'use strict';
+
+const $=id=>document.getElementById(id);
+const state=()=>window.__INSTARA_STATE__||window.state||null;
+const iso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const today=()=>iso(new Date());
+
+function normDate(value){
+  const s=String(value||'').trim();
+  let m=s.match(/(?:^|\D)(20\d{2})-(\d{1,2})-(\d{1,2})(?:\D|$)/);
+  if(m)return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+  m=s.match(/(?:^|\D)(\d{1,2})\/(\d{1,2})\/(20\d{2})(?:\D|$)/);
+  return m?`${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`:'';
+}
+function textOf(e){
+  return [
+    e?.status,e?.paymentState,e?.cioIMSStatus,e?.cioJobStatus,
+    e?.imsStatus,e?.jobStatus,e?.displayStatus,e?.lowesActivity,
+    e?._cioRaw?.imsStatus,e?._cioRaw?.jobStatus,e?._cioRaw?.displayStatus,
+    e?._cioRaw?.lowesActivity
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+function cancelled(e){
+  return e?.status==='cancelled' ||
+    /cancel|void|declin|customer request(?:ed)? (?:the )?delay/.test(textOf(e));
+}
+function paid(e){
+  return e?.status==='paid' ||
+    e?.paymentState==='completed' ||
+    e?.crewPaymentComplete===true ||
+    /payment received|past paid po|\bpaid\b/.test(textOf(e));
+}
+function amountOf(e){
+  const sources=[
+    e?.purchaseOrderAmount,e?.amount,e?._cioRaw?.purchaseOrderAmount,
+    e?._cioRaw?.amount,e?.crewPaymentAmount,e?.customerAmount
+  ];
+  for(const raw of sources){
+    const n=typeof raw==='number'?raw:Number(String(raw??'').replace(/[$,\s]/g,''));
+    if(Number.isFinite(n)&&n>=0&&n<50000)return Math.round(n*100)/100;
+  }
+  return 0;
+}
+function isOperational(e){
+  if(!e || e.type!=='income' || e.isFinanceOnly || e.isStoreStop) return false;
+  if(e.bridgeSource==='CiO Mega Bridge'||e.cioEventId||e.eventId||e.cioOrderId||e.cioJobNumber) return true;
+  return Boolean(e.customerName||e.customer||e.clientName||e.category);
+}
+function completionTimestamp(date){
+  const d=new Date(`${date}T23:59:59`);
+  return Number.isFinite(d.getTime())?d.toISOString():new Date().toISOString();
+}
+function repairHistoricalStatuses(){
+  const s=state();
+  if(!s?.entries || !Array.isArray(s.entries)) return {changed:0,completed:0,paid:0,priced:0};
+
+  const rate=Number(s.rate||90);
+  const now=today();
+  let changed=0,completed=0,paidCount=0,priced=0;
+
+  for(const e of s.entries){
+    if(!isOperational(e)) continue;
+
+    const date=normDate(e.date||e.scheduledDate||e.start||e._cioRaw?.scheduledDate||e._cioRaw?.start);
+    if(date && e.date!==date){e.date=date;changed++}
+
+    const amount=amountOf(e);
+    if(amount>0){
+      const nextNet=Math.round(amount*rate)/100;
+      if(Number(e.purchaseOrderAmount||0)!==amount){e.purchaseOrderAmount=amount;changed++;priced++}
+      if(Number(e.amount||0)!==amount){e.amount=amount;changed++}
+      if(Number(e.rate||0)!==rate){e.rate=rate;changed++}
+      if(Number(e.net||0)!==nextNet){e.net=nextNet;changed++}
+      if(e.paymentAmountSource!=='Crew Payment Tracking · Purchase Order Amount'){
+        e.paymentAmountSource='Crew Payment Tracking · Purchase Order Amount';changed++;
+      }
+    }
+
+    if(!date || date>=now || cancelled(e)) continue;
+
+    if(paid(e)){
+      if(e.status!=='paid'){e.status='paid';changed++}
+      if(e.paymentState!=='completed'){e.paymentState='completed';changed++}
+      if(e.historicalAutoCompleted!==true){e.historicalAutoCompleted=true;changed++}
+      if(!e.completedAt){e.completedAt=completionTimestamp(date);changed++}
+      paidCount++;
+    }else{
+      if(e.status!=='completed'){e.status='completed';changed++}
+      const nextPayment=amount>0?'pending':'no_payment';
+      if(e.paymentState!==nextPayment){e.paymentState=nextPayment;changed++}
+      if(e.historicalAutoCompleted!==true){e.historicalAutoCompleted=true;changed++}
+      if(!e.completedAt){e.completedAt=completionTimestamp(date);changed++}
+      completed++;
+    }
+  }
+
+  if(changed){
+    try{
+      window.persistEntries?.();
+      window.persistentEntries?.();
+    }catch(_e){}
+  }
+  return {changed,completed,paid:paidCount,priced};
+}
+let refreshTimer=null;
+function forceFinancialCalculation(reason='manual'){
+  clearTimeout(refreshTimer);
+  refreshTimer=setTimeout(()=>{
+    const result=repairHistoricalStatuses();
+    try{window.InstaraRC90?.renderFinance?.()}catch(_e){}
+    try{window.renderFinance?.()}catch(_e){}
+    try{window.updatePremiumDashboard?.()}catch(_e){}
+    try{window.InstaraSchedule?.refresh?.()}catch(_e){}
+    try{window.render?.()}catch(_e){}
+
+    window.__INSTARA_RC158_FINANCE__={
+      reason,
+      result,
+      snapshot:window.__INSTARA_FINANCE_SNAPSHOT__||null,
+      updatedAt:new Date().toISOString()
+    };
+
+    const line=$('status-line');
+    if(line && result.changed){
+      line.textContent=`INSTARA recalculó finanzas y cerró historial: ${result.completed} completados · ${result.paid} pagados.`;
+    }
+  },120);
+}
+function install(){
+  forceFinancialCalculation('boot');
+  setTimeout(()=>forceFinancialCalculation('boot-late'),1200);
+  setTimeout(()=>forceFinancialCalculation('firebase-hydrated'),4200);
+}
+document.addEventListener('DOMContentLoaded',install);
+window.addEventListener('focus',()=>forceFinancialCalculation('focus'));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)forceFinancialCalculation('visible')});
+document.addEventListener('click',event=>{
+  if(event.target.closest?.(
+    '.status-btn,#screen-finanzas,.nav-btn[data-screen="finanzas"],'+
+    '#screen-schedule,.nav-btn[data-screen="schedule"],#refresh-mega-btn,#schedule-refresh-btn'
+  )){
+    forceFinancialCalculation('user-action');
+    setTimeout(()=>forceFinancialCalculation('user-action-late'),500);
+  }
+},true);
+addEventListener('message',event=>{
+  const d=event.data;
+  if(d?.source==='INSTARA_BRIDGE'&&d?.type==='INSTARA_BRIDGE_SNAPSHOT'){
+    setTimeout(()=>forceFinancialCalculation('bridge'),250);
+    setTimeout(()=>forceFinancialCalculation('bridge-late'),1200);
+  }
+});
+window.addEventListener('storage',event=>{
+  if(['miruta-entries','wl:entries','instara-cio-observed-jobs-v2'].includes(event.key)){
+    forceFinancialCalculation('storage');
+  }
+});
+setInterval(()=>{
+  const active=document.body.dataset.activeScreen||
+    (document.querySelector('.screen.active')?.id||'');
+  if(/finanzas|hoy|schedule|calendar/i.test(active)){
+    forceFinancialCalculation('active-screen-interval');
+  }
+},5000);
+window.InstaraRC158={
+  repairHistoricalStatuses,
+  forceFinancialCalculation,
+  snapshot:()=>window.__INSTARA_FINANCE_SNAPSHOT__||null
+};
+})();
+</script>
+
 </body>
 
 
@@ -11828,6 +12003,8 @@ const BRIDGE_OWNED_FIELDS=[
 ];
 const USER_OWNED_FIELDS=[
   'status','statusSetByUser','manualCompletion',
+  'historicalAutoCompleted','completedAt','mirutaCompletedAt',
+  'paymentState','paymentAmountSource',
   'amount','rate','net',
   'notes','clientJournal',
   'orderIndex','routeExcluded','routeExcludedReason','manualRouteOverride',
