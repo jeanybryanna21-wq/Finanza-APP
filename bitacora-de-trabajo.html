@@ -1157,6 +1157,31 @@ input::placeholder,textarea::placeholder{color:rgba(16,42,56,.62)!important}
 @media(max-width:390px){.schedule-day{min-height:56px;padding:6px 4px}.schedule-grid{gap:3px}.schedule-ticket{grid-template-columns:39px 3px minmax(0,1fr) auto;gap:7px}.schedule-brand-row h2{font-size:25px}}
 </style>
 
+
+<style id="instara-rc159-2-status-buttons">
+.schedule-status-editor{display:block!important;margin-top:8px!important;text-align:right!important}
+.schedule-status-editor>label{display:block!important;margin-bottom:6px!important;font-size:9px!important;letter-spacing:.08em!important;color:#9fcdf4!important;font-weight:900!important}
+.schedule-status-actions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:6px!important;min-width:190px!important}
+.schedule-status-actions button{
+  appearance:none!important;-webkit-appearance:none!important;
+  border:1px solid rgba(106,185,255,.72)!important;
+  border-radius:9px!important;background:rgba(2,13,25,.9)!important;
+  color:#fff!important;padding:8px 7px!important;
+  font-size:9px!important;font-weight:900!important;line-height:1.1!important;
+  min-height:34px!important;touch-action:manipulation!important;
+  position:relative!important;z-index:5!important;
+}
+.schedule-status-actions button.active{border-color:#f5c84b!important;color:#f5c84b!important;box-shadow:0 0 0 1px rgba(245,200,75,.25)!important}
+.schedule-status-actions button[data-calendar-status-action="completed"].active,
+.schedule-status-actions button[data-calendar-status-action="paid"].active{border-color:#78dc8b!important;color:#9bedaa!important}
+.schedule-status-actions button[data-calendar-status-action="cancelled"].active{border-color:#ff8379!important;color:#ffaaa4!important}
+@media(max-width:430px){
+  #screen-schedule .schedule-ticket{grid-template-columns:58px 3px minmax(0,1fr)!important}
+  #screen-schedule .schedule-ticket .meta{grid-column:3!important;max-width:none!important;align-items:stretch!important;text-align:left!important}
+  .schedule-status-actions{min-width:0!important;width:100%!important}
+}
+</style>
+
 </head>
 <body>
 
@@ -7208,7 +7233,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
     const box=$('instara-schedule-agenda'),title=$('schedule-selected-title'),count=$('schedule-selected-count');if(!box)return;
     const data=dayRows(selected);title.textContent=niceDay(selected);count.textContent=data.length+' ticket'+(data.length===1?'':'s');
     if(!data.length){box.innerHTML='<div class="schedule-empty">SIN TICKETS PARA ESTE DÍA</div>';return}
-    box.innerHTML=data.map((e,i)=>{const cls=classOf(e),phone=e.phone||e.customerPhone||'TELÉFONO NO CARGADO',address=e.address||e.customerAddress||'DIRECCIÓN NO CARGADA',po=e.po||e.purchaseOrderNumber||'—';return `<article class="schedule-ticket ${cls}" data-ticket-index="${i}" data-ticket-key="${esc(keyOf(e)||e.id||'')}" tabindex="0" role="button"><div class="time">${esc(timeOf(e,i))}</div><div class="rail"></div><div class="copy"><b>${esc(customer(e))}</b><span class="schedule-service">${esc(service(e))}</span><span class="schedule-address">${esc(address)}</span><span class="schedule-phone">${esc(phone)}</span><span class="schedule-store">${esc(store(e)||'TIENDA NO CARGADA')}</span></div><div class="meta"><span class="pill">${esc(labelOf(e))}</span><span class="po">PO ${esc(po)}</span>${e.isStoreStop?'':`<div class="schedule-status-editor"><label>ESTADO</label><select class="schedule-status-select" data-calendar-status="${i}" data-current="${esc(e.status||'pending')}"><option value="pending" ${(e.status||'pending')==='pending'?'selected':''}>PENDIENTE</option><option value="completed" ${e.status==='completed'?'selected':''}>COMPLETADO</option><option value="paid" ${e.status==='paid'?'selected':''}>PAGADO</option><option value="cancelled" ${e.status==='cancelled'?'selected':''}>CANCELADO</option></select></div>${e.manualStatusOverride===true?'<span class="schedule-manual-badge">AJUSTADO MANUALMENTE</span>':''}`}${e.isStoreStop||/lowe'?s store/i.test(String(customer(e)))?'':`<button class="schedule-more" type="button" data-open-ticket="1">VER FICHA</button>`}</div></article>`}).join('');
+    box.innerHTML=data.map((e,i)=>{const cls=classOf(e),phone=e.phone||e.customerPhone||'TELÉFONO NO CARGADO',address=e.address||e.customerAddress||'DIRECCIÓN NO CARGADA',po=e.po||e.purchaseOrderNumber||'—';return `<article class="schedule-ticket ${cls}" data-ticket-index="${i}" data-ticket-key="${esc(keyOf(e)||e.id||'')}" tabindex="0" role="button"><div class="time">${esc(timeOf(e,i))}</div><div class="rail"></div><div class="copy"><b>${esc(customer(e))}</b><span class="schedule-service">${esc(service(e))}</span><span class="schedule-address">${esc(address)}</span><span class="schedule-phone">${esc(phone)}</span><span class="schedule-store">${esc(store(e)||'TIENDA NO CARGADA')}</span></div><div class="meta"><span class="pill">${esc(labelOf(e))}</span><span class="po">PO ${esc(po)}</span>${e.isStoreStop?'':`<div class="schedule-status-editor"><label>CAMBIAR ESTADO</label><div class="schedule-status-actions"><button type="button" data-calendar-status-action="pending" data-calendar-status-index="${i}" class="${(e.status||'pending')==='pending'?'active':''}">PENDIENTE</button><button type="button" data-calendar-status-action="completed" data-calendar-status-index="${i}" class="${e.status==='completed'?'active':''}">COMPLETADO</button><button type="button" data-calendar-status-action="paid" data-calendar-status-index="${i}" class="${e.status==='paid'?'active':''}">PAGADO</button><button type="button" data-calendar-status-action="cancelled" data-calendar-status-index="${i}" class="${e.status==='cancelled'?'active':''}">CANCELADO</button></div></div>${e.manualStatusOverride===true?'<span class="schedule-manual-badge">AJUSTADO MANUALMENTE</span>':''}`}${e.isStoreStop||/lowe'?s store/i.test(String(customer(e)))?'':`<button class="schedule-more" type="button" data-open-ticket="1">VER FICHA</button>`}</div></article>`}).join('');
     box.querySelectorAll('.schedule-ticket').forEach(card=>{
       const open=ev=>{
         if(ev){ev.preventDefault();ev.stopPropagation()}
@@ -7216,42 +7241,50 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
         if(entry)showTicketDetail(entry);
       };
       card.querySelector('[data-open-ticket]')?.addEventListener('click',open);
-      card.querySelector('[data-calendar-status]')?.addEventListener('click',ev=>ev.stopPropagation());
-      card.querySelector('[data-calendar-status]')?.addEventListener('change',async ev=>{
-        ev.preventDefault();
-        ev.stopPropagation();
+      card.querySelectorAll('[data-calendar-status-action]').forEach(btn=>{
+        btn.addEventListener('pointerdown',ev=>ev.stopPropagation());
+        btn.addEventListener('click',async ev=>{
+          ev.preventDefault();
+          ev.stopPropagation();
 
-        const entry=data[Number(card.dataset.ticketIndex)];
-        if(!entry || entry.isStoreStop) return;
+          const entry=data[Number(btn.dataset.calendarStatusIndex)];
+          if(!entry || entry.isStoreStop) return;
 
-        const next=String(ev.target.value||'pending');
-        const patch={
-          status:next,
-          statusSetByUser:true,
-          manualStatusOverride:true,
-          manualStatusUpdatedAt:new Date().toISOString(),
-          historicalAutoCompleted:false,
-          manualCompletion:next==='completed',
-          completedAt:(next==='completed'||next==='paid')
-            ? (entry.completedAt||new Date().toISOString())
-            : null,
-          mirutaCompletedAt:(next==='completed'||next==='paid')
-            ? (entry.mirutaCompletedAt||entry.completedAt||new Date().toISOString())
-            : null,
-          paymentState:next==='paid'
-            ? 'completed'
-            : (next==='completed' ? (Number(entry.amount||entry.purchaseOrderAmount||0)>0?'pending':'no_payment') : 'pending')
-        };
+          const next=String(btn.dataset.calendarStatusAction||'pending');
+          const patch={
+            status:next,
+            statusSetByUser:true,
+            manualStatusOverride:true,
+            manualStatusUpdatedAt:new Date().toISOString(),
+            historicalAutoCompleted:false,
+            manualCompletion:next==='completed',
+            completedAt:(next==='completed'||next==='paid')
+              ? (entry.completedAt||new Date().toISOString())
+              : null,
+            mirutaCompletedAt:(next==='completed'||next==='paid')
+              ? (entry.mirutaCompletedAt||entry.completedAt||new Date().toISOString())
+              : null,
+            paymentState:next==='paid'
+              ? 'completed'
+              : (next==='completed'
+                  ? (Number(entry.amount||entry.purchaseOrderAmount||0)>0?'pending':'no_payment')
+                  : 'pending')
+          };
 
-        if(window.InstaraTicketSync?.editEntryLocally){
-          window.InstaraTicketSync.editEntryLocally(entry,patch);
-        }else{
-          Object.assign(entry,patch);
-          try{await window.persistEntries?.()}catch(_e){}
-          try{window.render?.()}catch(_e){}
-        }
+          card.querySelectorAll('[data-calendar-status-action]').forEach(b=>b.disabled=true);
 
-        renderCalendar();
+          try{
+            if(window.InstaraTicketSync?.editEntryLocally){
+              await window.InstaraTicketSync.editEntryLocally(entry,patch);
+            }else{
+              Object.assign(entry,patch);
+              try{await window.persistEntries?.()}catch(_e){}
+              try{window.render?.()}catch(_e){}
+            }
+          }finally{
+            renderCalendar();
+          }
+        });
       });
       card.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){open(ev)}});
     })
