@@ -490,6 +490,33 @@
   .journal-add-row,.money-extra-row{display:flex;gap:7px;align-items:center}.journal-add-row input,.money-extra-row input{min-width:0;flex:1;border-bottom:1px solid var(--gold);padding:7px 3px}
   .mounted-archive-card{border:1px solid var(--hairline);padding:11px;margin-top:8px;border-radius:12px;background:var(--ivory)}.mounted-archive-card b{display:block;margin-bottom:4px}.mounted-archive-card span{font-size:13px;color:var(--ink-soft)}
   .historical-modal{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9999;display:flex;align-items:flex-end}.historical-modal>div{background:var(--paper);color:var(--ink);width:100%;max-height:88vh;overflow:auto;padding:18px;border-radius:22px 22px 0 0}.historical-full{white-space:pre-wrap;font-size:14px;line-height:1.5}
+
+<style id="instara-rc159-calendar-status-css">
+.schedule-status-editor{
+  display:flex;align-items:center;gap:6px;margin-top:8px;justify-content:flex-end;
+}
+.schedule-status-editor label{
+  font-size:9px;letter-spacing:.08em;color:#9fcdf4;font-weight:900;
+}
+.schedule-status-select{
+  max-width:132px;min-height:31px;border-radius:9px;
+  border:1px solid rgba(106,185,255,.72);
+  background:rgba(2,13,25,.82);color:#fff;
+  font-size:10px;font-weight:900;padding:5px 7px;
+}
+.schedule-status-select[data-current="completed"],
+.schedule-status-select[data-current="paid"]{
+  border-color:#78dc8b;color:#9bedaa;
+}
+.schedule-status-select[data-current="cancelled"]{
+  border-color:#ff8379;color:#ffaaa4;
+}
+.schedule-manual-badge{
+  display:inline-block;margin-top:4px;font-size:8px;color:#f5c84b;
+  letter-spacing:.05em;font-weight:900;
+}
+</style>
+
 </style>
 
 <style id="rc47-ios-glass">
@@ -7181,7 +7208,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
     const box=$('instara-schedule-agenda'),title=$('schedule-selected-title'),count=$('schedule-selected-count');if(!box)return;
     const data=dayRows(selected);title.textContent=niceDay(selected);count.textContent=data.length+' ticket'+(data.length===1?'':'s');
     if(!data.length){box.innerHTML='<div class="schedule-empty">SIN TICKETS PARA ESTE DÍA</div>';return}
-    box.innerHTML=data.map((e,i)=>{const cls=classOf(e),phone=e.phone||e.customerPhone||'TELÉFONO NO CARGADO',address=e.address||e.customerAddress||'DIRECCIÓN NO CARGADA',po=e.po||e.purchaseOrderNumber||'—';return `<article class="schedule-ticket ${cls}" data-ticket-index="${i}" data-ticket-key="${esc(keyOf(e)||e.id||'')}" tabindex="0" role="button"><div class="time">${esc(timeOf(e,i))}</div><div class="rail"></div><div class="copy"><b>${esc(customer(e))}</b><span class="schedule-service">${esc(service(e))}</span><span class="schedule-address">${esc(address)}</span><span class="schedule-phone">${esc(phone)}</span><span class="schedule-store">${esc(store(e)||'TIENDA NO CARGADA')}</span></div><div class="meta"><span class="pill">${esc(labelOf(e))}</span><span class="po">PO ${esc(po)}</span>${e.isStoreStop||/lowe'?s store/i.test(String(customer(e)))?'':`<button class="schedule-more" type="button" data-open-ticket="1">VER FICHA</button>`}</div></article>`}).join('');
+    box.innerHTML=data.map((e,i)=>{const cls=classOf(e),phone=e.phone||e.customerPhone||'TELÉFONO NO CARGADO',address=e.address||e.customerAddress||'DIRECCIÓN NO CARGADA',po=e.po||e.purchaseOrderNumber||'—';return `<article class="schedule-ticket ${cls}" data-ticket-index="${i}" data-ticket-key="${esc(keyOf(e)||e.id||'')}" tabindex="0" role="button"><div class="time">${esc(timeOf(e,i))}</div><div class="rail"></div><div class="copy"><b>${esc(customer(e))}</b><span class="schedule-service">${esc(service(e))}</span><span class="schedule-address">${esc(address)}</span><span class="schedule-phone">${esc(phone)}</span><span class="schedule-store">${esc(store(e)||'TIENDA NO CARGADA')}</span></div><div class="meta"><span class="pill">${esc(labelOf(e))}</span><span class="po">PO ${esc(po)}</span>${e.isStoreStop?'':`<div class="schedule-status-editor"><label>ESTADO</label><select class="schedule-status-select" data-calendar-status="${i}" data-current="${esc(e.status||'pending')}"><option value="pending" ${(e.status||'pending')==='pending'?'selected':''}>PENDIENTE</option><option value="completed" ${e.status==='completed'?'selected':''}>COMPLETADO</option><option value="paid" ${e.status==='paid'?'selected':''}>PAGADO</option><option value="cancelled" ${e.status==='cancelled'?'selected':''}>CANCELADO</option></select></div>${e.manualStatusOverride===true?'<span class="schedule-manual-badge">AJUSTADO MANUALMENTE</span>':''}`}${e.isStoreStop||/lowe'?s store/i.test(String(customer(e)))?'':`<button class="schedule-more" type="button" data-open-ticket="1">VER FICHA</button>`}</div></article>`}).join('');
     box.querySelectorAll('.schedule-ticket').forEach(card=>{
       const open=ev=>{
         if(ev){ev.preventDefault();ev.stopPropagation()}
@@ -7189,6 +7216,43 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
         if(entry)showTicketDetail(entry);
       };
       card.querySelector('[data-open-ticket]')?.addEventListener('click',open);
+      card.querySelector('[data-calendar-status]')?.addEventListener('click',ev=>ev.stopPropagation());
+      card.querySelector('[data-calendar-status]')?.addEventListener('change',async ev=>{
+        ev.preventDefault();
+        ev.stopPropagation();
+
+        const entry=data[Number(card.dataset.ticketIndex)];
+        if(!entry || entry.isStoreStop) return;
+
+        const next=String(ev.target.value||'pending');
+        const patch={
+          status:next,
+          statusSetByUser:true,
+          manualStatusOverride:true,
+          manualStatusUpdatedAt:new Date().toISOString(),
+          historicalAutoCompleted:false,
+          manualCompletion:next==='completed',
+          completedAt:(next==='completed'||next==='paid')
+            ? (entry.completedAt||new Date().toISOString())
+            : null,
+          mirutaCompletedAt:(next==='completed'||next==='paid')
+            ? (entry.mirutaCompletedAt||entry.completedAt||new Date().toISOString())
+            : null,
+          paymentState:next==='paid'
+            ? 'completed'
+            : (next==='completed' ? (Number(entry.amount||entry.purchaseOrderAmount||0)>0?'pending':'no_payment') : 'pending')
+        };
+
+        if(window.InstaraTicketSync?.editEntryLocally){
+          window.InstaraTicketSync.editEntryLocally(entry,patch);
+        }else{
+          Object.assign(entry,patch);
+          try{await window.persistEntries?.()}catch(_e){}
+          try{window.render?.()}catch(_e){}
+        }
+
+        renderCalendar();
+      });
       card.addEventListener('keydown',ev=>{if(ev.key==='Enter'||ev.key===' '){open(ev)}});
     })
   }
@@ -11638,6 +11702,9 @@ function repairHistoricalStatuses(){
       }
     }
 
+    // El usuario siempre manda sobre la clasificación automática.
+    // Aun con override manual, los importes se recalculan arriba.
+    if(e.manualStatusOverride===true || e.statusSetByUser===true) continue;
     if(!date || date>=now || cancelled(e)) continue;
 
     if(paid(e)){
@@ -12003,6 +12070,7 @@ const BRIDGE_OWNED_FIELDS=[
 ];
 const USER_OWNED_FIELDS=[
   'status','statusSetByUser','manualCompletion',
+  'manualStatusOverride','manualStatusUpdatedAt',
   'historicalAutoCompleted','completedAt','mirutaCompletedAt',
   'paymentState','paymentAmountSource',
   'amount','rate','net',
