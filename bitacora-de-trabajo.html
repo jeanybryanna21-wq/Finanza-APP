@@ -7135,6 +7135,46 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   function load(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch(_e){return fallback}}
   function rows(){try{return Array.isArray(state.entries)?state.entries:[]}catch(e){return[]}}
   function keyOf(e){return String(e.cioOrderId||e.orderViewId||e.cioJobNumber||e.jobNumber||e.po||e.purchaseOrderNumber||e.eventId||e.cioEventId||'')}
+  function resolveCalendarStateEntry(viewEntry){
+    const source=rows();
+    if(!viewEntry || !Array.isArray(source)) return null;
+
+    if(source.includes(viewEntry)) return viewEntry;
+
+    const eventId=String(
+      viewEntry.cioEventId||
+      viewEntry.eventId||
+      viewEntry._cioRaw?.eventId||
+      ''
+    ).trim();
+
+    if(eventId){
+      const exact=source.find(e=>String(
+        e?.cioEventId||
+        e?.eventId||
+        e?._cioRaw?.eventId||
+        ''
+      ).trim()===eventId);
+      if(exact) return exact;
+    }
+
+    const id=String(viewEntry.id||'').trim();
+    if(id){
+      const byId=source.find(e=>String(e?.id||'').trim()===id);
+      if(byId) return byId;
+    }
+
+    const tokens=window.InstaraMegaCanonical?.tokens?.(viewEntry)||[];
+    if(tokens.length){
+      const byToken=source.find(e=>{
+        const other=window.InstaraMegaCanonical?.tokens?.(e)||[];
+        return other.some(token=>tokens.includes(token));
+      });
+      if(byToken) return byToken;
+    }
+
+    return null;
+  }
   function isoDate(v){if(!v)return '';const raw=String(v).trim();const direct=raw.match(/^(\d{4}-\d{2}-\d{2})/);if(direct)return direct[1];const m=raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m)return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;const d=new Date(raw);return Number.isNaN(d.getTime())?'':`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
   function observedStatus(j){const text=[j.imsStatus,j.jobStatus,j.raw?.barColor,j.laborCategory].filter(Boolean).join(' ').toLowerCase();if(j.confirmed)return 'pending';if(/payment received|past paid|paid/.test(text))return 'paid';if(/closed|complete|completed|work_complete/.test(text))return 'completed';if(/cancel|void|declin/.test(text))return 'cancelled';return 'observed'}
   function virtualJob(j){const status=observedStatus(j),fallbackId=String(j.orderViewId||j.eventId||j.text||'').trim();return {_cioObserved:true,_cioRaw:j,cioOrderId:String(j.orderViewId||''),cioEventId:String(j.eventId||''),date:isoDate(j.scheduledDate||j.start),type:'income',status,displayStatus:statusName[status],customerName:j.customerName||j.eventCustomer||(fallbackId?`Ticket Mega #${fallbackId}`:'Ticket Mega sin identidad'),category:j.laborCategory||j.eventService||'Servicio pendiente de detalle',service:j.laborCategory||j.eventService||'Servicio pendiente de detalle',storeNumber:String(j.storeNumber||''),store:j.storeNumber?'Store '+String(j.storeNumber).replace(/^0+/,''):(j.sellerName||''),po:j.purchaseOrderNumber||'',windowStart:j.start||'',scheduledStart:j.start||'',time:j.start||'',address:j.customerAddress||'',phone:j.customerPhone||'',email:j.customerEmail||'',jobNumber:j.jobNumber||'',projectNumber:j.projectNumber||'',invoiceNumber:j.invoiceNumber||'',imsStatus:j.imsStatus||'',jobStatus:j.jobStatus||'',purchaseOrderAmount:Number(j.purchaseOrderAmount||0),lineItems:j.lineItems||[],relatedOrders:j.relatedOrders||[],deliveryNotes:j.deliveryNotes||'',scopeNotes:j.scopeNotes||'',notesText:j.notesText||'',notesHistory:j.notesHistory||[],haulAway:j.haulAway===true||/haul\s*away/i.test([j.extendedOrderText,...(j.lineItems||[]).map(x=>x.description||'')].filter(Boolean).join(' | ')),extendedOrderText:j.extendedOrderText||'',extendedOrderRows:j.extendedOrderRows||[],detailError:j.detailError||'',isStoreStop:j.isStoreStop===true,instaraAutoStore:j.instaraAutoStore===true,instaraDraftOnly:j.instaraDraftOnly===true}}
@@ -7247,7 +7287,8 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
           ev.preventDefault();
           ev.stopPropagation();
 
-          const entry=data[Number(btn.dataset.calendarStatusIndex)];
+          const viewEntry=data[Number(btn.dataset.calendarStatusIndex)];
+          const entry=resolveCalendarStateEntry(viewEntry);
           if(!entry || entry.isStoreStop) return;
 
           const next=String(btn.dataset.calendarStatusAction||'pending');
@@ -7282,6 +7323,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
               try{window.render?.()}catch(_e){}
             }
           }finally{
+            // Re-render from the authoritative state entry, not the deduped view clone.
             renderCalendar();
           }
         });
