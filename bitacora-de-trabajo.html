@@ -12266,7 +12266,13 @@ async function upsertTicket(entry,{source}={}){
   });
 
   if(aborted) return {ok:false, reason:'ticket-deleted', key};
-  return {ok:Boolean(result.committed), key};
+  const committedNode=result?.snapshot?.val?.()||null;
+  return {
+    ok:Boolean(result.committed),
+    key,
+    node:committedNode,
+    revision:Number(committedNode?.meta?.revision||0)
+  };
 }
 
 async function deleteTicket(entryOrKey){
@@ -12466,6 +12472,24 @@ function mergeRemoteEntryInMemory(key,node){
   }else{
     const localRevision=Number(entry?._syncMeta?.revision||0);
     const remoteRevision=Number(remoteMeta.revision||0);
+    const pending=entry?._manualStatusWrite||null;
+
+    // Mientras una elección manual se está confirmando, una emisión remota vieja
+    // no puede devolver el ticket al estado anterior.
+    if(pending){
+      const fromThisClient=remoteMeta.updatedBy===THIS_CLIENT_INSTANCE;
+      const confirmsPending=fromThisClient && remoteRevision>Number(pending.baseRevision||0);
+
+      if(!confirmsPending && remoteRevision<=Number(pending.baseRevision||0)){
+        lastSyncedFingerprint.set(canonicalKey,computeSyncFingerprint(entry));
+        return;
+      }
+
+      if(confirmsPending){
+        delete entry._manualStatusWrite;
+      }
+    }
+
     if(remoteRevision>=localRevision){
       Object.assign(entry,node.data,{_syncMeta:remoteMeta});
     }
@@ -12706,16 +12730,62 @@ function hookPersistEntries(){
 }
 
 // ---------- Actualización optimista explícita (uso directo opcional) ----------
-function editEntryLocally(idOrEntry,patch){
+async function editEntryLocally(idOrEntry,patch){
   const st=window.state;
   if(!st || !Array.isArray(st.entries)) return null;
   const entry=typeof idOrEntry==='string' ? st.entries.find(e=>e.id===idOrEntry) : idOrEntry;
   if(!entry) return null;
+
+  const key=entryKey(entry);
+  const baseRevision=Number(entry?._syncMeta?.revision||0);
+  const pendingAt=String(patch?.manualStatusUpdatedAt||new Date().toISOString());
+
   Object.assign(entry,patch);
+  entry._manualStatusWrite={
+    baseRevision,
+    pendingAt,
+    status:patch?.status
+  };
+
+  // Marca esta huella como conocida antes de persistir para que el wrapper
+  // universal no lance un segundo upsert simultáneo.
+  if(key) lastSyncedFingerprint.set(key,computeSyncFingerprint(entry));
+
   try{ window.canonicalizeStateEntries?.() }catch(_e){}
-  try{ window.persistEntries?.() }catch(_e){} // dispara el hook de arriba automáticamente
+  try{ await window.persistEntries?.() }catch(_e){}
   try{ window.render?.() }catch(_e){}
-  return entry;
+
+  if((window.__INSTARA_TICKET_SYNC_MODE__||'legacy')==='legacy' || !window.fbDb){
+    delete entry._manualStatusWrite;
+    return entry;
+  }
+
+  try{
+    const result=await upsertTicket(entry,{source:'user'});
+    if(!result?.ok){
+      if(key) lastSyncedFingerprint.delete(key);
+      entry._syncPending=true;
+      entry._syncError=String(result?.reason||'status-write-failed');
+      return entry;
+    }
+
+    if(result.node?.meta){
+      entry._syncMeta=result.node.meta;
+    }
+    entry._syncPending=false;
+    entry._syncError=null;
+    delete entry._manualStatusWrite;
+    if(key) lastSyncedFingerprint.set(key,computeSyncFingerprint(entry));
+
+    try{ await window.persistEntries?.() }catch(_e){}
+    try{ window.render?.() }catch(_e){}
+    return entry;
+  }catch(err){
+    if(key) lastSyncedFingerprint.delete(key);
+    entry._syncPending=true;
+    entry._syncError=String(err?.message||err||'status-write-failed');
+    return entry;
+  }
 }
 
 // ---------- Resolución de conflictos (entradas manuales, solo migración) ----------
