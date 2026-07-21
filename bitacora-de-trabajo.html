@@ -7370,11 +7370,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   function parseWindow(job){const text=[job.scheduleDetails,job.deliveryNotes,job.eventHtml].filter(Boolean).join(' ');const m=text.match(/(\d{1,2}:\d{2}\s*[AP]M)\s*[-–]\s*(\d{1,2}:\d{2}\s*[AP]M)/i);return m?{start:m[1].replace(/\s+/g,' ').toUpperCase(),end:m[2].replace(/\s+/g,' ').toUpperCase()}:{start:'',end:''}}
   function operationalConstraints(job){const text=[job.deliveryNotes,job.scopeNotes,job.notesText].filter(Boolean).join(' ');let callBeforeMinutes=0,earliestArrival='';const cb=text.match(/CALL\s+(?:CX|CUSTOMER).*?(\d{1,3})\s*MINS?\s*BEFORE/i);if(cb)callBeforeMinutes=Number(cb[1])||0;const after=text.match(/(?:ONLY\s+AVAILABLE|AVAILABLE|DO\s+NOT\s+ARRIVE).*?(?:AFTER|FROM)\s+(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);if(after)earliestArrival=`${after[1]}:${after[2]||'00'} ${after[3].toUpperCase()}`;return {callBeforeMinutes,earliestArrival,hasDogs:/\bDOGS?\b/i.test(text),raw:text}}
   function storeNumber(job){return String(job.storeNumber||job.sellerStoreNumber||'').replace(/^0+/,'')}
-  function stableId(job){
-    const eventId=String(job.eventId||job.cioEventId||'').trim();
-    if(eventId)return 'cio_event_'+eventId.replace(/\W+/g,'_');
-    return 'cio_legacy_'+String(job.orderViewId||job.jobNumber||job.purchaseOrderNumber||Date.now()).replace(/\W+/g,'_');
-  }
+  function stableId(job){return 'cio_'+String(job.orderViewId||job.jobNumber||job.purchaseOrderNumber||job.eventId||Date.now()).replace(/\W+/g,'_')}
   function lineText(job){return (job.lineItems||[]).map(x=>String(x.description||'')).join(' | ')}
   // RC135: clasifica CADA ticket de CiO por el texto real de su status (en vez de exigir
   // imsStatus==='scheduled' && jobStatus==='scheduled' para dejarlo entrar). Así TODOS los
@@ -7396,16 +7392,8 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
   function addJournal(e,text){e.clientJournal=Array.isArray(e.clientJournal)?e.clientJournal:[];e.clientJournal.push({id:'jn_'+Date.now()+'_'+Math.random().toString(36).slice(2,7),at:nowIso(),text})}
   function nextOrder(date){return Math.max(0,...(state.entries||[]).filter(e=>e.date===date).map(e=>Number(e.orderIndex??e.order??0)))+1}
   function priceEvidence(entry){try{if(!entry.cioConfirmed||!entry.category||!entry.amount)return;const all=load(PRICE_EVIDENCE_KEY,{}),key=String(entry.category).trim().toLowerCase(),bucket=Array.isArray(all[key])?all[key]:[];if(!bucket.some(x=>x.po===entry.po&&x.amount===entry.amount))bucket.push({po:entry.po,amount:entry.amount,at:nowIso(),source:'Purchase Order Amount'});all[key]=bucket.slice(-20);save(PRICE_EVIDENCE_KEY,all);const p=(state.priceList||[]).find(x=>String(x.name||'').trim().toLowerCase()===key);if(!p||Number(p.price)===Number(entry.amount))return;const hits=bucket.filter(x=>Number(x.amount)===Number(entry.amount)).length;if(hits>=3){const oldPrice=Number(p.price||0);p.price=Number(entry.amount);window.persistPriceList();window.MirutaRC68?.logDecision?.('price_intelligence','Tarifa CiO actualizada',`${entry.category}: 3+ tickets confirmados muestran ${money(entry.amount)} en Purchase Order Amount. INSTARA actualizó la referencia desde ${money(oldPrice)}.`,{score:96,evidence:['Crew Payment Tracking','Purchase Order Amount','3 tickets confirmados equivalentes']},'observed')}}catch(_e){}}
-  function jobKey(j){
-    const eventId=String(j.eventId||j.cioEventId||'').trim();
-    if(eventId)return 'event:'+eventId;
-    return 'legacy:'+String(j.orderViewId||j.jobNumber||j.purchaseOrderNumber||'');
-  }
-  function entryKey(e){
-    const eventId=String(e.cioEventId||e.eventId||e._cioRaw?.eventId||'').trim();
-    if(eventId)return 'event:'+eventId;
-    return 'legacy:'+String(e.cioOrderId||e.cioJobNumber||e.po||'');
-  }
+  function jobKey(j){return String(j.orderViewId||j.jobNumber||j.purchaseOrderNumber||j.eventId||'')}
+  function entryKey(e){return String(e.cioOrderId||e.cioJobNumber||e.po||e.cioEventId||'')}
   function applySnapshot(payload){
     const rawJobs=Array.isArray(payload?.jobs)?payload.jobs:[];
     let jobs=window.InstaraNextDay?.cleanJobs?window.InstaraNextDay.cleanJobs(rawJobs):rawJobs.filter(j=>{
@@ -7427,70 +7415,7 @@ window.MirutaRC68={confidence,logDecision,recordOverride,evaluateReturnOpportuni
     // cuando el mismo ticket vuelve a llegar en una sincronización futura.
     const allJobs=jobs,observedById=new Map(jobs.map(j=>[jobKey(j),j]));
     let added=0,rescheduled=0,updated=0,suspended=0,preserved=0;
-    for(const job of allJobs){
-      const incoming=normalizedJob(job);
-      const incomingEventId=String(incoming.cioEventId||incoming.eventId||incoming._cioRaw?.eventId||'').trim();
-
-      let e=null;
-      if(incomingEventId){
-        e=(state.entries||[]).find(x=>
-          String(x?.cioEventId||x?.eventId||x?._cioRaw?.eventId||'').trim()===incomingEventId
-        );
-      }
-
-      if(!e && !incomingEventId){
-        const incomingTokens=new Set(window.megaIdentityTokens(incoming));
-        e=(state.entries||[]).find(x=>
-          window.megaIdentityTokens(x).some(token=>incomingTokens.has(token))
-        );
-      }
-
-      if(!e){
-        incoming.order=nextOrder(incoming.date);
-        incoming.orderIndex=incoming.order;
-        addJournal(incoming,`INSTARA importó este ticket desde CiO (${incoming.status}).`);
-        state.entries.push(incoming);
-        priceEvidence(incoming);
-        added++;
-        continue;
-      }
-
-      const oldDate=e.date;
-      if(incoming.date && oldDate!==incoming.date){
-        e.date=incoming.date;
-        e.order=nextOrder(incoming.date);
-        e.orderIndex=e.order;
-        e.originalScheduledDate=e.originalScheduledDate||oldDate||incoming.date;
-        e.manualRouteOverride=false;
-        rescheduled++;
-        addJournal(e,`CiO restauró/reprogramó el trabajo de ${oldDate||'sin fecha'} a ${incoming.date}.`);
-      }
-
-      const preserveManualStatus=e.manualStatusOverride===true||e.statusSetByUser===true;
-      const preservedStatus=e.status;
-      const preservedPayment=e.paymentState;
-      const preservedCompletedAt=e.completedAt;
-      const preservedManualCompletion=e.manualCompletion;
-
-      Object.assign(e,{
-        ...incoming,
-        id:e.id||incoming.id,
-        order:e.order,
-        orderIndex:e.orderIndex||e.order,
-        status:preserveManualStatus?preservedStatus:incoming.status,
-        paymentState:preserveManualStatus?preservedPayment:e.paymentState,
-        completedAt:preserveManualStatus?preservedCompletedAt:e.completedAt,
-        manualCompletion:preserveManualStatus?preservedManualCompletion:e.manualCompletion,
-        manualStatusOverride:e.manualStatusOverride===true,
-        statusSetByUser:e.statusSetByUser===true,
-        manualStatusUpdatedAt:e.manualStatusUpdatedAt||null,
-        cioObservedOnly:false,
-        clientJournal:e.clientJournal||[]
-      });
-
-      priceEvidence(e);
-      if(statusIsDone(e))preserved++;else updated++;
-    }
+    for(const job of allJobs){const incoming=normalizedJob(job);const incomingTokens=new Set(window.megaIdentityTokens(incoming));let e=(state.entries||[]).find(x=>window.megaIdentityTokens(x).some(token=>incomingTokens.has(token)));if(!e){incoming.order=nextOrder(incoming.date);incoming.orderIndex=incoming.order;addJournal(incoming,`INSTARA importó este ticket desde CiO (${incoming.status}).`);state.entries.push(incoming);priceEvidence(incoming);added++;continue}if(statusIsDone(e)){Object.assign(e,{cioSyncAt:incoming.cioSyncAt,cioIMSStatus:incoming.cioIMSStatus,cioJobStatus:incoming.cioJobStatus,lineItems:incoming.lineItems,itemNumbers:incoming.itemNumbers,relatedOrders:incoming.relatedOrders,cioHistory:incoming.cioHistory,notes:incoming.notes,scopeNotes:incoming.scopeNotes,haulAway:incoming.haulAway,extendedOrderText:incoming.extendedOrderText,extendedOrderRows:incoming.extendedOrderRows,purchaseOrderAmount:incoming.purchaseOrderAmount,cioObservedOnly:false});preserved++;continue}const oldDate=e.date;if(oldDate!==incoming.date){e.date=incoming.date;e.order=nextOrder(incoming.date);e.orderIndex=e.order;rescheduled++;addJournal(e,`CiO reprogramó el trabajo de ${oldDate} a ${incoming.date}.`)}Object.assign(e,{...incoming,id:e.id,order:e.order,orderIndex:e.orderIndex||e.order,status:incoming.status,cioObservedOnly:false,clientJournal:e.clientJournal||[]});priceEvidence(e);updated++}
     window.canonicalizeStateEntries();window.persistEntries();if(typeof window.render==='function')window.render();window.InstaraSchedule?.refresh?.();
     const paidCount=allJobs.filter(j=>classifyBridgeStatus(j)==='paid').length,completedCount=allJobs.filter(j=>classifyBridgeStatus(j)==='completed').length,pendingCount=allJobs.filter(j=>classifyBridgeStatus(j)==='pending').length,cancelledCount=allJobs.filter(j=>classifyBridgeStatus(j)==='cancelled').length;
     const impact={added,rescheduled,updated,suspended,preserved,totalObserved:jobs.length,totalConfirmed:allJobs.length,paidCount,completedCount,pendingCount,cancelledCount,syncedAt:payload.syncedAt||nowIso(),source:payload.source||'CiO',windowFrom:payload.schedule?.windowFrom||'',windowTo:payload.schedule?.windowTo||''};save(BRIDGE_KEY,impact);lastPayload=payload;
